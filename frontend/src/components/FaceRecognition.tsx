@@ -161,21 +161,27 @@ const FaceRecognition = ({ onCapture, disabled }: FaceRecognitionProps) => {
       
       <CardFooter className="flex justify-center space-x-4 pb-6">
         {!isActive ? (
-          <Button 
-            onClick={() => setIsActive(true)} 
-            disabled={disabled || isCapturing}
-            className="bg-brand-500 hover:bg-brand-600"
-          >
-            <Camera className="mr-2 h-4 w-4" /> Start Camera
-          </Button>
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-400 to-brand-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200"></div>
+            <Button 
+              onClick={() => setIsActive(true)} 
+              disabled={disabled || isCapturing}
+              className="relative bg-brand-500 hover:bg-brand-600 px-6 py-3 text-base shadow-lg rounded-lg"
+            >
+              <Camera className="mr-2 h-5 w-5" /> Start Camera
+            </Button>
+          </div>
         ) : (
-          <Button 
-            onClick={captureImage} 
-            disabled={isCapturing}
-            className="bg-brand-500 hover:bg-brand-600"
-          >
-            {isCapturing ? "Processing..." : "Capture"}
-          </Button>
+          <div className="relative group">
+            <div className={`absolute -inset-0.5 ${isCapturing ? 'bg-gray-300' : 'bg-gradient-to-r from-green-400 to-green-600'} rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200`}></div>
+            <Button 
+              onClick={captureImage} 
+              disabled={isCapturing}
+              className={`relative px-6 py-3 text-base shadow-lg rounded-lg ${isCapturing ? 'bg-gray-400' : 'bg-green-500 hover:bg-green-600'}`}
+            >
+              {isCapturing ? "Processing..." : "Capture"}
+            </Button>
+          </div>
         )}
       </CardFooter>
     </Card>

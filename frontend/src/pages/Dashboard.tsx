@@ -6,7 +6,6 @@ import AttendanceChart from '@/components/AttendanceChart';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Link } from 'react-router-dom';
-import FaceRecognition from '@/components/FaceRecognition';
 import { useToast } from '@/hooks/use-toast';
 
 // Mock data for dashboard
@@ -63,11 +62,6 @@ const recentStudents = [
 const Dashboard = () => {
   const { toast } = useToast();
 
-  const handleCapture = (dataUrl: string, recognized: boolean) => {
-    console.log('Image captured:', { dataUrl, recognized });
-    // In a real app, you would send this to the server for processing
-  };
-
   return (
     <div className="space-y-6">
       {/* Header Stats */}
@@ -75,11 +69,8 @@ const Dashboard = () => {
       
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Face Recognition */}
+        {/* Recent Activity */}
         <div className="lg:col-span-1 space-y-6">
-          <FaceRecognition onCapture={handleCapture} />
-          
-          {/* Recent Activity */}
           <Card>
             <CardHeader>
               <CardTitle>Recent Activity</CardTitle>

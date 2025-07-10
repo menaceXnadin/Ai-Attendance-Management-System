@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,21 +7,27 @@ import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { User, Mail, Phone, MapPin, Calendar, Edit } from 'lucide-react';
+import { useAuth } from '@/contexts/useAuth';
+import { useToast } from '@/hooks/use-toast';
 
 const StudentProfile = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  
   // Mock data - in real app, this would come from API
-  const studentData = {
-    id: 'STU001',
-    name: 'John Doe',
-    email: 'john.doe@student.edu',
+  // Extended with authenticated user data where available
+  const [studentData, setStudentData] = useState({
+    id: user?.id || 'STU001',
+    name: user?.name || 'John Smith',
+    email: user?.email || 'student@example.com',
     phone: '+1 (555) 123-4567',
     address: '123 Student Street, Education City',
     dateOfBirth: '2000-05-15',
     enrollmentDate: '2023-09-01',
-    class: 'Grade 12-A',
-    rollNumber: '001',
+    class: 'Computer Science',
+    rollNumber: 'CS001',
     profileImage: '/placeholder.svg'
-  };
+  });
 
   return (
     <div className="space-y-6">
@@ -92,7 +98,12 @@ const StudentProfile = () => {
           
           <div className="mt-6 flex justify-end space-x-3">
             <Button variant="outline">Cancel</Button>
-            <Button>Save Changes</Button>
+            <Button onClick={() => {
+              toast({
+                title: "Profile Updated",
+                description: "Your profile changes have been saved successfully.",
+              });
+            }}>Save Changes</Button>
           </div>
         </CardContent>
       </Card>

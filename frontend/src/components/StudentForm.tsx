@@ -20,6 +20,8 @@ export interface StudentFormData {
   rollNo: string;
   studentId: string;
   email: string;
+  password?: string;
+  confirmPassword?: string;
   profileImage?: File | null;
 }
 
@@ -108,6 +110,45 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
               {errors.rollNo && <span className="text-sm text-red-500">{errors.rollNo.message}</span>}
             </div>
           </div>
+          
+          {/* Password fields only shown when creating a new student */}
+          {!initialData && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input 
+                  id="password" 
+                  type="password"
+                  {...register('password', { 
+                    required: initialData ? false : "Password is required",
+                    minLength: {
+                      value: 8,
+                      message: "Password must be at least 8 characters"
+                    }
+                  })} 
+                  placeholder="********" 
+                  disabled={isLoading}
+                />
+                {errors.password && <span className="text-sm text-red-500">{errors.password.message}</span>}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Input 
+                  id="confirmPassword" 
+                  type="password"
+                  {...register('confirmPassword', { 
+                    required: initialData ? false : "Please confirm password",
+                    validate: (value, formValues) => 
+                      value === formValues.password || "Passwords do not match"
+                  })} 
+                  placeholder="********" 
+                  disabled={isLoading}
+                />
+                {errors.confirmPassword && <span className="text-sm text-red-500">{errors.confirmPassword.message}</span>}
+              </div>
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="profileImage">Profile Image (for facial recognition)</Label>

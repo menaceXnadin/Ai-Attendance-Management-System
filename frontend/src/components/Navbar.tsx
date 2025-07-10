@@ -48,9 +48,6 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link to="/register">
-                  <Button variant="outline" className="ml-4 border-blue-400 text-blue-400 hover:bg-blue-900/40">Register</Button>
-                </Link>
                 <Link to="/login">
                   <Button className="bg-blue-400 hover:bg-blue-500 text-blue-950">Login</Button>
                 </Link>
@@ -118,13 +115,6 @@ const Navbar = () => {
               </>
             ) : (
               <>
-                <Link
-                  to="/register"
-                  className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-brand-50 hover:text-brand-500"
-                  onClick={toggleMenu}
-                >
-                  Register
-                </Link>
                 <Link
                   to="/login"
                   className="block px-3 py-2 mt-4 rounded-md text-base font-medium bg-brand-500 text-white hover:bg-brand-600"

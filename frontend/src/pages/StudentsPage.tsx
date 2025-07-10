@@ -51,15 +51,27 @@ const StudentsPage = () => {
     },
   });
 
-  // Add student mutation
+  // Add student mutation - now includes account creation with password
   const addStudentMutation = useMutation({
     mutationFn: async (student: StudentFormData) => {
       try {
+        // Validate required fields for account creation
+        if (!student.password) {
+          throw new Error("Password is required to create a student account");
+        }
+        
+        if (student.password !== student.confirmPassword) {
+          throw new Error("Passwords do not match");
+        }
+        
+        // Create student with account credentials
         const result = await api.students.create({
           name: student.name,
           rollNo: student.rollNo,
           studentId: student.studentId,
           email: student.email,
+          password: student.password,
+          role: 'student', // Always create as student role
           profileImage: student.profileImage ? await convertFileToBase64(student.profileImage) : null
         });
         

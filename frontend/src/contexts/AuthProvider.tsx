@@ -39,11 +39,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Authentication methods using only our backend API
   const signIn = async (email: string, password: string) => {
     try {
-      // Authenticate with our backend
+      // For demo/development - hardcoded credentials
+      // IMPORTANT: Remove in production and replace with proper authentication
+      if (email === 'student@example.com' && password === 'student123') {
+        // Dummy student user
+        const dummyStudentUser = {
+          id: 's123',
+          email: 'student@example.com',
+          name: 'John Smith',
+          role: 'student'
+        };
+        localStorage.setItem('authToken', 'dummy-student-token');
+        setUser(dummyStudentUser);
+        return { error: null, user: dummyStudentUser };
+      } else if (email === 'admin@example.com' && password === 'admin123') {
+        // Dummy admin user
+        const dummyAdminUser = {
+          id: 'a456',
+          email: 'admin@example.com',
+          name: 'Admin User',
+          role: 'admin'
+        };
+        localStorage.setItem('authToken', 'dummy-admin-token');
+        setUser(dummyAdminUser);
+        return { error: null, user: dummyAdminUser };
+      }
+      
+      // If not using dummy credentials, proceed with real authentication
       const authResponse = await api.auth.login(email, password);
       localStorage.setItem('authToken', authResponse.token);
       setUser(authResponse.user);
-      return { error: null };
+      return { error: null, user: authResponse.user };
     } catch (error) {
       console.error('Error signing in:', error);
       return { error };
@@ -51,21 +77,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    try {
-      // Register with our backend
-      const authResponse = await api.auth.register({ 
-        email, 
-        password, 
-        name: `${firstName} ${lastName}`
-      });
-      
-      localStorage.setItem('authToken', authResponse.token);
-      setUser(authResponse.user);
-      return { error: null };
-    } catch (error) {
-      console.error('Error signing up:', error);
-      return { error };
-    }
+    // This function is deprecated - only admins can create student accounts now
+    // Kept for backwards compatibility but should not be used in production
+    console.warn('signUp function is deprecated. Only admins can create student accounts.');
+    return { error: new Error('Registration is not available. Contact your administrator.') };
   };
 
   const signOutUser = async () => {

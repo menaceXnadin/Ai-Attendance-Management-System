@@ -1,6 +1,6 @@
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,7 @@ const RegisterPage = () => {
   });
   const { toast } = useToast();
   const { signUp } = useAuth();
+  const navigate = useNavigate();
   const password = watch('password');
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -37,13 +38,22 @@ const RegisterPage = () => {
       return;
     }
 
-    // Pass the role to signUp (update your AuthContext and backend to handle this if needed)
-    const { error } = await signUp(
+    // Block admin registrations
+    if (data.role === 'admin') {
+      toast({
+        title: "Registration not allowed",
+        description: "Admin accounts can only be created by system administrators. Please contact support for assistance.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Always register as student regardless of selection for security
+    const { error, user: registeredUser } = await signUp(
       data.email, 
       data.password, 
       data.firstName, 
       data.lastName
-      // data.role // Remove this for now, as signUp expects only 4 arguments
     );
 
     if (error) {
@@ -55,8 +65,10 @@ const RegisterPage = () => {
     } else {
       toast({
         title: "Registration successful",
-        description: "Please check your email to verify your account.",
+        description: "Your student account has been created.",
       });
+      // Redirect to student dashboard
+      navigate("/student");
     }
   };
 
