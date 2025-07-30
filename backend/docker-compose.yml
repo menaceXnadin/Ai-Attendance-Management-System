@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15
+    container_name: ai_attendance_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ai_attendance_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ai_attendance_network
+
+  # Redis (for caching and sessions)
+  redis:
+    image: redis:7-alpine
+    container_name: ai_attendance_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ai_attendance_network
+
+  # FastAPI Backend
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_attendance_backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/ai_attendance_db
+      - DATABASE_URL_SYNC=postgresql://postgres:password@postgres:5432/ai_attendance_db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - ai_attendance_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  ai_attendance_network:
+    driver: bridge

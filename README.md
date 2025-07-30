@@ -1,6 +1,6 @@
-# Face Recognition Attendance System
+# AttendAI - Smart Attendance Management System
 
-A student attendance system with facial recognition built with React, TypeScript, and Vite.
+An AI-powered student attendance system with facial recognition built with React, TypeScript, FastAPI, and PostgreSQL.
 
 ## Project Structure
 
@@ -39,13 +39,11 @@ The frontend will run on http://localhost:5173
 ## Features
 
 - Face detection and recognition with webcam integration
-- Student attendance tracking with mock data
-- Dashboard with attendance statistics
+- Student attendance tracking with real-time database integration
+- Dashboard with attendance statistics and AI insights
 - Responsive design with dark mode support
-- No backend required - all data is mocked in the frontend
+- Full-stack integration with FastAPI backend and PostgreSQL database
 
-## Mock Login
+## Authentication
 
-Use these credentials to login:
-- Email: `admin@example.com` or `teacher1@example.com`
-- Password: `password`
+The system uses secure JWT-based authentication. Contact your system administrator for account credentials. Student accounts must be created by administrators through the admin panel.

@@ -1,12 +1,15 @@
 
 import React from 'react';
 import { useForm } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { api } from '@/integrations/api/client';
 
 interface StudentFormProps {
   onSubmit: (data: StudentFormData) => void;
@@ -16,26 +19,48 @@ interface StudentFormProps {
 
 export interface StudentFormData {
   id?: string;
-  name: string;
-  rollNo: string;
-  studentId: string;
+  full_name: string;
+  student_id: string;
   email: string;
+  faculty_id: number;  // Changed to faculty_id
+  semester: number;
+  year: number;
+  batch: number;
   password?: string;
   confirmPassword?: string;
-  profileImage?: File | null;
 }
 
+
 const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormProps) => {
-  const { register, handleSubmit, formState: { errors }, reset } = useForm<StudentFormData>({
+  const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<StudentFormData>({
     defaultValues: initialData || {
-      name: '',
-      rollNo: '',
-      studentId: '',
+      full_name: '',
+      student_id: '',
       email: '',
-      profileImage: null,
+      faculty_id: 0,  // Changed to faculty_id
+      semester: 1,
+      year: 1,
+      batch: new Date().getFullYear(),
     },
   });
   const { toast } = useToast();
+
+  // Fetch faculties for dropdown
+  const { data: faculties = [] } = useQuery({
+    queryKey: ['faculties'],
+    queryFn: () => api.faculties.getAll(),
+  });
+
+  // Auto-set year based on semester (fix React warning)
+  const semester = watch('semester');
+  React.useEffect(() => {
+    let year = 1;
+    if (semester === 1 || semester === 2) year = 1;
+    else if (semester === 3 || semester === 4) year = 2;
+    else if (semester === 5 || semester === 6) year = 3;
+    else if (semester === 7 || semester === 8) year = 4;
+    setValue('year', year, { shouldValidate: true });
+  }, [semester, setValue]);
 
   const handleFormSubmit = (data: StudentFormData) => {
     onSubmit(data);
@@ -50,22 +75,22 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
         <CardTitle>{initialData ? 'Edit Student' : 'Add New Student'}</CardTitle>
         <CardDescription>
           {initialData 
-            ? 'Update the student information and profile picture.' 
-            : 'Enter the student details and upload a profile picture for face recognition.'}
+            ? 'Update the student information.' 
+            : 'Enter the required student details to create a new student record.'}
         </CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit(handleFormSubmit)}>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="full_name">Full Name</Label>
               <Input 
-                id="name" 
-                {...register('name', { required: "Name is required" })} 
+                id="full_name" 
+                {...register('full_name', { required: "Full name is required" })} 
                 placeholder="John Doe" 
                 disabled={isLoading}
               />
-              {errors.name && <span className="text-sm text-red-500">{errors.name.message}</span>}
+              {errors.full_name && <span className="text-sm text-red-500">{errors.full_name.message}</span>}
             </div>
             
             <div className="space-y-2">
@@ -89,25 +114,114 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="studentId">Student ID</Label>
+              <Label htmlFor="student_id">Student ID</Label>
               <Input 
-                id="studentId" 
-                {...register('studentId', { required: "Student ID is required" })} 
+                id="student_id" 
+                {...register('student_id', { required: "Student ID is required" })} 
                 placeholder="STU12345" 
                 disabled={isLoading}
               />
-              {errors.studentId && <span className="text-sm text-red-500">{errors.studentId.message}</span>}
+              {errors.student_id && <span className="text-sm text-red-500">{errors.student_id.message}</span>}
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="rollNo">Roll Number</Label>
+              <Label htmlFor="faculty_id">Faculty</Label>
+              <select 
+                id="faculty_id" 
+                {...register('faculty_id', { 
+                  required: "Faculty is required",
+                  valueAsNumber: true,
+                  validate: value => value > 0 || "Please select a faculty"
+                })} 
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={isLoading}
+              >
+                <option value="">Select Faculty</option>
+                {faculties.map((faculty: { id: number; name: string }) => (
+                  <option key={faculty.id} value={faculty.id}>
+                    {faculty.name}
+                  </option>
+                ))}
+              </select>
+              {errors.faculty_id && <span className="text-sm text-red-500">{errors.faculty_id.message}</span>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="semester">Semester</Label>
               <Input 
-                id="rollNo" 
-                {...register('rollNo', { required: "Roll number is required" })} 
-                placeholder="A12" 
+                id="semester" 
+                type="number" 
+                min="1" 
+                max="8" 
+                {...register('semester', { 
+                  required: "Semester is required",
+                  valueAsNumber: true,
+                  min: {
+                    value: 1,
+                    message: "Semester must be at least 1"
+                  },
+                  max: {
+                    value: 8,
+                    message: "Semester cannot be more than 8"
+                  }
+                })} 
+                placeholder="1" 
                 disabled={isLoading}
               />
-              {errors.rollNo && <span className="text-sm text-red-500">{errors.rollNo.message}</span>}
+              {errors.semester && <span className="text-sm text-red-500">{errors.semester.message}</span>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="year">Academic Year</Label>
+              <Input 
+                id="year" 
+                type="number" 
+                min="1" 
+                max="4" 
+                {...register('year', { 
+                  required: "Academic year is required",
+                  valueAsNumber: true,
+                  min: {
+                    value: 1,
+                    message: "Year must be at least 1"
+                  },
+                  max: {
+                    value: 4,
+                    message: "Year cannot be more than 4"
+                  }
+                })} 
+                placeholder="1" 
+                readOnly
+                disabled={isLoading}
+              />
+              {errors.year && <span className="text-sm text-red-500">{errors.year.message}</span>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="batch">Batch Year</Label>
+              <Input 
+                id="batch" 
+                type="number" 
+                min="2020" 
+                max={new Date().getFullYear() + 1}
+                {...register('batch', { 
+                  required: "Batch year is required",
+                  valueAsNumber: true,
+                  min: {
+                    value: 2020,
+                    message: "Batch year must be at least 2020"
+                  },
+                  max: {
+                    value: new Date().getFullYear() + 1,
+                    message: `Batch year cannot be more than ${new Date().getFullYear() + 1}`
+                  }
+                })} 
+                placeholder={new Date().getFullYear().toString()}
+                disabled={isLoading}
+              />
+              {errors.batch && <span className="text-sm text-red-500">{errors.batch.message}</span>}
             </div>
           </div>
           
@@ -116,9 +230,8 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input 
+                <PasswordInput 
                   id="password" 
-                  type="password"
                   {...register('password', { 
                     required: initialData ? false : "Password is required",
                     minLength: {
@@ -134,9 +247,8 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
               
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input 
+                <PasswordInput 
                   id="confirmPassword" 
-                  type="password"
                   {...register('confirmPassword', { 
                     required: initialData ? false : "Please confirm password",
                     validate: (value, formValues) => 
@@ -149,20 +261,6 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
               </div>
             </div>
           )}
-          
-          <div className="space-y-2">
-            <Label htmlFor="profileImage">Profile Image (for facial recognition)</Label>
-            <Input 
-              id="profileImage" 
-              type="file" 
-              accept="image/*" 
-              {...register('profileImage', { 
-                required: initialData ? false : "Profile image is required for facial recognition"
-              })}
-              disabled={isLoading}
-            />
-            {errors.profileImage && <span className="text-sm text-red-500">{errors.profileImage.message}</span>}
-          </div>
         </CardContent>
         
         <CardFooter className="flex justify-between">

@@ -1,0 +1,25 @@
+# Root .gitignore for full stack project
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+dist/
+
+# Environment and secrets
+*.env
+*.env.*
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Uploads (if not demo data)
+uploads/

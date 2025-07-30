@@ -91,6 +91,37 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Prevent text selection and cursor issues */
+  h1, h2, h3, h4, h5, h6, p, span, div:not([contenteditable]), 
+  .hero-section, .feature-card, .stats-card, .testimonial-card,
+  .navbar, .footer, .btn, button:not(input), a:not([contenteditable]) {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    cursor: default;
+  }
+
+  /* Ensure proper cursor for interactive elements */
+  button, a[href], input, textarea, select, 
+  [role="button"], [tabindex]:not([tabindex="-1"]),
+  .cursor-pointer {
+    cursor: pointer !important;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Allow text selection only for actual text content areas */
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+    cursor: text !important;
+  }
 }
 
 .hero-gradient {
@@ -104,6 +135,50 @@
 .feature-card:hover {
   transform: translateY(-5px);
   box-shadow: 0 10px 25px rgba(0, 155, 175, 0.15);
+}
+
+/* Animation Keyframes */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Animation Utility Classes */
+.animate-fade-in-up {
+  animation: fadeInUp 0.6s ease-out forwards;
+  opacity: 0;
+}
+
+.animate-pulse {
+  animation: pulse 6s infinite;
+}
+
+/* 3D Transform Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+}
+
+.rotateY-3 {
+  transform: rotateY(3deg);
+}
+
+.hover\:rotateY-0:hover {
+  transform: rotateY(0);
 }
 
 @layer utilities {

@@ -25,10 +25,11 @@ interface ClassFormData {
   id?: string;
   name: string;
   description: string;
+  faculty_id?: number;
 }
 
 // Importing Class type from the API types
-import type { Class as ApiClass } from '@/integrations/api/types';
+import type { Class as ApiClass, Faculty } from '@/integrations/api/types';
 
 // Local interface that extends ApiClass with any additional properties needed
 interface Class extends ApiClass {
@@ -42,10 +43,21 @@ const ClassesPage = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClass, setEditingClass] = useState<ClassFormData | null>(null);
 
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ClassFormData>({
+
+  // Fetch faculties for dropdown
+  const { data: faculties = [], isLoading: facultiesLoading } = useQuery({
+    queryKey: ['faculties'],
+    queryFn: async () => {
+      const response = await api.faculties.getAll();
+      return response;
+    },
+  });
+
+  const { register, handleSubmit, reset, formState: { errors }, setValue } = useForm<ClassFormData>({
     defaultValues: {
       name: '',
       description: '',
+      faculty_id: undefined,
     }
   });
 
@@ -54,8 +66,12 @@ const ClassesPage = () => {
     queryFn: async () => {
       try {
         const data = await api.classes.getAll();
-        // Filter classes by teacher if needed
-        return data.filter(cls => cls.teacherId === user?.id);
+        // Admins can see all classes, teachers only see their own
+        if (user?.role === 'admin') {
+          return data;
+        } else {
+          return data.filter(cls => cls.teacherId === user?.id);
+        }
       } catch (error) {
         console.error('Error fetching classes:', error);
         throw error;
@@ -71,6 +87,7 @@ const ClassesPage = () => {
           name: classData.name,
           description: classData.description,
           teacherId: user?.id,
+          faculty_id: classData.faculty_id,
         });
         return result;
       } catch (error) {
@@ -101,11 +118,11 @@ const ClassesPage = () => {
       if (!classData.id) {
         throw new Error("Class ID is required for updates");
       }
-      
       try {
         const result = await api.classes.update(classData.id, {
           name: classData.name,
           description: classData.description,
+          faculty_id: classData.faculty_id,
         });
         return result;
       } catch (error) {
@@ -170,11 +187,13 @@ const ClassesPage = () => {
     setEditingClass({
       id: classData.id,
       name: classData.name,
-      description: classData.description
+      description: classData.description,
+      faculty_id: classData.faculty_id,
     });
     reset({
       name: classData.name,
-      description: classData.description
+      description: classData.description,
+      faculty_id: classData.faculty_id,
     });
     setIsDialogOpen(true);
   };
@@ -236,6 +255,22 @@ const ClassesPage = () => {
                   {...register('description')}
                   rows={4}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="faculty_id">Faculty</Label>
+                <select
+                  id="faculty_id"
+                  {...register('faculty_id', { required: "Faculty is required", valueAsNumber: true })}
+                  className="border rounded px-3 py-2 min-w-[200px] bg-slate-900 text-white"
+                  disabled={facultiesLoading}
+                >
+                  <option value="">-- Select Faculty --</option>
+                  {faculties.map((faculty: Faculty) => (
+                    <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
+                  ))}
+                </select>
+                {errors.faculty_id && <p className="text-sm text-red-500">{errors.faculty_id.message}</p>}
               </div>
 
               <div className="flex justify-end gap-2">

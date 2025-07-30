@@ -1,0 +1,35 @@
+/* Ensures video and overlay are always mirrored for the user preview */
+.mirrored-video {
+  transform: scaleX(-1) !important;
+  -webkit-transform: scaleX(-1) !important;
+}
+
+/* Smooth camera loading transition */
+.camera-container {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Camera loading state */
+.camera-loading {
+  background: linear-gradient(45deg, #1a1a1a, #2a2a2a);
+  background-size: 400% 400%;
+  animation: gradientShift 2s ease infinite;
+}
+
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Better video element styling */
+video {
+  object-fit: cover;
+  background: #000;
+}
+
+/* Fallback styling for camera errors */
+.camera-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px dashed rgba(239, 68, 68, 0.3);
+}

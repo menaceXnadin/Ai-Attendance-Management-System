@@ -1,13 +1,7 @@
 import * as React from 'react';
-import { ResponsiveContainer, BarChart, Bar, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { XAxis as RechartsXAxis, YAxis as RechartsYAxis } from 'recharts';
-
-// @ts-ignore: Suppress TypeScript error for XAxis
-const XAxis = React.forwardRef<any, any>((props, ref) => <RechartsXAxis {...props} ref={ref} />);
-
-// @ts-ignore: Suppress TypeScript error for YAxis
-const YAxis = React.forwardRef<any, any>((props, ref) => <RechartsYAxis {...props} ref={ref} />);
+import { useTheme } from '@/hooks/useTheme';
 
 interface AttendanceData {
   name: string;
@@ -23,12 +17,25 @@ interface AttendanceChartProps {
   type?: 'bar' | 'pie' | 'line';
 }
 
-const COLORS = ['#38bdf8', '#0ea5e9', '#2563eb'];
-
 const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceChartProps) => {
+  const { theme } = useTheme();
+  
+  // Define colors based on theme
+  const COLORS = {
+    light: ['#38bdf8', '#0ea5e9', '#2563eb'],
+    dark: ['#38bdf8', '#0ea5e9', '#2563eb'],
+  };
+  
+  // Choose color set based on theme
+  const colorSet = theme === 'dark' ? COLORS.dark : COLORS.light;
+  
+  // Grid and text colors
+  const gridColor = theme === 'dark' ? '#374151' : '#e5e7eb';
+  const textColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
+  
   const renderChart = () => {
     switch (type) {
-      case 'pie':
+      case 'pie': {
         const pieData = [
           { name: 'Present', value: data.reduce((acc, curr) => acc + curr.present, 0) },
           { name: 'Absent', value: data.reduce((acc, curr) => acc + curr.absent, 0) },
@@ -49,46 +56,49 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
               >
                 {pieData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  <Cell key={`cell-${index}`} fill={colorSet[index % colorSet.length]} />
                 ))}
               </Pie>
-              <Tooltip />
-              <Legend />
+              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
             </PieChart>
           </ResponsiveContainer>
         );
+      }
         
-      case 'line':
+      case 'line': {
         return (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="present" stroke="#38bdf8" activeDot={{ r: 8 }} />
-              <Line type="monotone" dataKey="absent" stroke="#0ea5e9" />
-              <Line type="monotone" dataKey="late" stroke="#2563eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis dataKey="name" stroke={textColor} />
+              <YAxis stroke={textColor} />
+              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
+              <Line type="monotone" dataKey="present" stroke={colorSet[0]} activeDot={{ r: 8 }} />
+              <Line type="monotone" dataKey="absent" stroke={colorSet[1]} />
+              <Line type="monotone" dataKey="late" stroke={colorSet[2]} />
             </LineChart>
           </ResponsiveContainer>
         );
+      }
         
-      default:
+      default: {
         return (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="present" fill="#38bdf8" />
-              <Bar dataKey="absent" fill="#0ea5e9" />
-              <Bar dataKey="late" fill="#2563eb" />
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+              <XAxis dataKey="name" stroke={textColor} />
+              <YAxis stroke={textColor} />
+              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
+              <Bar dataKey="present" fill={colorSet[0]} />
+              <Bar dataKey="absent" fill={colorSet[1]} />
+              <Bar dataKey="late" fill={colorSet[2]} />
             </BarChart>
           </ResponsiveContainer>
         );
+      }
     }
   };
 

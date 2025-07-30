@@ -27,7 +27,7 @@ export const useAttendanceData = () => {
     queryKey: ['classes'],
     queryFn: async () => {
       try {
-        // Get classes from mock API
+        // Get classes from API
         const data = await api.classes.getAll();
         
         // Filter by teacher ID if needed
@@ -42,7 +42,6 @@ export const useAttendanceData = () => {
         throw error;
       }
     },
-    // Always enabled for mock data
     enabled: true
   });
 
@@ -83,9 +82,9 @@ export const useAttendanceData = () => {
           Promise.all(classPromises)
         ]);
         
-        // Create lookup maps
+        // Create lookup maps (using database IDs since attendance.studentId is the database ID)
         const studentMap = students.reduce<Record<string, Student>>((acc, student) => {
-          acc[student.id] = student;
+          acc[student.id.toString()] = student;
           return acc;
         }, {});
         
@@ -114,7 +113,6 @@ export const useAttendanceData = () => {
         throw error;
       }
     },
-    // Always enabled for mock data
     enabled: true
   });
 

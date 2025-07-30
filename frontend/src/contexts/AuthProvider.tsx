@@ -12,60 +12,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkAuthStatus = async () => {
       setLoading(true);
       try {
-        // Check if we have a token stored
         const token = localStorage.getItem('authToken');
         if (token) {
+          // Check if token is expired
+          const parts = token.split('.');
+          let isExpired = false;
+          if (parts.length === 3) {
+            try {
+              const payload = JSON.parse(atob(parts[1]));
+              const now = Math.floor(Date.now() / 1000);
+              if (payload.exp && payload.exp < now) {
+                isExpired = true;
+              }
+            } catch (e) {
+              isExpired = true;
+            }
+          } else {
+            isExpired = true;
+          }
+
+          if (isExpired) {
+            // Try to refresh token
+            try {
+              const refreshResult = await api.auth.refreshToken();
+              setUser(refreshResult.user);
+              localStorage.setItem('authToken', refreshResult.token);
+              setLoading(false);
+              return;
+            } catch (refreshError) {
+              console.error('Token refresh failed:', refreshError);
+              localStorage.removeItem('authToken');
+              setUser(null);
+              setLoading(false);
+              return;
+            }
+          }
+
+          // Token is valid, get user info
           try {
-            // Attempt to get the current user with the stored token
             const userData = await api.auth.getUser();
             setUser(userData);
           } catch (error) {
-            // If the token is invalid, clear it
-            console.error('Error retrieving user:', error);
-            localStorage.removeItem('authToken');
-            setUser(null);
+            // Only log out if error is 401 (unauthorized), otherwise keep user and show error
+            if (error?.response?.status === 401) {
+              localStorage.removeItem('authToken');
+              setUser(null);
+            } else {
+              console.error('Network or server error retrieving user:', error);
+              // Keep user, don't log out for temporary issues
+            }
           }
+        } else {
+          setUser(null);
         }
       } catch (error) {
         console.error('Auth status check error:', error);
+        // Don't log out for temporary errors
       } finally {
         setLoading(false);
       }
     };
-
     checkAuthStatus();
   }, []);
 
   // Authentication methods using only our backend API
   const signIn = async (email: string, password: string) => {
     try {
-      // For demo/development - hardcoded credentials
-      // IMPORTANT: Remove in production and replace with proper authentication
-      if (email === 'student@example.com' && password === 'student123') {
-        // Dummy student user
-        const dummyStudentUser = {
-          id: 's123',
-          email: 'student@example.com',
-          name: 'John Smith',
-          role: 'student'
-        };
-        localStorage.setItem('authToken', 'dummy-student-token');
-        setUser(dummyStudentUser);
-        return { error: null, user: dummyStudentUser };
-      } else if (email === 'admin@example.com' && password === 'admin123') {
-        // Dummy admin user
-        const dummyAdminUser = {
-          id: 'a456',
-          email: 'admin@example.com',
-          name: 'Admin User',
-          role: 'admin'
-        };
-        localStorage.setItem('authToken', 'dummy-admin-token');
-        setUser(dummyAdminUser);
-        return { error: null, user: dummyAdminUser };
-      }
-      
-      // If not using dummy credentials, proceed with real authentication
+      // Authenticate with backend API
       const authResponse = await api.auth.login(email, password);
       localStorage.setItem('authToken', authResponse.token);
       setUser(authResponse.user);
@@ -77,10 +90,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, firstName: string, lastName: string) => {
-    // This function is deprecated - only admins can create student accounts now
-    // Kept for backwards compatibility but should not be used in production
-    console.warn('signUp function is deprecated. Only admins can create student accounts.');
-    return { error: new Error('Registration is not available. Contact your administrator.') };
+    // Student registration is handled through admin panel only
+    console.warn('Self-registration is disabled. Students must be registered by administrators.');
+    return { error: new Error('Self-registration is not available. Please contact your administrator to create an account.') };
   };
 
   const signOutUser = async () => {

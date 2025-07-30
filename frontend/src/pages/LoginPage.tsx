@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -42,11 +43,12 @@ const LoginPage = () => {
   const handleLogin = async (data: LoginFormData, userType: 'student' | 'admin') => {
     const { error, user: signedInUser } = await signIn(data.email, data.password);
     if (error) {
-      setLoginError("Login failed");
+      const errorMsg = error?.message || "Login failed";
+      setLoginError(errorMsg);
       setShowError(true);
       toast({
         title: "Login failed",
-        description: "Invalid email or password. Please try again.",
+        description: errorMsg,
         variant: "destructive",
       });
       setTimeout(() => setShowError(false), 2500); // Hide after 2.5s
@@ -128,38 +130,45 @@ const LoginPage = () => {
       )}
 
       {/* Login Form Popup (slide down) */}
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-950 via-blue-900 to-blue-800">
-        <Card className="w-full max-w-md bg-white/95 border-none shadow-2xl rounded-2xl backdrop-blur-md">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-950 to-blue-950 relative overflow-hidden">
+        {/* Background decorative elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full opacity-10 blur-3xl animate-pulse"></div>
+          <div className="absolute top-60 -left-20 w-60 h-60 bg-teal-400 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-indigo-500 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
+        </div>
+        
+        <Card className="w-full max-w-md bg-slate-900/80 border border-slate-700/50 shadow-2xl rounded-2xl backdrop-blur-md z-10">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center text-blue-900">
+            <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
               Login to AttendAI
             </CardTitle>
-            <CardDescription className="text-center text-blue-500">
+            <CardDescription className="text-center text-blue-300">
               Choose your login type
             </CardDescription>
           </CardHeader>
 
           <CardContent>
-            <Tabs defaultValue="student" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="student">Student Login</TabsTrigger>
-                <TabsTrigger value="admin">Admin Login</TabsTrigger>
+            <Tabs defaultValue="student" className="w-full">            <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-800/50">
+              <TabsTrigger value="student" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-teal-400 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Student Login</TabsTrigger>
+              <TabsTrigger value="admin" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Admin Login</TabsTrigger>
               </TabsList>
               
               {/* Student Login Tab */}
               <TabsContent value="student">
-                <div className="mb-4 p-3 bg-blue-50 border border-blue-100 rounded-md">
-                  <p className="text-sm text-blue-700">
+                <div className="mb-4 p-3 bg-blue-950/50 border border-blue-700/30 rounded-md">
+                  <p className="text-sm text-blue-300">
                     Students, please use the login credentials provided by your admin.
                   </p>
                 </div>
                 <form onSubmit={handleStudentSubmit(onStudentSubmit)} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="student-email">Email</Label>
+                    <Label htmlFor="student-email" className="text-blue-200">Email</Label>
                     <Input
                       id="student-email"
                       type="email"
-                      placeholder="student@example.com"
+                      placeholder="Enter your email"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100 placeholder:text-blue-400/50"
                       {...registerStudent("email", {
                         required: "Email is required",
                         pattern: {
@@ -173,10 +182,10 @@ const LoginPage = () => {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="student-password">Password</Label>
-                    <Input
+                    <Label htmlFor="student-password" className="text-blue-200">Password</Label>
+                    <PasswordInput
                       id="student-password"
-                      type="password"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100"
                       {...registerStudent("password", { required: "Password is required" })}
                     />
                     {studentErrors.password && (
@@ -192,18 +201,18 @@ const LoginPage = () => {
                         type="checkbox"
                         className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                       />
-                      <label htmlFor="student-remember-me" className="ml-2 block text-sm text-gray-700">
+                      <label htmlFor="student-remember-me" className="ml-2 block text-sm text-blue-300">
                         Remember me
                       </label>
                     </div>
                     <div className="text-sm">
-                      <Link to="/" className="font-medium text-brand-500 hover:text-brand-400">
+                      <Link to="/" className="font-medium text-teal-400 hover:text-teal-300 transition-colors">
                         Forgot password?
                       </Link>
                     </div>
                   </div>
 
-                  <Button type="submit" className="w-full bg-brand-500 hover:bg-brand-600">
+                  <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white transition-all duration-300">
                     Student Sign in
                   </Button>
                 </form>
@@ -213,11 +222,12 @@ const LoginPage = () => {
               <TabsContent value="admin">
                 <form onSubmit={handleAdminSubmit(onAdminSubmit)} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="admin-email">Admin Email</Label>
+                    <Label htmlFor="admin-email" className="text-blue-200">Admin Email</Label>
                     <Input
                       id="admin-email"
                       type="email"
-                      placeholder="admin@example.com"
+                      placeholder="Enter your email"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100 placeholder:text-blue-400/50"
                       {...registerAdmin("email", {
                         required: "Email is required",
                         pattern: {
@@ -231,10 +241,10 @@ const LoginPage = () => {
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="admin-password">Admin Password</Label>
-                    <Input
+                    <Label htmlFor="admin-password" className="text-blue-200">Admin Password</Label>
+                    <PasswordInput
                       id="admin-password"
-                      type="password"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100"
                       {...registerAdmin("password", { required: "Password is required" })}
                     />
                     {adminErrors.password && (
@@ -250,18 +260,18 @@ const LoginPage = () => {
                         type="checkbox"
                         className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
                       />
-                      <label htmlFor="admin-remember-me" className="ml-2 block text-sm text-gray-700">
+                      <label htmlFor="admin-remember-me" className="ml-2 block text-sm text-blue-300">
                         Remember me
                       </label>
                     </div>
                     <div className="text-sm">
-                      <Link to="/" className="font-medium text-brand-500 hover:text-brand-400">
+                      <Link to="/" className="font-medium text-teal-400 hover:text-teal-300 transition-colors">
                         Forgot password?
                       </Link>
                     </div>
                   </div>
 
-                  <Button type="submit" variant="default" className="w-full bg-red-600 hover:bg-red-700">
+                  <Button type="submit" variant="default" className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white transition-all duration-300">
                     Admin Sign in
                   </Button>
                 </form>
@@ -270,7 +280,7 @@ const LoginPage = () => {
           </CardContent>
 
           <CardFooter className="flex flex-col">
-            <p className="text-center text-sm text-gray-600">
+            <p className="text-center text-sm text-blue-300/80">
               Contact your administrator if you need access to the system.
             </p>
           </CardFooter>

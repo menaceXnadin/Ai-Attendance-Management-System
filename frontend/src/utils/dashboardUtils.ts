@@ -1,5 +1,22 @@
 import { AttendanceRecord, AttendancePrediction, SmartAlert, ClassComparison, CalendarDay } from '@/types/dashboard';
 
+// API helper for fetching insights and analytics
+const fetchStudentInsights = async (studentId: string) => {
+  try {
+    const response = await fetch(`/api/analytics/student-insights/${studentId}`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      }
+    });
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (error) {
+    console.error('Failed to fetch student insights:', error);
+  }
+  return null;
+};
+
 export const calculateAttendancePrediction = (
   attendanceRecords: AttendanceRecord[],
   totalSemesterClasses: number = 120
@@ -22,77 +39,120 @@ export const calculateAttendancePrediction = (
   };
 };
 
-export const generateSmartAlerts = (
+export const generateSmartAlerts = async (
   attendanceRecords: AttendanceRecord[],
-  currentAttendance: number
-): SmartAlert[] => {
+  currentAttendance: number,
+  studentId?: string
+): Promise<SmartAlert[]> => {
   const alerts: SmartAlert[] = [];
   
-  // Check recent attendance pattern (last 7 days)
-  const recentRecords = attendanceRecords
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 10);
-  
-  const recentAbsences = recentRecords.filter(r => r.status === 'absent').length;
-  const recentPresent = recentRecords.filter(r => r.status === 'present').length;
-  
-  // Generate context-aware alerts
-  if (recentAbsences >= 3) {
-    alerts.push({
-      id: 'frequent-absences',
-      type: 'danger',
-      title: 'Attendance Alert',
-      message: `You've missed ${recentAbsences} classes recently. Consider reaching out for support.`,
-      actionable: true
-    });
-  } else if (currentAttendance >= 95) {
-    alerts.push({
-      id: 'excellent-attendance',
-      type: 'success',
-      title: 'Outstanding Performance!',
-      message: `Excellent! You maintain ${currentAttendance}% attendance.`,
-      actionable: false
-    });
-  } else if (currentAttendance < 75) {
-    alerts.push({
-      id: 'low-attendance',
-      type: 'warning',
-      title: 'Attendance Below 75%',
-      message: 'Your attendance is below the minimum requirement. Take action now!',
-      actionable: true
-    });
+  // Try to get AI insights from backend
+  if (studentId) {
+    try {
+      const insights = await fetchStudentInsights(studentId);
+      if (insights && insights.insights) {
+        // Convert backend insights to our alert format
+        insights.insights.forEach((insight: { type: string; title: string; message: string; priority: string }) => {
+          alerts.push({
+            id: `ai-${insight.type}`,
+            type: insight.type as 'warning' | 'success' | 'info' | 'danger',
+            title: insight.title,
+            message: insight.message,
+            actionable: insight.priority === 'high'
+          });
+        });
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI insights:', error);
+    }
   }
-
-  // Check if student hasn't marked attendance today
-  const today = new Date().toISOString().split('T')[0];
-  const todayAttendance = attendanceRecords.find(r => r.date === today);
   
-  if (!todayAttendance && new Date().getHours() > 8) { // After 8 AM
-    alerts.push({
-      id: 'attendance-reminder',
-      type: 'info',
-      title: 'Daily Check-in Reminder',
-      message: "Don't forget to mark your attendance for today's classes!",
-      actionable: true
-    });
+  // Fallback to client-side analysis if API fails
+  if (alerts.length === 0) {
+    // Check recent attendance pattern (last 7 days)
+    const recentRecords = attendanceRecords
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10);
+    
+    const recentAbsences = recentRecords.filter(r => r.status === 'absent').length;
+    
+    // Generate context-aware alerts
+    if (recentAbsences >= 3) {
+      alerts.push({
+        id: 'frequent-absences',
+        type: 'danger',
+        title: 'Attendance Alert',
+        message: `You've missed ${recentAbsences} classes recently. Consider reaching out for support.`,
+        actionable: true
+      });
+    } else if (currentAttendance >= 95) {
+      alerts.push({
+        id: 'excellent-attendance',
+        type: 'success',
+        title: 'Outstanding Performance!',
+        message: `Excellent! You maintain ${currentAttendance}% attendance.`,
+        actionable: false
+      });
+    } else if (currentAttendance < 75) {
+      alerts.push({
+        id: 'low-attendance',
+        type: 'warning',
+        title: 'Attendance Below 75%',
+        message: 'Your attendance is below the minimum requirement. Take action now!',
+        actionable: true
+      });
+    }
+
+    // Check if student hasn't marked attendance today
+    const today = new Date().toISOString().split('T')[0];
+    const todayAttendance = attendanceRecords.find(r => r.date === today);
+    
+    if (!todayAttendance && new Date().getHours() > 8) { // After 8 AM
+      alerts.push({
+        id: 'attendance-reminder',
+        type: 'info',
+        title: 'Daily Check-in Reminder',
+        message: "Don't forget to mark your attendance for today's classes!",
+        actionable: true
+      });
+    }
   }
 
   return alerts;
 };
 
-export const calculateClassComparison = (
+export const calculateClassComparison = async (
   studentAttendance: number,
-  studentMarks: number
-): ClassComparison => {
-  // Mock class averages - in real app, this would come from API
-  const classAverageAttendance = 82.5;
-  const classAverageMarks = 78.2;
-
+  studentMarks: number,
+  studentId?: string
+): Promise<ClassComparison> => {
+  try {
+    // Fetch real class averages from API
+    const response = await fetch('/api/analytics/class-averages', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      }
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        studentAttendance,
+        classAverageAttendance: data.averageAttendance || 0,
+        studentMarks,
+        classAverageMarks: data.averageMarks || 0
+      };
+    }
+  } catch (error) {
+    console.error('Failed to fetch class averages:', error);
+  }
+  
+  // Fallback to empty comparison if API fails
   return {
     studentAttendance,
-    classAverageAttendance,
+    classAverageAttendance: 0,
     studentMarks,
-    classAverageMarks
+    classAverageMarks: 0
   };
 };
 
@@ -161,6 +221,6 @@ export const generatePDFData = (
     },
     marks: marksData,
     generatedDate: new Date().toLocaleDateString(),
-    semester: 'Spring 2024'
+    semester: new Date().getFullYear() + (new Date().getMonth() < 6 ? ' Spring' : ' Fall')
   };
 };
