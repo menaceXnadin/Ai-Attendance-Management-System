@@ -208,6 +208,12 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
                   <SidebarNavItem 
+                    icon={<Bell className="w-5 h-5" />} 
+                    label="Notifications" 
+                    to="/app/notifications"
+                    isNew={true}
+                  />
+                  <SidebarNavItem 
                     icon={<Settings className="w-5 h-5" />} 
                     label="Settings" 
                     to="/app/settings" 
@@ -263,7 +269,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
         
         <div className="flex-1">
           {/* Enhanced Header */}
-          <div className="flex items-center justify-between h-20 px-6 border-b border-slate-700/50 bg-slate-900/60 backdrop-blur-md">
+          <div className="relative z-50 flex items-center justify-between h-20 px-6 border-b border-slate-700/50 bg-slate-900/60 backdrop-blur-md">
             <div className="flex items-center gap-4">
               <SidebarTrigger className="text-slate-300 hover:text-white" />
               <div>
@@ -292,10 +298,9 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               <ThemeToggle />
             </div>
           </div>
-          
-          <div className="p-6">
-            {children}
-          </div>
+
+          {/* Main Content */}
+          <main className="p-6">{children}</main>
         </div>
       </div>
     </SidebarProvider>

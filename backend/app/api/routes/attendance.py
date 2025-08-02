@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from typing import List, Optional
 from datetime import datetime, date
 from app.core.database import get_db
-from app.models import AttendanceRecord, Student, Subject, Faculty
+from app.models import AttendanceRecord, Student, Subject, Faculty, AttendanceStatus, AttendanceMethod
 from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
@@ -278,7 +278,7 @@ async def mark_bulk_attendance(
         
         if existing_record:
             # Update existing record
-            existing_record.status = status.upper()
+            existing_record.status = AttendanceStatus(status.lower())
             existing_record.marked_by = current_user.id
             updated_records.append(existing_record.id)
         else:
@@ -287,9 +287,9 @@ async def mark_bulk_attendance(
                 student_id=student_id,
                 subject_id=subject_id,
                 date=target_date,
-                status=status.upper(),
+                status=AttendanceStatus(status.lower()),
                 marked_by=current_user.id,
-                method="manual"
+                method=AttendanceMethod.manual
             )
             db.add(new_record)
             created_records.append(student_id)

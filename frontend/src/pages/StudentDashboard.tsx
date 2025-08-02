@@ -36,15 +36,13 @@ import { api } from '@/integrations/api/client';
 import StudentAttendanceReport from '@/components/student/StudentAttendanceReport';
 import StudentMarksReport from '@/components/student/StudentMarksReport';
 import StudentProfile from '@/components/student/StudentProfile';
+import StudentPersonalAnalytics from '@/components/StudentPersonalAnalytics';
+import EnhancedNotificationSystem from '@/components/EnhancedNotificationSystem';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import FaceRecognition from '@/components/FaceRecognition';
 import FaceRegistration from '@/components/FaceRegistration';
 import StudentSidebar from '@/components/StudentSidebar';
 import SmartNotificationSystem from '@/components/SmartNotificationSystem';
-
-import AttendanceAnalytics from '@/components/AttendanceAnalytics';
-// DEMO: AdvancedAnalytics import
-import AdvancedAnalytics from '@/components/AdvancedAnalytics';
 
 
 const StudentDashboard = () => {
@@ -559,7 +557,7 @@ const StudentDashboard = () => {
                     value="analytics" 
                     className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-indigo-500 data-[state=active]:to-purple-500 data-[state=active]:text-white data-[state=inactive]:text-slate-300"
                   >
-                    <BarChart3 className="h-4 w-4 mr-2" />
+                    <Target className="h-4 w-4 mr-2" />
                     Analytics
                   </TabsTrigger>
                   <TabsTrigger 
@@ -604,52 +602,11 @@ const StudentDashboard = () => {
               </TabsContent>
 
               <TabsContent value="analytics" className="mt-0 p-4 md:p-6 border-t border-slate-700/30">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-white">Advanced Analytics</h3>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Export Data
-                    </Button>
-                  </div>
-                  <AttendanceAnalytics />
-                  {/* DEMO SECTION: AdvancedAnalytics (does not affect current setup) */}
-                  {import.meta.env.VITE_DEMO_MODE === 'true' && (
-                    <div className="mt-8">
-                      <h4 className="text-md font-semibold text-blue-300 mb-2">Demo: Advanced Analytics Component</h4>
-                      <AdvancedAnalytics data={{
-                        totalStudents: 120,
-                        presentToday: 95,
-                        attendanceRate: 82.5,
-                        weeklyTrend: 3.2,
-                        averageArrivalTime: '9:12 AM',
-                        topPerformingClass: 'Computer Science',
-                        lowAttendanceCount: 7
-                      }} />
-                    </div>
-                  )}
-                </div>
+                <StudentPersonalAnalytics />
               </TabsContent>
 
               <TabsContent value="notifications" className="mt-0 p-4 md:p-6 border-t border-slate-700/30">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg font-semibold text-white">Smart Notifications</h3>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
-                    >
-                      <Settings className="h-4 w-4 mr-2" />
-                      Settings
-                    </Button>
-                  </div>
-                  <SmartNotificationSystem />
-                </div>
+                <EnhancedNotificationSystem />
               </TabsContent>
               
               <TabsContent value="marks" className="mt-0 p-4 md:p-6 border-t border-slate-700/30">

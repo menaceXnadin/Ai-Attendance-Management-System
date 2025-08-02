@@ -75,7 +75,7 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts/useAuth';
 import RealTimeAnalytics from '@/components/RealTimeAnalytics';
-import RealAttendanceAnalytics from '@/components/RealAttendanceAnalytics';
+import UnifiedAnalytics from '@/components/UnifiedAnalytics';
 
 
 const Dashboard = () => {
@@ -856,7 +856,7 @@ const Dashboard = () => {
 
           {/* Analytics Tab - Enhanced */}
           <TabsContent value="analytics" className="space-y-6">
-            <RealAttendanceAnalytics className="mb-6" />
+            <UnifiedAnalytics className="mb-6" />
             <RealTimeStats />
           </TabsContent>
 

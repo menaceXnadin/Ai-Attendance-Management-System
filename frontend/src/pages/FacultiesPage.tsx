@@ -43,6 +43,12 @@ interface Subject {
   description?: string;
   credits: number;
   faculty_id: number;
+  class_schedule?: {
+    semester?: number;
+    days?: string[];
+    time?: string;
+    faculty?: string;
+  };
 }
 
 type ViewMode = 'faculties' | 'semesters' | 'classes';
@@ -247,9 +253,12 @@ const FacultiesPage = () => {
 
   // Filter subjects by selected semester
   const semesterSubjects = subjects.filter(subject => {
-    // Since subjects don't have semester info directly, we'll show all subjects
-    // In a real implementation, you might need to add semester info to subjects
-    return true;
+    // Check if subject has class_schedule with semester info
+    if (subject.class_schedule && typeof subject.class_schedule === 'object') {
+      const schedule = subject.class_schedule as { semester?: number };
+      return schedule.semester === selectedSemester;
+    }
+    return false;
   });
 
   const semesters = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -434,8 +443,14 @@ const FacultiesPage = () => {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {semesters.map((semester) => {
-              // Count subjects for this semester (for display purposes)
-              const semesterClassCount = subjects.length; // All subjects shown for now
+              // Count subjects for this specific semester
+              const semesterClassCount = subjects.filter(subject => {
+                if (subject.class_schedule && typeof subject.class_schedule === 'object') {
+                  const schedule = subject.class_schedule as { semester?: number };
+                  return schedule.semester === semester;
+                }
+                return false;
+              }).length;
               
               return (
                 <Card 

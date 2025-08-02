@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Users, BookOpen, GraduationCap, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Loader2, Users, BookOpen, GraduationCap, Calendar, CheckCircle, XCircle, Clock, Save, UserCheck, UserX } from 'lucide-react';
 import { api } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -32,6 +32,7 @@ interface StudentWithAttendance {
   semester: number;
   status: 'present' | 'absent' | 'late';
   faculty_id: number;
+  hasChanges?: boolean; // Track if attendance was manually changed
 }
 
 const EnhancedAttendanceManagement = () => {
@@ -51,6 +52,7 @@ const EnhancedAttendanceManagement = () => {
     faculties: false,
     subjects: false,
     students: false,
+    saving: false,
   });
 
   // Fetch faculties on component mount
@@ -184,6 +186,77 @@ const EnhancedAttendanceManagement = () => {
     setSelectedSubject(value);
   };
 
+  // Manual attendance marking functions
+  const markStudentAttendance = (studentId: number, status: 'present' | 'absent' | 'late') => {
+    setStudents(prevStudents => 
+      prevStudents.map(student => 
+        student.id === studentId 
+          ? { ...student, status, hasChanges: true }
+          : student
+      )
+    );
+  };
+
+  const markAllStudents = (status: 'present' | 'absent' | 'late') => {
+    setStudents(prevStudents => 
+      prevStudents.map(student => ({ 
+        ...student, 
+        status, 
+        hasChanges: true 
+      }))
+    );
+  };
+
+  const saveAttendanceChanges = async () => {
+    const changedStudents = students.filter(student => student.hasChanges);
+    
+    if (changedStudents.length === 0) {
+      toast({
+        title: "No Changes",
+        description: "No attendance changes to save.",
+        variant: "default",
+      });
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, saving: true }));
+    
+    try {
+      const attendanceData = {
+        subject_id: parseInt(selectedSubject),
+        date: selectedDate,
+        students: changedStudents.map(student => ({
+          student_id: student.id,
+          status: student.status
+        }))
+      };
+
+      await api.attendance.markBulk(attendanceData);
+      
+      // Clear the hasChanges flag after successful save
+      setStudents(prevStudents => 
+        prevStudents.map(student => ({ 
+          ...student, 
+          hasChanges: false 
+        }))
+      );
+
+      toast({
+        title: "Attendance Saved",
+        description: `Successfully updated attendance for ${changedStudents.length} students.`,
+      });
+    } catch (error) {
+      console.error('Error saving attendance:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save attendance changes.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(prev => ({ ...prev, saving: false }));
+    }
+  };
+
   const selectedFacultyName = faculties.find(f => f.id.toString() === selectedFaculty)?.name || '';
   const selectedSubjectName = subjects.find(s => s.id.toString() === selectedSubject)?.name || '';
 
@@ -191,6 +264,8 @@ const EnhancedAttendanceManagement = () => {
     acc[student.status] = (acc[student.status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  const hasUnsavedChanges = students.some(student => student.hasChanges);
 
   return (
     <div className="space-y-6">
@@ -327,21 +402,78 @@ const EnhancedAttendanceManagement = () => {
                 )}
               </CardTitle>
               
-              {/* Quick Stats */}
-              {students.length > 0 && (
-                <div className="flex gap-2">
-                  <Badge className="bg-green-500/20 text-green-300">
-                    Present: {attendanceStats.present || 0}
-                  </Badge>
-                  <Badge className="bg-yellow-500/20 text-yellow-300">
-                    Late: {attendanceStats.late || 0}
-                  </Badge>
-                  <Badge className="bg-red-500/20 text-red-300">
-                    Absent: {attendanceStats.absent || 0}
-                  </Badge>
-                </div>
-              )}
+              {/* Quick Stats & Actions */}
+              <div className="flex items-center gap-4">
+                {students.length > 0 && (
+                  <div className="flex gap-2">
+                    <Badge className="bg-green-500/20 text-green-300">
+                      Present: {attendanceStats.present || 0}
+                    </Badge>
+                    <Badge className="bg-yellow-500/20 text-yellow-300">
+                      Late: {attendanceStats.late || 0}
+                    </Badge>
+                    <Badge className="bg-red-500/20 text-red-300">
+                      Absent: {attendanceStats.absent || 0}
+                    </Badge>
+                  </div>
+                )}
+                
+                {/* Save Button */}
+                {hasUnsavedChanges && (
+                  <Button 
+                    onClick={saveAttendanceChanges}
+                    disabled={loading.saving}
+                    className="bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {loading.saving ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
+            
+            {/* Bulk Actions */}
+            {students.length > 0 && (
+              <div className="flex items-center gap-2 pt-4 border-t border-slate-700">
+                <span className="text-sm text-slate-300 mr-2">Bulk Actions:</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => markAllStudents('present')}
+                  className="text-green-400 border-green-400/30 hover:bg-green-500/10"
+                >
+                  <UserCheck className="h-4 w-4 mr-1" />
+                  Mark All Present
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => markAllStudents('absent')}
+                  className="text-red-400 border-red-400/30 hover:bg-red-500/10"
+                >
+                  <UserX className="h-4 w-4 mr-1" />
+                  Mark All Absent
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => markAllStudents('late')}
+                  className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10"
+                >
+                  <Clock className="h-4 w-4 mr-1" />
+                  Mark All Late
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {loading.students ? (
@@ -367,16 +499,27 @@ const EnhancedAttendanceManagement = () => {
                       <TableHead className="text-slate-300">Email</TableHead>
                       <TableHead className="text-slate-300">Semester</TableHead>
                       <TableHead className="text-slate-300">Status</TableHead>
+                      <TableHead className="text-slate-300 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {students.map((student) => (
-                      <TableRow key={student.id} className="border-slate-700 hover:bg-slate-800/30">
+                      <TableRow 
+                        key={student.id} 
+                        className={`border-slate-700 hover:bg-slate-800/30 ${
+                          student.hasChanges ? 'bg-blue-500/10 border-blue-500/30' : ''
+                        }`}
+                      >
                         <TableCell className="text-white font-medium">
                           {student.student_id}
                         </TableCell>
                         <TableCell className="text-white">
                           {student.name}
+                          {student.hasChanges && (
+                            <Badge variant="outline" className="ml-2 text-xs bg-blue-500/20 text-blue-300">
+                              Modified
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-slate-300">
                           {student.email}
@@ -386,6 +529,40 @@ const EnhancedAttendanceManagement = () => {
                         </TableCell>
                         <TableCell>
                           {getStatusBadge(student.status)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => markStudentAttendance(student.id, 'present')}
+                              disabled={student.status === 'present'}
+                              className="text-green-400 border-green-400/30 hover:bg-green-500/10 h-8 w-8 p-0"
+                              title="Mark Present"
+                            >
+                              <CheckCircle className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => markStudentAttendance(student.id, 'late')}
+                              disabled={student.status === 'late'}
+                              className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10 h-8 w-8 p-0"
+                              title="Mark Late"
+                            >
+                              <Clock className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => markStudentAttendance(student.id, 'absent')}
+                              disabled={student.status === 'absent'}
+                              className="text-red-400 border-red-400/30 hover:bg-red-500/10 h-8 w-8 p-0"
+                              title="Mark Absent"
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

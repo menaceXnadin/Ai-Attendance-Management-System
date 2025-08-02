@@ -74,6 +74,7 @@ async def get_all_students(
                 "email": student.user.email if student.user else "unknown@example.com",
                 "student_id": student.student_id,
                 "faculty": faculty_name,
+                "faculty_id": student.faculty_id,  # Add faculty_id for filtering
                 "semester": getattr(student, "semester", 1),
                 "year": getattr(student, "year", 1),
                 "batch": getattr(student, "batch", 2025),
@@ -145,9 +146,11 @@ async def create_student(
     print(f"[Backend] Student data semester: {getattr(student_data, 'semester', 'NOT_FOUND')}")
     print(f"[Backend] Student data year: {getattr(student_data, 'year', 'NOT_FOUND')}")
     
-    # Check if user is admin
-    if current_user.role != "admin":
-        print(f"[Backend] Unauthorized create attempt by user: {current_user.email}")
+    # Check if user is admin - handle both enum and string roles
+    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    print(f"[Backend] User role check: {user_role} (type: {type(current_user.role)})")
+    if user_role != "admin":
+        print(f"[Backend] Unauthorized create attempt by user: {current_user.email} with role: {user_role}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -173,6 +176,7 @@ async def create_student(
     try:
         # Create user first
         from app.core.security import get_password_hash
+        print(f"[Backend] Creating user: {student_data.user.full_name} ({student_data.user.email})")
         user = User(
             email=student_data.user.email,
             full_name=student_data.user.full_name,
@@ -181,13 +185,33 @@ async def create_student(
         )
         db.add(user)
         await db.flush()  # Get the user ID
-        print(f"[Backend] Created user with ID: {user.id}")
+        print(f"[Backend] Created user with ID: {user.id}, Name: {user.full_name}")
+        
+        # Get faculty information - faculty_id is required
+        if not student_data.faculty_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Faculty selection is required"
+            )
+            
+        faculty_result = await db.execute(select(Faculty).where(Faculty.id == student_data.faculty_id))
+        faculty = faculty_result.scalar_one_or_none()
+        if not faculty:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Faculty with ID {student_data.faculty_id} not found"
+            )
+        
+        faculty_name = faculty.name
+        print(f"[Backend] Selected faculty: {faculty_name} (ID: {student_data.faculty_id})")
         
         # Create student profile
+        print(f"[Backend] Creating student profile: ID={student_data.student_id}, Faculty={faculty_name} (ID: {student_data.faculty_id})")
         student = Student(
             user_id=user.id,
             student_id=student_data.student_id,
-            faculty_id=student_data.faculty_id,  # Use faculty_id instead of faculty
+            faculty=faculty_name,  # Set faculty name (required field)
+            faculty_id=student_data.faculty_id,  # Set faculty_id (foreign key)
             semester=student_data.semester or 1,  # Add semester field
             year=student_data.year or 1,           # Keep year field
             batch=student_data.batch or datetime.now().year,  # Add batch field with current year default
@@ -196,6 +220,8 @@ async def create_student(
         )
         db.add(student)
         await db.commit()
+        await db.refresh(student)
+        print(f"[Backend] Created student with ID: {student.id}, Faculty: {student.faculty}, Faculty_ID: {student.faculty_id}")
         await db.refresh(student)
         print(f"[Backend] Created student with ID: {student.id}")
         
@@ -253,8 +279,9 @@ async def update_student(
     
     print(f"[Backend] Found student: {student.student_id} - {student.user.full_name if student.user else 'No user'}")
     
-    # Check permissions
-    if current_user.role == "student" and student.user_id != current_user.id:
+    # Check permissions - handle both enum and string roles
+    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    if user_role == "student" and student.user_id != current_user.id:
         print(f"[Backend] Permission denied: student can only update their own profile")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -262,7 +289,7 @@ async def update_student(
         )
     
     # Update student fields
-    student_fields = ['faculty', 'semester', 'year', 'batch', 'phone_number', 'emergency_contact', 'student_id']
+    student_fields = ['faculty', 'faculty_id', 'semester', 'year', 'batch', 'phone_number', 'emergency_contact', 'student_id']
     updated_fields = []
     for field in student_fields:
         if field in student_data:
@@ -272,8 +299,24 @@ async def update_student(
             updated_fields.append(f"{field}: {old_value} -> {new_value}")
             print(f"[Backend] Updated {field}: {old_value} -> {new_value}")
     
+    # If faculty_id is provided, also update the legacy faculty field with the faculty name
+    if 'faculty_id' in student_data and student_data['faculty_id']:
+        try:
+            faculty_result = await db.execute(
+                select(Faculty).where(Faculty.id == student_data['faculty_id'])
+            )
+            faculty = faculty_result.scalar_one_or_none()
+            if faculty:
+                old_faculty = student.faculty
+                student.faculty = faculty.name
+                updated_fields.append(f"faculty (legacy): {old_faculty} -> {faculty.name}")
+                print(f"[Backend] Updated legacy faculty field: {old_faculty} -> {faculty.name}")
+        except Exception as e:
+            print(f"[Backend] Warning: Could not update legacy faculty field: {str(e)}")
+    
     # Update user fields if provided and user has permissions
-    if current_user.role == "admin":
+    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
+    if user_role == "admin":
         user = student.user
         if user:
             user_fields = ['full_name', 'email']

@@ -22,10 +22,12 @@ export interface StudentFormData {
   full_name: string;
   student_id: string;
   email: string;
-  faculty_id: number;  // Changed to faculty_id
+  faculty_id: number;
   semester: number;
   year: number;
   batch: number;
+  phone_number?: string;        // Added missing field
+  emergency_contact?: string;   // Added missing field
   password?: string;
   confirmPassword?: string;
 }
@@ -222,6 +224,33 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
                 disabled={isLoading}
               />
               {errors.batch && <span className="text-sm text-red-500">{errors.batch.message}</span>}
+            </div>
+          </div>
+
+          {/* Additional contact information */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone_number">Phone Number (Optional)</Label>
+              <Input 
+                id="phone_number" 
+                type="tel"
+                {...register('phone_number')} 
+                placeholder="e.g., +977-9812345678" 
+                disabled={isLoading}
+              />
+              {errors.phone_number && <span className="text-sm text-red-500">{errors.phone_number.message}</span>}
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="emergency_contact">Emergency Contact (Optional)</Label>
+              <Input 
+                id="emergency_contact" 
+                type="tel"
+                {...register('emergency_contact')} 
+                placeholder="e.g., +977-9887654321" 
+                disabled={isLoading}
+              />
+              {errors.emergency_contact && <span className="text-sm text-red-500">{errors.emergency_contact.message}</span>}
             </div>
           </div>
           

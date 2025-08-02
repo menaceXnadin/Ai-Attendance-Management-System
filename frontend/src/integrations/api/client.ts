@@ -289,8 +289,8 @@ export const api = {
   students: {
     getAll: async (): Promise<Student[]> => {
       console.log('[API] students.getAll called');
-      // Always use trailing slash to avoid FastAPI redirect
-      const response = await apiRequest('/students/');
+      // Use high limit to get all students
+      const response = await apiRequest('/students/?limit=1000');
       console.log('[API] Students API response:', response);
       if (!response || !Array.isArray(response)) {
         console.error('[API] Invalid response format, expected array:', response);
@@ -313,9 +313,12 @@ export const api = {
           rollNo: `R-${studentId}`,
           studentId: studentId,
           faculty: faculty,
+          faculty_id: student.faculty_id ? Number(student.faculty_id) : 0, // Add faculty_id from backend
           semester: student.semester ? Number(student.semester) : 1,
           year: student.year ? Number(student.year) : 1,
           batch: student.batch ? Number(student.batch) : new Date().getFullYear(),
+          phone_number: student.phone_number?.toString() || '',
+          emergency_contact: student.emergency_contact?.toString() || '',
           profileImage: student.profile_image_url?.toString() || '',
           face_encoding: Array.isArray(student.face_encoding) ? student.face_encoding as number[] : null
         };
@@ -335,6 +338,8 @@ export const api = {
           semester: response.semester || 1,
           year: response.year || 1,
           batch: response.batch || new Date().getFullYear(),
+          phone_number: response.phone_number || '',
+          emergency_contact: response.emergency_contact || '',
           profileImage: response.profile_image_url || '',
           face_encoding: Array.isArray(response.face_encoding) ? response.face_encoding as number[] : null
         };
@@ -357,12 +362,12 @@ export const api = {
               password: studentData.password
             },
             student_id: studentData.studentId,
-            faculty: studentData.faculty || "General", // Use faculty field
+            faculty_id: studentData.faculty_id, // Send faculty_id instead of faculty
             semester: studentData.semester || 1,
             year: studentData.year || 1,
             batch: studentData.batch || new Date().getFullYear(),
-            phone_number: "",
-            emergency_contact: ""
+            phone_number: studentData.phone_number || null,
+            emergency_contact: studentData.emergency_contact || null
           }),
         });
         
@@ -374,7 +379,7 @@ export const api = {
           email: response.user ? response.user.email : studentData.email,
           rollNo: `R-${response.student_id}`,
           studentId: response.student_id,
-          faculty: response.faculty || studentData.faculty,
+          faculty: response.faculty || "Unknown", // Use faculty from backend response
           semester: response.semester || studentData.semester,
           year: response.year || studentData.year,
           batch: response.batch || studentData.batch,
@@ -555,6 +560,24 @@ export const api = {
         return response;
       } catch (error) {
         console.error('Failed to fetch students by subject:', error);
+        throw error;
+      }
+    },
+
+    markBulk: async (attendanceData: {
+      subject_id: number;
+      date?: string;
+      students: Array<{ student_id: number; status: string }>;
+    }) => {
+      console.log('[API] attendance.markBulk called', attendanceData);
+      try {
+        const response = await apiRequest('/attendance/mark-bulk', {
+          method: 'POST',
+          body: JSON.stringify(attendanceData),
+        });
+        return response;
+      } catch (error) {
+        console.error('Failed to mark bulk attendance:', error);
         throw error;
       }
     },

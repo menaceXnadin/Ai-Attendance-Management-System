@@ -63,7 +63,7 @@ class User(UserBase):
 # Student schemas
 class StudentBase(BaseModel):
     student_id: str
-    faculty_id: Optional[int] = None  # Changed to faculty_id
+    faculty_id: int  # Make faculty_id required
     semester: int = 1  # Current semester (1-8)
     year: int = 1  # Current academic year (1-4)
     batch: int  # Year when student joined (e.g., 2025)

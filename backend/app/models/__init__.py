@@ -4,6 +4,9 @@ from sqlalchemy.sql import func
 from app.core.database import Base
 import enum
 
+# Import notification models
+from .notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope, NotificationPriority, NotificationType
+
 # Enums matching PostgreSQL ENUM types
 class UserRole(enum.Enum):
     student = "student"

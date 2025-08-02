@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
+import AdminRoute from "@/components/AdminRoute";
 import RoleRedirect from "@/components/RoleRedirect";
 import ApiErrorBoundary from "@/components/ApiErrorBoundary";
 import { useAuth } from './contexts/useAuth';
@@ -32,6 +33,14 @@ import NotFound from "./pages/NotFound";
 
 import GlobalAnalyticsDemo from "./pages/UnifiedAnalyticsDemo";
 import MergedAnalyticsDemo from "./pages/MergedAnalyticsDemo";
+
+import AnalyticsPage from "./pages/AnalyticsPage";
+
+import AnalyticsShowcase from "./pages/AnalyticsShowcase";
+import SystemStatusPage from "./pages/SystemStatusPage";
+import AdminNotificationsPage from "./pages/AdminNotificationsPage";
+
+import LiveMonitoringPage from "./pages/LiveMonitoringPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -97,12 +106,14 @@ const App = () => {
                 </ProtectedRoute>
               } />
               
-              {/* Protected App Routes */}
+              {/* Protected Admin Routes */}
               <Route path="/app" element={
                 <ProtectedRoute>
-                  <ApiErrorBoundary>
-                    <DashboardLayout />
-                  </ApiErrorBoundary>
+                  <AdminRoute>
+                    <ApiErrorBoundary>
+                      <DashboardLayout />
+                    </ApiErrorBoundary>
+                  </AdminRoute>
                 </ProtectedRoute>
               }>
                 <Route index element={<Dashboard />} />
@@ -110,8 +121,17 @@ const App = () => {
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="faculties" element={<FacultiesPage />} />
                 <Route path="settings" element={<SettingsPage />} />
+                <Route path="notifications" element={<AdminNotificationsPage />} />
+                <Route path="monitoring" element={<LiveMonitoringPage />} />
+                <Route path="analytics" element={<ApiErrorBoundary><AnalyticsPage /></ApiErrorBoundary>} />
               </Route>
               
+              <Route path="analytics-showcase" element={<AnalyticsShowcase />} />
+              <Route path="/status" element={
+                <ProtectedRoute>
+                  <SystemStatusPage />
+                </ProtectedRoute>
+              } />
               {/* Catch-all route */}
               <Route path="*" element={<NotFound />} />
             </Routes>

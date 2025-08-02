@@ -46,8 +46,8 @@ const StudentsPage = () => {
           student_id: student.studentId || 'Unknown ID',
           studentId: student.studentId || 'Unknown ID',
           email: student.email || 'unknown@example.com',
-          faculty: student.faculty || 'Unknown Faculty', // This should now have the actual faculty value
-          faculty_id: 0, // Default value, will be set by form
+          faculty: student.faculty || 'Unknown Faculty',
+          faculty_id: student.faculty_id || 0, // Use actual faculty_id from backend
           semester: student.semester || 1,
           year: student.year || 1,
           batch: student.batch || new Date().getFullYear(),
@@ -73,14 +73,14 @@ const StudentsPage = () => {
     }
   }, [activeTab, refetch]);
 
-  // Use all faculties from backend for dropdown
+  // Use all faculties from backend for dropdown - keep the full objects
   const faculties = React.useMemo(() => {
-    return allFaculties.map(f => f.name || f.title || f);
+    return allFaculties; // Return full faculty objects with id and name
   }, [allFaculties]);
 
   // Filter students by selected faculty
   const filteredStudents = selectedFaculty
-    ? students.filter(s => s.faculty === selectedFaculty)
+    ? students.filter(s => s.faculty_id === Number(selectedFaculty))
     : [];
 
   React.useEffect(() => {
@@ -123,11 +123,14 @@ const StudentsPage = () => {
           email: student.email,
           studentId: student.student_id,
           password: student.password,
-          rollNo: student.faculty_id?.toString() || "0", // Use faculty_id as rollNo for backend compatibility
           faculty_id: student.faculty_id, // Pass faculty_id directly
           semester: student.semester,
           year: student.year,
           batch: student.batch,
+          phone_number: student.phone_number,      // Add phone number
+          emergency_contact: student.emergency_contact, // Add emergency contact
+          // Legacy fields for backward compatibility
+          rollNo: student.faculty_id?.toString() || "0", 
           role: 'student',
         };
         
@@ -175,10 +178,12 @@ const StudentsPage = () => {
           full_name: student.full_name,
           email: student.email,
           student_id: student.student_id,
-          faculty_id: student.faculty_id, // Backend expects faculty_id
+          faculty_id: student.faculty_id, // For backend faculty relationship
           semester: student.semester,
           year: student.year,
           batch: student.batch,
+          phone_number: student.phone_number,
+          emergency_contact: student.emergency_contact,
         };
         
         console.log('[Frontend] Mapped update data for API:', updateData);
@@ -363,7 +368,7 @@ const StudentsPage = () => {
             >
               <option value="">-- Choose Faculty --</option>
               {faculties.map(faculty => (
-                <option key={faculty} value={faculty}>{faculty}</option>
+                <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
               ))}
             </select>
           </div>

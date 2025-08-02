@@ -27,25 +27,31 @@ export interface Student {
   student_id?: string; // Backend sends this field
   email: string;
   faculty?: string;
+  faculty_id?: number;       // Add faculty_id field for filtering
   semester?: number;
   year?: number;
   batch?: number;
+  phone_number?: string;     // Add phone number field
+  emergency_contact?: string; // Add emergency contact field
   profileImage?: string | null;
   face_encoding?: number[] | null; // Face encoding for recognition
 }
 
 export interface StudentCreateData {
-  name: string;
-  rollNo: string;
-  studentId: string;
-  email: string;
-  password: string;
-  role: string;
-  faculty_id?: number;  // Changed to faculty_id
-  semester?: number;
-  year?: number;
-  batch?: number;
-  profileImage?: string | null;
+  name: string;         // Maps to user.full_name 
+  email: string;        // Maps to user.email
+  password: string;     // Maps to user.password
+  studentId: string;    // Maps to student_id
+  faculty_id: number;   // Maps to faculty_id (required)
+  semester: number;     // Maps to semester
+  year: number;         // Maps to year
+  batch: number;        // Maps to batch
+  phone_number?: string;     // Maps to phone_number (optional)
+  emergency_contact?: string; // Maps to emergency_contact (optional)
+  // Legacy fields - can be removed in future
+  rollNo?: string;      // Not used in backend
+  role?: string;        // Not used in backend  
+  profileImage?: string | null; // Not used in backend
 }
 
 export interface Class {

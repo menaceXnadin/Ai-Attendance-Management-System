@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, Integer, text
 from typing import List, Optional
 from app.core.database import get_db, get_sync_db
 from app.models import Subject, Faculty
@@ -40,16 +40,20 @@ async def get_subjects_by_faculty_semester(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get subjects grouped by semester for a specific faculty."""
+    """Get subjects filtered by faculty and semester."""
     query = select(Subject).where(Subject.faculty_id == faculty_id)
+    
+    # Filter by semester if provided
+    if semester is not None:
+        query = query.where(text(f"class_schedule->>'semester' = '{semester}'"))
     
     result = await db.execute(query)
     subjects = result.scalars().all()
     
-    # Return all subjects for the faculty
-    # In a real implementation, you might want to add semester field to Subject model
+    # Return subjects with proper class_schedule data
     subjects_data = []
     for subject in subjects:
+        class_schedule = subject.class_schedule or {}
         subjects_data.append({
             "id": subject.id,
             "name": subject.name,
@@ -57,7 +61,8 @@ async def get_subjects_by_faculty_semester(
             "description": subject.description,
             "credits": subject.credits,
             "faculty_id": subject.faculty_id,
-            "semester": semester or 1  # For now, return the semester passed as parameter
+            "class_schedule": class_schedule,
+            "semester": class_schedule.get('semester') if class_schedule else None
         })
     
     return subjects_data

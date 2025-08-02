@@ -6,6 +6,7 @@ from app.api.routes import auth, face_recognition, students, classes, attendance
 from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
 from app.api.routes.admins import router as admins_router
+from app.api.endpoints.notifications import router as notifications_router
 from app.middleware import ResponseTimeMiddleware
 import logging
 import warnings
@@ -29,7 +30,7 @@ app = FastAPI(
 # Add CORS middleware with more permissive settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins since we're using a proxy
+    allow_origins=["*", "http://localhost:8080", "http://localhost:3000", "http://localhost:5173"],  # Allow specific origins including frontend
     allow_credentials=True,  # Allow credentials
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
@@ -41,7 +42,7 @@ app.add_middleware(ResponseTimeMiddleware)
 # Add trusted host middleware
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["localhost", "127.0.0.1", "*.localhost"]
+    allowed_hosts=["localhost", "127.0.0.1", "*.localhost", "*"]
 )
 
 # Include routers
@@ -55,6 +56,7 @@ app.include_router(comprehensive.router, prefix="/api")
 app.include_router(faculties_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
 app.include_router(admins_router, prefix="/api")
+app.include_router(notifications_router, prefix="/api")
 
 @app.get("/")
 async def root():

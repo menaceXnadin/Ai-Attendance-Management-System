@@ -1,12 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, X, Calendar, AlertTriangle, CheckCircle, Info, Clock } from 'lucide-react';
+import { Bell, X, Calendar, AlertTriangle, CheckCircle, Info, Clock, Megaphone } from 'lucide-react';
+import { useAuth } from '@/contexts/useAuth';
+import { API_URL } from '@/config/api';
+
+interface ApiNotification {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'danger' | 'announcement';
+  is_read: boolean;
+  created_at: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  recipient_id: string;
+  sender_id: string;
+  category: string;
+  action_url?: string;
+}
 
 interface Notification {
   id: string;
-  type: 'info' | 'warning' | 'success' | 'error';
+  type: 'info' | 'warning' | 'success' | 'error' | 'announcement';
   title: string;
   message: string;
   timestamp: Date;
@@ -17,68 +33,107 @@ interface Notification {
 }
 
 const NotificationCenter: React.FC = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    {
-      id: '1',
-      type: 'warning',
-      title: 'Low Attendance Alert',
-      message: '3 students have attendance below 75%. Immediate attention required.',
-      timestamp: new Date(Date.now() - 30 * 60 * 1000),
-      read: false,
-      actionable: true,
-      actionText: 'View Students',
-      onAction: () => console.log('Navigate to students page')
-    },
-    {
-      id: '2',
-      type: 'success',
-      title: 'Weekly Report Generated',
-      message: 'Your weekly attendance report has been generated and is ready for download.',
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      read: false,
-      actionable: true,
-      actionText: 'Download',
-      onAction: () => console.log('Download report')
-    },
-    {
-      id: '3',
-      type: 'info',
-      title: 'System Update',
-      message: 'Face recognition accuracy has been improved to 99.8% with the latest update.',
-      timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-      read: true,
-    },
-    {
-      id: '4',
-      type: 'error',
-      title: 'Camera Offline',
-      message: 'Classroom 3B camera is offline. Students cannot mark attendance.',
-      timestamp: new Date(Date.now() - 5 * 60 * 1000),
-      read: false,
-      actionable: true,
-      actionText: 'Check Status',
-      onAction: () => console.log('Check camera status')
-    }
-  ]);
-
+  const { user } = useAuth(); // Get current user to check role
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Check if user is admin
+  const isAdmin = user?.role === 'admin';
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError("Authentication token not found.");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/notifications/user/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch notifications: ${response.statusText}`);
+      }
+      const data: ApiNotification[] = await response.json();
+      
+      const formattedNotifications = data.map((n): Notification => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type === 'danger' ? 'error' : n.type,
+        read: n.is_read,
+        timestamp: new Date(n.created_at),
+        actionable: !!n.action_url,
+        actionText: 'View',
+        onAction: () => {
+          if (n.action_url) {
+            window.open(n.action_url, '_blank');
+          }
+        }
+      }));
+      setNotifications(formattedNotifications);
+      setError(null);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      setError(error instanceof Error ? error.message : "An unknown error occurred.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 30000); // Refresh every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isOpen, fetchNotifications]);
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
-    );
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/notifications/${id}/read`, { 
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setNotifications(prev => 
+        prev.map(n => n.id === id ? { ...n, read: true } : n)
+      );
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications(prev => 
-      prev.map(n => ({ ...n, read: true }))
-    );
+  const handleMarkAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/notifications/mark-all-read`, { 
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setNotifications(prev => 
+        prev.map(n => ({ ...n, read: true }))
+      );
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+    }
   };
 
-  const removeNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id));
+  const handleRemoveNotification = async (id: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch(`${API_URL}/notifications/${id}`, { 
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+    }
   };
 
   const getNotificationIcon = (type: string) => {
@@ -89,6 +144,8 @@ const NotificationCenter: React.FC = () => {
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'error':
         return <X className="h-4 w-4 text-red-500" />;
+      case 'announcement':
+        return <Megaphone className="h-4 w-4 text-purple-500" />;
       default:
         return <Info className="h-4 w-4 text-blue-500" />;
     }
@@ -102,6 +159,8 @@ const NotificationCenter: React.FC = () => {
         return 'border-green-200 bg-green-50';
       case 'error':
         return 'border-red-200 bg-red-50';
+      case 'announcement':
+        return 'border-purple-200 bg-purple-50';
       default:
         return 'border-blue-200 bg-blue-50';
     }
@@ -142,7 +201,7 @@ const NotificationCenter: React.FC = () => {
 
       {/* Notification Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-12 w-96 z-50">
+        <div className="absolute right-0 top-12 w-96 z-[999]">
           <Card className="bg-slate-900/95 backdrop-blur-md border-slate-700/50 shadow-2xl">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -155,7 +214,7 @@ const NotificationCenter: React.FC = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={markAllAsRead}
+                      onClick={handleMarkAllAsRead}
                       className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800"
                     >
                       Mark all read
@@ -178,6 +237,12 @@ const NotificationCenter: React.FC = () => {
                   <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
                   <p>No notifications</p>
                 </div>
+              ) : error ? (
+                <div className="p-6 text-center text-red-400">
+                  <AlertTriangle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>Error loading notifications:</p>
+                  <p className="text-sm text-slate-400">{error}</p>
+                </div>
               ) : (
                 <div className="space-y-1">
                   {notifications.map((notification) => (
@@ -189,9 +254,10 @@ const NotificationCenter: React.FC = () => {
                         notification.type === 'warning' ? 'border-amber-500 bg-amber-500/10' :
                         notification.type === 'success' ? 'border-green-500 bg-green-500/10' :
                         notification.type === 'error' ? 'border-red-500 bg-red-500/10' :
+                        notification.type === 'announcement' ? 'border-purple-500 bg-purple-500/10' :
                         'border-blue-500 bg-blue-500/10'
                       }`}
-                      onClick={() => !notification.read && markAsRead(notification.id)}
+                      onClick={() => !notification.read && handleMarkAsRead(notification.id)}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
@@ -227,17 +293,20 @@ const NotificationCenter: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeNotification(notification.id);
-                          }}
-                          className="ml-2 h-6 w-6 p-0 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-white"
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
+                        {/* Only show delete button for admins */}
+                        {isAdmin && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveNotification(notification.id);
+                            }}
+                            className="ml-2 h-6 w-6 p-0 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-white"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}

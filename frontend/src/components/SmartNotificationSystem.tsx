@@ -23,6 +23,7 @@ import {
   Wifi,
   WifiOff
 } from 'lucide-react';
+import { useAuth } from '@/contexts/useAuth';
 
 interface Notification {
   id: string;
@@ -46,6 +47,9 @@ const SmartNotificationSystem: React.FC<SmartNotificationSystemProps> = ({
   className = '',
   maxVisible = 5 
 }) => {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [notifications, setNotifications] = useState<Notification[]>([
     {
       id: '1',
@@ -346,12 +350,15 @@ const SmartNotificationSystem: React.FC<SmartNotificationSystemProps> = ({
                         >
                           {notification.priority}
                         </Badge>
-                        <button
-                          onClick={() => deleteNotification(notification.id)}
-                          className="text-slate-400 hover:text-red-400 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
+                        {/* Only show delete button for admins */}
+                        {isAdmin && (
+                          <button
+                            onClick={() => deleteNotification(notification.id)}
+                            className="text-slate-400 hover:text-red-400 transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     

@@ -210,32 +210,6 @@ async def get_system_health(
             "last_updated": datetime.now().isoformat()
         }
 
-# ============ SIMPLE NOTIFICATION ENDPOINT ============
-@router.get("/notifications/")
-async def get_notifications(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    """Get notifications for the current user (demonstrates user relationship)."""
-    result = await db.execute(
-        select(Notification).filter(Notification.user_id == current_user.id)
-    )
-    notifications = result.scalars().all()
-    return {
-        "notifications": [
-            {
-                "id": n.id,
-                "title": n.title,
-                "message": n.message,
-                "type": n.type,
-                "is_read": n.is_read,
-                "created_at": n.created_at
-            } for n in notifications
-        ],
-        "user_email": current_user.email,
-        "user_role": current_user.role
-    }
-
 # ============ ATTENDANCE WITH RELATIONSHIPS ============
 @router.get("/attendance-with-details/")
 async def get_attendance_with_details(

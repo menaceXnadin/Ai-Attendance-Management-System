@@ -40,7 +40,7 @@ class ServiceHealthChecker:
     
     @staticmethod
     async def check_face_recognition_service() -> Dict[str, Any]:
-    
+        pass
     @staticmethod
     async def check_file_system_health() -> Dict[str, Any]:
         """Check file system health and permissions"""
