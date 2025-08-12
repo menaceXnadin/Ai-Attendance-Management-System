@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: List[str]
     
-    # Face Recognition
-    face_recognition_tolerance: float = 0.6
-    face_encoding_model: str = "large"
+    # Face Recognition (using InsightFace)
+    face_recognition_tolerance: float = 0.6  # Cosine similarity threshold
+    insightface_det_size: int = 640  # Detection size for InsightFace
     development_mode: bool = True  # Enable mock face detection for testing
     
     # File Storage

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 
@@ -187,7 +187,10 @@ class FaceRecognitionRequest(BaseModel):
     subject_id: int
 
 class FaceRegistrationRequest(BaseModel):
-    image_data: str  # Base64 encoded image
+    image_data: Union[str, List[str]]  # Single Base64 string or list of Base64 encoded images
+    
+class MultiImageFaceRegistrationRequest(BaseModel):
+    images: List[str]  # List of Base64 encoded images
 
 class FaceRecognitionResponse(BaseModel):
     success: bool

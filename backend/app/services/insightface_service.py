@@ -62,6 +62,7 @@ class InsightFaceService:
             'landmark_2d_106': None,
             'age': 25,
             'gender': 1,
+            'glasses': 0,  # NEW: No glasses in mock data
             'embedding_norm': float(np.linalg.norm(mock_embedding)),
             'width': bbox_width,
             'height': bbox_height,
@@ -73,10 +74,10 @@ class InsightFaceService:
         try:
             logger.info("🔥 Initializing InsightFace model...")
             
-            # Initialize FaceAnalysis app
+            # Initialize FaceAnalysis app with all modules for glasses detection
             self.app = FaceAnalysis(
                 providers=['CPUExecutionProvider'],  # Use CPU for better compatibility
-                allowed_modules=['detection', 'recognition']
+                allowed_modules=None  # Load all modules including genderage for glasses detection
             )
             
             # Prepare the model with context size
@@ -90,15 +91,59 @@ class InsightFaceService:
             logger.error("💡 Falling back to CPU-only mode...")
             
             try:
-                # Fallback to basic CPU setup
+                # Fallback to basic CPU setup with all modules
                 self.app = FaceAnalysis(providers=['CPUExecutionProvider'])
                 self.app.prepare(ctx_id=-1, det_size=(320, 320))  # Smaller size for CPU
-                logger.info("✅ InsightFace initialized in CPU fallback mode")
+                logger.info("✅ InsightFace initialized in CPU fallback mode with all modules")
             except Exception as e2:
                 logger.error(f"❌ Complete InsightFace initialization failed: {str(e2)}")
                 self.app = None
                 raise RuntimeError("InsightFace could not be initialized")
     
+    def _extract_glasses_attribute(self, image: np.ndarray, face) -> Optional[int]:
+        """
+        Extract glasses attribute using the genderage model.
+        The genderage model might output [age, gender, glasses] or just [age, gender].
+        
+        Returns:
+            0 = no glasses, 1 = glasses, None = not supported
+        """
+        try:
+            if self.development_mode:
+                # In development mode, return mock data
+                return 0  # No glasses for testing
+            
+            if 'genderage' not in self.app.models:
+                logger.warning("Genderage model not available for glasses detection")
+                return None
+            
+            genderage_model = self.app.models['genderage']
+            
+            # Get attribute predictions from the model
+            attr_result = genderage_model.get(image, face)
+            
+            # Log the raw result for debugging
+            logger.info(f"Genderage model output: {attr_result} (shape: {attr_result.shape if hasattr(attr_result, 'shape') else 'no shape'})")
+            
+            # Check if we have a third output that could be glasses
+            if hasattr(attr_result, '__len__') and len(attr_result) >= 3:
+                # Third value might be glasses (0 = no glasses, 1 = glasses)
+                glasses_value = attr_result[2]
+                
+                # Convert to binary (0 or 1)
+                if glasses_value > 0.5:
+                    return 1  # Glasses detected
+                else:
+                    return 0  # No glasses
+            else:
+                # Model doesn't provide glasses information
+                logger.info(f"Genderage model only provides {len(attr_result) if hasattr(attr_result, '__len__') else 'unknown'} outputs - no glasses attribute")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error extracting glasses attribute: {str(e)}")
+            return None
+
     def decode_base64_image(self, base64_string: str) -> np.ndarray:
         """Decode base64 string to OpenCV BGR image."""
         try:
@@ -163,6 +208,7 @@ class InsightFaceService:
                 'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
                 'age': int(face.age) if hasattr(face, 'age') else None,
                 'gender': int(face.gender) if hasattr(face, 'gender') else None,
+                'glasses': self._extract_glasses_attribute(image, face),  # NEW: Glasses detection
                 'embedding_norm': float(np.linalg.norm(face.embedding)),
             }
             
@@ -394,6 +440,7 @@ class InsightFaceService:
                     'landmark_2d_106': face.landmark_2d_106.tolist() if hasattr(face, 'landmark_2d_106') else None,
                     'age': int(face.age) if hasattr(face, 'age') else None,
                     'gender': int(face.gender) if hasattr(face, 'gender') else None,
+                    'glasses': self._extract_glasses_attribute(image, face),  # NEW: Glasses detection
                     'embedding_norm': float(np.linalg.norm(face.embedding)),
                 }
                 
@@ -493,6 +540,145 @@ class InsightFaceService:
         except Exception as e:
             logger.error(f"Error validating face quality: {str(e)}")
             return False, "Error validating face quality. Please try again."
+    
+    def process_multi_image_face_registration(self, base64_images: List[str]) -> Dict[str, Any]:
+        """
+        Process multiple face images for registration - provides more robust face encoding.
+        Analyzes all images, validates quality, and creates a composite face profile.
+        
+        Args:
+            base64_images: List of Base64 encoded images (typically 3: center, left, right)
+            
+        Returns:
+            Dictionary with registration result and composite face data
+        """
+        try:
+            logger.info(f"🎯 Processing multi-image face registration with {len(base64_images)} images...")
+            
+            if len(base64_images) == 0:
+                return {
+                    'success': False,
+                    'message': 'No images provided for registration.',
+                    'images_processed': 0,
+                    'encoding': None
+                }
+            
+            all_face_data = []
+            valid_encodings = []
+            image_results = []
+            
+            # Process each image
+            for i, base64_image in enumerate(base64_images):
+                logger.info(f"📷 Processing image {i+1}/{len(base64_images)}...")
+                
+                try:
+                    # Decode image
+                    image = self.decode_base64_image(base64_image)
+                    
+                    # Detect faces
+                    detected_faces = self.detect_faces(image)
+                    
+                    image_result = {
+                        'image_index': i,
+                        'faces_detected': len(detected_faces),
+                        'valid': False,
+                        'message': '',
+                        'face_data': None
+                    }
+                    
+                    if len(detected_faces) == 0:
+                        image_result['message'] = 'No face detected'
+                    elif len(detected_faces) > 1:
+                        image_result['message'] = f'Multiple faces detected ({len(detected_faces)})'
+                    else:
+                        face_data = detected_faces[0]
+                        
+                        # Validate face quality
+                        is_valid, validation_message = self.validate_face_quality(image, face_data)
+                        
+                        image_result['valid'] = is_valid
+                        image_result['message'] = validation_message
+                        image_result['face_data'] = {
+                            'confidence': face_data['confidence'],
+                            'area_percentage': (face_data['area'] / (image.shape[0] * image.shape[1])) * 100,
+                            'bbox': face_data['bbox']
+                        }
+                        
+                        if is_valid:
+                            all_face_data.append(face_data)
+                            valid_encodings.append(face_data['embedding'])
+                    
+                    image_results.append(image_result)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing image {i+1}: {str(e)}")
+                    image_results.append({
+                        'image_index': i,
+                        'faces_detected': 0,
+                        'valid': False,
+                        'message': f'Error processing image: {str(e)}',
+                        'face_data': None
+                    })
+            
+            # Check if we have enough valid images
+            valid_count = len(valid_encodings)
+            
+            if valid_count == 0:
+                return {
+                    'success': False,
+                    'message': 'No valid faces found in any of the provided images.',
+                    'images_processed': len(base64_images),
+                    'image_results': image_results,
+                    'encoding': None
+                }
+            
+            # Create composite encoding from multiple valid images
+            if valid_count == 1:
+                # Use single encoding
+                composite_encoding = valid_encodings[0]
+                logger.info("📊 Using single valid encoding")
+            else:
+                # Average multiple encodings for more robust representation
+                composite_encoding = np.mean(valid_encodings, axis=0)
+                # Normalize the averaged encoding
+                composite_encoding = composite_encoding / np.linalg.norm(composite_encoding)
+                logger.info(f"📊 Created composite encoding from {valid_count} images")
+            
+            # Calculate quality metrics
+            avg_confidence = np.mean([fd['confidence'] for fd in all_face_data])
+            avg_area_percentage = np.mean([(fd['area'] / (image.shape[0] * image.shape[1])) * 100 
+                                         for fd, image in zip(all_face_data, 
+                                         [self.decode_base64_image(img) for img in base64_images[:valid_count]])])
+            
+            success_message = f"Successfully processed {valid_count}/{len(base64_images)} images. "
+            if valid_count >= 2:
+                success_message += "Multi-angle face profile created for enhanced recognition accuracy."
+            else:
+                success_message += "Single-angle face profile created."
+            
+            return {
+                'success': True,
+                'message': success_message,
+                'images_processed': len(base64_images),
+                'valid_images': valid_count,
+                'image_results': image_results,
+                'composite_face_data': {
+                    'avg_confidence': avg_confidence,
+                    'avg_area_percentage': avg_area_percentage,
+                    'embedding_dimensions': len(composite_encoding),
+                    'encoding_method': 'composite' if valid_count > 1 else 'single'
+                },
+                'encoding': composite_encoding.tolist()  # Convert to list for JSON serialization
+            }
+            
+        except Exception as e:
+            logger.error(f"Multi-image face registration error: {str(e)}")
+            return {
+                'success': False,
+                'message': f'Error processing multiple images: {str(e)}',
+                'images_processed': len(base64_images) if base64_images else 0,
+                'encoding': None
+            }
     
     def process_face_registration(self, base64_image: str) -> Dict[str, Any]:
         """

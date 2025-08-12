@@ -20,9 +20,10 @@ interface FaceRecognitionProps {
   onCapture: (dataUrl: string, recognized: boolean) => void;
   onCancel?: () => void;
   disabled?: boolean;
+  subjectId?: string; // optional, used when marking attendance
 }
 
-const FaceRecognition = ({ onCapture, onCancel, disabled }: FaceRecognitionProps) => {
+const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecognitionProps) => {
   const [isActive, setIsActive] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecognized, setIsRecognized] = useState(false);
@@ -155,25 +156,63 @@ const FaceRecognition = ({ onCapture, onCancel, disabled }: FaceRecognitionProps
     const dataUrl = canvas.toDataURL('image/jpeg');
     const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
     try {
-      const res = await fetch('/api/face-recognition/verify-face', {
+      // 1) Verify identity against the logged-in user's saved embedding
+      const token = localStorage.getItem('authToken');
+      const commonHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      const idRes = await fetch('/api/face-recognition/verify-identity', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: commonHeaders,
         body: JSON.stringify({ image_data: base64 })
       });
-      const data = await res.json();
-      setIsRecognized(data.valid);
-      onCapture(dataUrl, data.valid);
-      toast({
-        title: data.valid ? 'Face Recognized' : 'Face Not Recognized',
-        description: data.message || (data.valid ? 'Face successfully verified!' : 'Please try again.'),
-        variant: data.valid ? 'default' : 'destructive',
-      });
+      const idData = await idRes.json();
+
+      const matched = !!idData.matched;
+      setIsRecognized(matched);
+
+      if (!matched) {
+        onCapture(dataUrl, false);
+        toast({
+          title: 'Identity Mismatch',
+          description: idData.message || 'Face does not match the current user.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // 2) Optionally mark attendance if subjectId is provided
+      if (subjectId) {
+        const attendRes = await fetch('/api/face-recognition/mark-attendance', {
+          method: 'POST',
+          headers: commonHeaders,
+          body: JSON.stringify({ image_data: base64, subject_id: Number(subjectId) })
+        });
+        const attendData = await attendRes.json();
+
+        const ok = attendData.success && attendData.attendance_marked;
+        onCapture(dataUrl, ok);
+        toast({
+          title: ok ? 'Attendance Marked' : 'Attendance Not Marked',
+          description: attendData.message || (ok ? 'Attendance marked successfully.' : 'Could not mark attendance.'),
+          variant: ok ? 'default' : 'destructive',
+        });
+      } else {
+        // If no subjectId, just report successful identity match
+        onCapture(dataUrl, true);
+        toast({
+          title: 'Identity Verified',
+          description: 'Face matches your registered profile.',
+        });
+      }
     } catch (e) {
       setIsRecognized(false);
       onCapture(dataUrl, false);
       toast({
-        title: 'Face Not Recognized',
-        description: 'Error verifying face. Please try again.',
+        title: 'Verification Error',
+        description: 'Error verifying identity. Please try again.',
         variant: 'destructive',
       });
     }

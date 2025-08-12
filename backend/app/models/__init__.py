@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey, JSON, Enum, ARRAY
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey, JSON, Enum, ARRAY, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -125,7 +125,7 @@ class AttendanceRecord(Base):
     date = Column(DateTime, nullable=False)
     status = Column(Enum(AttendanceStatus, name="attendance_status", native_enum=False), nullable=False, default=AttendanceStatus.present)
     method = Column(Enum(AttendanceMethod, name="attendance_method", native_enum=False), nullable=False, default=AttendanceMethod.manual)
-    confidence_score = Column(Float)  # Face recognition confidence
+    confidence_score = Column(Numeric(5, 2))  # Face recognition confidence (up to 999.99)
     marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who marked the attendance
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())

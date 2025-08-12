@@ -4,7 +4,7 @@ import {
   AuthResponse, 
   Student, 
   StudentCreateData,
-  Class, 
+  Subject,
   Attendance, 
   AttendanceSummary, 
   AttendanceFilters, 
@@ -477,7 +477,7 @@ export const api = {
           studentId: response.student_id.toString(),
           date: response.date,
           status: response.status,
-          classId: response.class_id.toString()
+          subjectId: response.subject_id.toString()
         };
       } catch (error) {
         throw new Error(`Attendance record with ID ${id} not found`);
@@ -490,7 +490,7 @@ export const api = {
           method: 'POST',
           body: JSON.stringify({
             student_id: parseInt(attendance.studentId),
-            class_id: parseInt(attendance.classId),
+            subject_id: parseInt(attendance.subjectId),
             date: attendance.date,
             status: attendance.status
           }),
@@ -583,15 +583,17 @@ export const api = {
     },
   },
 
-  // Classes methods
+  // Classes methods (legacy wrapper around subjects)
   classes: {
-    getAll: async (): Promise<Class[]> => {
+    getAll: async (): Promise<Subject[]> => {
       try {
         const response = await apiRequest('/classes');
         return response.map((cls: Record<string, unknown>) => ({
           id: cls.id?.toString() || '',
           name: cls.name?.toString() || '',
-          teacherId: cls.teacher_id?.toString() || '',
+          code: cls.code?.toString() || '',
+          description: cls.description?.toString(),
+          credits: cls.credits ? Number(cls.credits) : undefined,
           faculty_id: cls.faculty_id !== undefined ? Number(cls.faculty_id) : undefined
         }));
       } catch (error) {
@@ -600,13 +602,15 @@ export const api = {
       }
     },
     
-    getById: async (id: string): Promise<Class> => {
+    getById: async (id: string): Promise<Subject> => {
       try {
         const response = await apiRequest(`/classes/${id}`);
         return {
           id: response.id.toString(),
           name: response.name,
-          teacherId: response.teacher_id?.toString() || '',
+          code: response.code || '',
+          description: response.description,
+          credits: response.credits ? Number(response.credits) : undefined,
           faculty_id: response.faculty_id !== undefined ? Number(response.faculty_id) : undefined
         };
       } catch (error) {
@@ -614,13 +618,15 @@ export const api = {
       }
     },
     
-    create: async (classData: Omit<Class, 'id'>) => {
+    create: async (classData: Omit<Subject, 'id'>) => {
       try {
         const response = await apiRequest('/classes', {
           method: 'POST',
           body: JSON.stringify({
             name: classData.name,
-            teacher_id: classData.teacherId ? parseInt(classData.teacherId) : undefined,
+            code: classData.code,
+            description: classData.description,
+            credits: classData.credits,
             faculty_id: classData.faculty_id
           }),
         });
@@ -628,7 +634,9 @@ export const api = {
         return {
           id: response.id.toString(),
           name: response.name,
-          teacherId: response.teacher_id?.toString() || '',
+          code: response.code || '',
+          description: response.description,
+          credits: response.credits ? Number(response.credits) : undefined,
           faculty_id: response.faculty_id !== undefined ? Number(response.faculty_id) : undefined
         };
       } catch (error) {
@@ -636,12 +644,14 @@ export const api = {
       }
     },
     
-    update: async (id: string, classData: Partial<Class>) => {
+    update: async (id: string, classData: Partial<Subject>) => {
       try {
         const updateData: Record<string, unknown> = {};
-  if (classData.name) updateData.name = classData.name;
-  if (classData.teacherId) updateData.teacher_id = parseInt(classData.teacherId);
-  if (classData.faculty_id !== undefined) updateData.faculty_id = classData.faculty_id;
+        if (classData.name) updateData.name = classData.name;
+        if (classData.code) updateData.code = classData.code;
+        if (classData.description) updateData.description = classData.description;
+        if (classData.credits !== undefined) updateData.credits = classData.credits;
+        if (classData.faculty_id !== undefined) updateData.faculty_id = classData.faculty_id;
         
         const response = await apiRequest(`/classes/${id}`, {
           method: 'PUT',
@@ -651,7 +661,9 @@ export const api = {
         return {
           id: response.id.toString(),
           name: response.name,
-          teacherId: response.teacher_id?.toString() || '',
+          code: response.code || '',
+          description: response.description,
+          credits: response.credits ? Number(response.credits) : undefined,
           faculty_id: response.faculty_id !== undefined ? Number(response.faculty_id) : undefined
         };
       } catch (error) {
@@ -694,25 +706,91 @@ export const api = {
       }
     },
 
-    registerFace: async (imageData: string) => {
+    registerFace: async (imageData: string | string[] | { image_data: string | string[] }) => {
       try {
-        console.log('[API] Registering face, image data length:', imageData.length);
-        console.log('[API] Image data preview:', imageData.substring(0, 50) + '...');
+        let requestBody;
+        
+        // Handle different input formats
+        if (typeof imageData === 'string') {
+          // Single image string
+          requestBody = { image_data: imageData };
+          console.log('[API] Registering face (single image), data length:', imageData.length);
+        } else if (Array.isArray(imageData)) {
+          // Array of image strings
+          requestBody = { image_data: imageData };
+          console.log('[API] Registering face (multiple images), count:', imageData.length);
+        } else {
+          // Object with image_data property
+          requestBody = imageData;
+          const data = imageData.image_data;
+          if (Array.isArray(data)) {
+            console.log('[API] Registering face (multiple images), count:', data.length);
+          } else {
+            console.log('[API] Registering face (single image), data length:', data.length);
+          }
+        }
         
         const response = await apiRequest('/face-recognition/register-face', {
           method: 'POST',
-          body: JSON.stringify({ image_data: imageData }),
+          body: JSON.stringify(requestBody),
         });
         
         console.log('[API] Face registration response:', response);
         
         return {
           success: response.success,
-          message: response.message
+          message: response.message,
+          details: response.details
         };
       } catch (error) {
         console.error('[API] Face registration error:', error);
         throw new Error('Failed to register face');
+      }
+    },
+
+    registerFaceMulti: async (images: string[]) => {
+      try {
+        console.log('[API] Registering face (multi-image endpoint), count:', images.length);
+        
+        const response = await apiRequest('/face-recognition/register-face-multi', {
+          method: 'POST',
+          body: JSON.stringify({ images }),
+        });
+        
+        console.log('[API] Multi-image face registration response:', response);
+        
+        return {
+          success: response.success,
+          message: response.message,
+          details: response.details
+        };
+      } catch (error) {
+        console.error('[API] Multi-image face registration error:', error);
+        throw new Error('Failed to register face with multiple images');
+      }
+    },
+
+    detectGlasses: async (imageData: string) => {
+      try {
+        console.log('[API] Detecting glasses in image...');
+        
+        const response = await apiRequest('/face-recognition/detect-glasses', {
+          method: 'POST',
+          body: JSON.stringify({ image_data: imageData }),
+        });
+        
+        console.log('[API] Glasses detection response:', response);
+        
+        return {
+          success: response.success,
+          message: response.message,
+          glasses_detected: response.glasses_detected,
+          confidence: response.confidence,
+          all_attributes: response.all_attributes
+        };
+      } catch (error) {
+        console.error('[API] Glasses detection error:', error);
+        throw new Error('Failed to detect glasses');
       }
     },
 
@@ -830,6 +908,124 @@ export const api = {
       const response = await apiRequest(`/subjects/${subjectId}`, {
         method: 'DELETE',
       });
+      return response;
+    }
+  },
+
+  // Attendance methods
+  attendance: {
+    getAll: async (filters?: AttendanceFilters): Promise<Attendance[]> => {
+      console.log('[API] attendance.getAll called', filters);
+      const params = new URLSearchParams();
+      
+      if (filters?.studentId) params.append('studentId', filters.studentId);
+      if (filters?.startDate) params.append('startDate', filters.startDate);
+      if (filters?.endDate) params.append('endDate', filters.endDate);
+      if (filters?.date) params.append('date', filters.date);
+      if (filters?.classId) params.append('classId', filters.classId);
+      
+      const queryString = params.toString();
+      const endpoint = queryString ? `/attendance/?${queryString}` : '/attendance/';
+      
+      try {
+        const response = await apiRequest(endpoint);
+        
+        // Ensure response is an array
+        if (!Array.isArray(response)) {
+          console.warn('[API] Expected array response for attendance, got:', typeof response);
+          return [];
+        }
+        
+        return response.map((record: any) => ({
+          id: record.id?.toString() || '',
+          studentId: record.student_id?.toString() || record.studentId?.toString() || '',
+          subjectId: record.subject_id?.toString() || record.subjectId?.toString() || record.classId?.toString() || '',
+          date: record.date || '',
+          status: record.status || 'absent',
+          student: record.student,
+          subject: record.subject
+        }));
+      } catch (error) {
+        console.error('[API] Failed to fetch attendance records:', error);
+        return [];
+      }
+    },
+
+    getSummary: async (filters?: { studentId?: string }): Promise<AttendanceSummary> => {
+      console.log('[API] attendance.getSummary called', filters);
+      const params = new URLSearchParams();
+      
+      if (filters?.studentId) params.append('studentId', filters.studentId);
+      
+      const queryString = params.toString();
+      const endpoint = queryString ? `/attendance/summary?${queryString}` : '/attendance/summary';
+      
+      try {
+        const response = await apiRequest(endpoint);
+        
+        return {
+          present: response.present || 0,
+          absent: response.absent || 0,
+          late: response.late || 0,
+          excused: response.excused || 0,
+          total: response.total || 0,
+          percentagePresent: response.percentagePresent || 0
+        };
+      } catch (error) {
+        console.error('[API] Failed to fetch attendance summary:', error);
+        return {
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          total: 0,
+          percentagePresent: 0
+        };
+      }
+    },
+
+    create: async (attendanceData: {
+      studentId: string;
+      classId: string;
+      date: string;
+      status: string;
+    }) => {
+      console.log('[API] attendance.create called', attendanceData);
+      const response = await apiRequest('/attendance/', {
+        method: 'POST',
+        body: JSON.stringify({
+          student_id: parseInt(attendanceData.studentId),
+          subject_id: parseInt(attendanceData.classId), // Map classId to subject_id
+          date: attendanceData.date,
+          status: attendanceData.status
+        }),
+      });
+      return response;
+    },
+
+    markBulk: async (attendanceData: {
+      subject_id: number;
+      date?: string;
+      students: Array<{ student_id: number; status: string }>;
+    }) => {
+      console.log('[API] attendance.markBulk called', attendanceData);
+      const response = await apiRequest('/attendance/mark-bulk', {
+        method: 'POST',
+        body: JSON.stringify(attendanceData),
+      });
+      return response;
+    },
+
+    getStudentsBySubject: async (facultyId: number, semester: number, subjectId: number, date?: string) => {
+      console.log('[API] attendance.getStudentsBySubject called', { facultyId, semester, subjectId, date });
+      const params = new URLSearchParams({
+        faculty_id: facultyId.toString(),
+        semester: semester.toString(),
+        subject_id: subjectId.toString()
+      });
+      if (date) params.append('date', date);
+      
+      const response = await apiRequest(`/attendance/students-by-subject?${params}`);
       return response;
     }
   },

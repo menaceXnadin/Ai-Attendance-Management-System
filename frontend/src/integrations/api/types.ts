@@ -54,23 +54,26 @@ export interface StudentCreateData {
   profileImage?: string | null; // Not used in backend
 }
 
-export interface Class {
+export interface Subject {
   id: string;
   name: string;
+  code: string;
   description?: string;
-  teacherId?: string;
-  createdAt?: string;
+  credits?: number;
+  class_schedule?: Record<string, unknown>; // JSON schedule data
   faculty_id?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Attendance {
   id: string;
   studentId: string;
-  classId: string;
+  subjectId: string;  // Fixed: should be subjectId, not classId
   date: string;
   status: 'present' | 'absent' | 'late' | 'excused';
   student?: Student;
-  class?: Class;
+  subject?: Subject;  // Fixed: should be subject, not class
 }
 
 export interface AttendanceSummary {

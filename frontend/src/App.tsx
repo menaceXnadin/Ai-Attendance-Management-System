@@ -1,5 +1,4 @@
-
-              {/* Unified Analytics Standalone Demo */}
+{/* Unified Analytics Standalone Demo */}
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -11,7 +10,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
 import RoleRedirect from "@/components/RoleRedirect";
 import ApiErrorBoundary from "@/components/ApiErrorBoundary";
-import { useAuth } from './contexts/useAuth';
+import { useContext } from 'react';
+import { AuthContext } from './contexts/AuthContext';
 
 import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
@@ -24,9 +24,7 @@ import StudentsPage from "./pages/StudentsPage";
 import AttendancePage from "./pages/AttendancePage";
 import FacultiesPage from "./pages/FacultiesPage";
 import SettingsPage from "./pages/SettingsPage";
-import FaceDetectionTest from "./pages/FaceDetectionTest";
-import FaceRegistrationPage from "./pages/FaceRegistrationPage";
-import ModernFaceRegistrationDemo from "./pages/ModernFaceRegistrationDemo";
+import FaceIntegrationTest from "./pages/FaceIntegrationTest";
 import AdvancedAnalyticsDemo from "./pages/AdvancedAnalyticsDemo";
 import AttendanceAnalyticsDemo from "./pages/AttendanceAnalyticsDemo";
 import NotFound from "./pages/NotFound";
@@ -41,6 +39,13 @@ import SystemStatusPage from "./pages/SystemStatusPage";
 import AdminNotificationsPage from "./pages/AdminNotificationsPage";
 
 import LiveMonitoringPage from "./pages/LiveMonitoringPage";
+
+import StudentAttendancePage from "./pages/StudentAttendancePage";
+import StudentMarkAttendancePage from "./pages/StudentMarkAttendancePage";
+import StudentFaceRegistrationPage from "./pages/StudentFaceRegistrationPage";
+import MarksPage from "./pages/MarksPage";
+import ProfilePage from "./pages/ProfilePage";
+import FaceRegistrationDemoPage from "./pages/FaceRegistrationDemoPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -58,7 +63,11 @@ const queryClient = new QueryClient({
 });
 
 const App = () => {
-  const { user } = useAuth();
+  const authContext = useContext(AuthContext);
+  if (!authContext) {
+    throw new Error('App must be wrapped with AuthProvider');
+  }
+  const { user } = authContext;
 
   return (
     <QueryClientProvider client={queryClient}>
@@ -73,18 +82,8 @@ const App = () => {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/blog" element={<BlogPage />} />
               <Route path="/login" element={<LoginPage />} />
-              {/* Face Detection Test Route */}
-              <Route path="/face-test" element={<FaceDetectionTest />} />
-              {/* Face Registration for Students */}
-              <Route path="/face-registration" element={
-                <ProtectedRoute>
-                  <ApiErrorBoundary>
-                    <FaceRegistrationPage />
-                  </ApiErrorBoundary>
-                </ProtectedRoute>
-              } />
-              {/* Modern Face Registration Demo - Remove in production */}
-              <Route path="/face-demo" element={<ModernFaceRegistrationDemo />} />
+              {/* Face Integration Test Route - MediaPipe + InsightFace */}
+              <Route path="/face-integration-test" element={<FaceIntegrationTest />} />
               {/* Attendance Analytics Standalone Demo */}
               <Route path="/attendance-analytics-demo" element={<AttendanceAnalyticsDemo />} />
               {/* Advanced Analytics Standalone Demo */}
@@ -96,12 +95,48 @@ const App = () => {
               {/* Registration route removed - only admins can register new students */}
               <Route path="/register" element={<Navigate to="/login" replace />} />
               <Route path="/dashboard" element={<RoleRedirect />} />
+              <Route path="/face-registration-demo" element={<FaceRegistrationDemoPage />} />
               
               {/* Student Route - Protected */}
               <Route path="/student" element={
                 <ProtectedRoute>
                   <ApiErrorBoundary>
                     <StudentDashboard />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/student/marks" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <MarksPage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/student/profile" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <ProfilePage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/student/attendance" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <StudentAttendancePage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/student/attendance/mark" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <StudentMarkAttendancePage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/face-registration" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <StudentFaceRegistrationPage />
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />

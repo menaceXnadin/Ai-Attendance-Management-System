@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import face_recognition
+import insightface
 import base64
 from typing import Optional, List, Tuple
 from io import BytesIO
@@ -10,13 +10,21 @@ from app.schemas import FaceRecognitionResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 import logging
+import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
 
 class FaceRecognitionService:
     def __init__(self):
         self.tolerance = settings.face_recognition_tolerance
-        self.model = settings.face_encoding_model
+        # Initialize InsightFace model
+        self.app = insightface.app.FaceAnalysis(
+            providers=['CPUExecutionProvider'],  # Use CPU, can switch to CUDA if available
+            allowed_modules=['detection', 'recognition']
+        )
+        det_size = getattr(settings, 'insightface_det_size', 640)
+        self.app.prepare(ctx_id=0, det_size=(det_size, det_size))
+        logger.info("InsightFace model initialized successfully")
     
     def decode_base64_image(self, base64_string: str) -> np.ndarray:
         """Decode base64 string to OpenCV image."""
@@ -42,28 +50,23 @@ class FaceRecognitionService:
             raise ValueError("Invalid image data")
     
     def extract_face_encoding(self, image: np.ndarray) -> Optional[List[float]]:
-        """Extract face encoding from image."""
+        """Extract face encoding from image using InsightFace."""
         try:
-            # Find face locations
-            face_locations = face_recognition.face_locations(image, model=self.model)
+            # Convert RGB to BGR for InsightFace
+            bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             
-            if not face_locations:
+            # Get face analysis results
+            faces = self.app.get(bgr_image)
+            
+            if not faces:
                 logger.warning("No face found in image")
                 return None
             
-            # Extract face encodings
-            face_encodings = face_recognition.face_encodings(
-                image, 
-                face_locations, 
-                model=self.model
-            )
+            # Get the largest face (most prominent)
+            face = max(faces, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))
             
-            if not face_encodings:
-                logger.warning("Could not encode face")
-                return None
-            
-            # Return the first face encoding
-            return face_encodings[0].tolist()
+            # Return the face embedding (512-dimensional vector)
+            return face.embedding.tolist()
         
         except Exception as e:
             logger.error(f"Error extracting face encoding: {str(e)}")
@@ -110,30 +113,32 @@ class FaceRecognitionService:
         known_encodings: List[List[float]], 
         unknown_encoding: List[float]
     ) -> Tuple[bool, float]:
-        """Compare unknown face with known faces (fallback method)."""
+        """Compare unknown face with known faces using cosine similarity for InsightFace embeddings."""
         try:
             if not known_encodings or not unknown_encoding:
                 return False, 0.0
             
             # Convert to numpy arrays
-            known_encodings_np = [np.array(encoding) for encoding in known_encodings]
+            known_encodings_np = np.array(known_encodings)
             unknown_encoding_np = np.array(unknown_encoding)
             
-            # Calculate face distances
-            face_distances = face_recognition.face_distance(
-                known_encodings_np, 
-                unknown_encoding_np
-            )
+            # Normalize vectors for cosine similarity
+            known_encodings_norm = known_encodings_np / np.linalg.norm(known_encodings_np, axis=1, keepdims=True)
+            unknown_encoding_norm = unknown_encoding_np / np.linalg.norm(unknown_encoding_np)
+            
+            # Calculate cosine similarities
+            similarities = np.dot(known_encodings_norm, unknown_encoding_norm)
             
             # Find the best match
-            best_match_index = np.argmin(face_distances)
-            best_distance = face_distances[best_match_index]
+            best_match_index = np.argmax(similarities)
+            best_similarity = similarities[best_match_index]
             
-            # Calculate confidence (inverse of distance)
-            confidence = max(0, (1 - best_distance) * 100)
+            # Convert similarity to confidence percentage
+            confidence = max(0, best_similarity * 100)
             
-            # Check if match is within tolerance
-            is_match = best_distance <= self.tolerance
+            # Check if match is above threshold (InsightFace typically uses 0.6 threshold)
+            threshold = 0.6  # Adjust based on your requirements
+            is_match = best_similarity >= threshold
             
             return is_match, confidence
         
@@ -329,26 +334,34 @@ class FaceRecognitionService:
             )
     
     def validate_face_image(self, base64_image: str) -> Tuple[bool, str]:
-        """Validate if image contains a clear face for registration."""
+        """Validate if image contains a clear face for registration using InsightFace."""
         try:
             image = self.decode_base64_image(base64_image)
             
-            # Find face locations
-            face_locations = face_recognition.face_locations(image, model=self.model)
+            # Convert RGB to BGR for InsightFace
+            bgr_image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
             
-            if len(face_locations) == 0:
+            # Get face analysis results
+            faces = self.app.get(bgr_image)
+            
+            if len(faces) == 0:
                 return False, "No face detected in the image"
             
-            if len(face_locations) > 1:
+            if len(faces) > 1:
                 return False, "Multiple faces detected. Please ensure only one face is visible"
             
-            # Check face quality (size)
-            top, right, bottom, left = face_locations[0]
-            face_height = bottom - top
-            face_width = right - left
+            # Check face quality (size and confidence)
+            face = faces[0]
+            bbox = face.bbox
+            face_width = bbox[2] - bbox[0]
+            face_height = bbox[3] - bbox[1]
             
             if face_height < 100 or face_width < 100:
                 return False, "Face is too small. Please move closer to the camera"
+            
+            # Check detection confidence if available
+            if hasattr(face, 'det_score') and face.det_score < 0.8:
+                return False, "Face detection confidence is too low. Please ensure good lighting"
             
             # Extract encoding to verify quality
             encoding = self.extract_face_encoding(image)

@@ -32,26 +32,52 @@ const StudentAttendanceReport = () => {
         
         const records = await api.attendance.getAll(filters);
         
-        // Get class details for each record
-        const classIds = [...new Set(records.map(record => record.classId))];
-        const classPromises = classIds.map(id => api.classes.getById(id));
-        const classes = await Promise.all(classPromises);
+        // Get subject details for each record
+        const subjectIds = [...new Set(records.map(record => record.subjectId))]
+          .filter(id => id && !isNaN(parseInt(id))); // Filter out invalid IDs
         
-        // Create a map of classId -> className
-        const classMap = classes.reduce((map, cls) => {
-          map[cls.id] = cls.name;
+        if (subjectIds.length === 0) {
+          console.warn('[StudentAttendanceReport] No valid subject IDs found in attendance records');
+          return [];
+        }
+        
+        const subjectPromises = subjectIds.map(id => {
+          const numericId = parseInt(id);
+          console.log('[StudentAttendanceReport] Fetching subject with ID:', numericId);
+          return api.subjects.getById(numericId);
+        });
+        
+        const subjects = await Promise.all(subjectPromises.map(promise => 
+          promise.catch(error => {
+            console.error('[StudentAttendanceReport] Failed to fetch subject:', error);
+            return null; // Return null for failed requests
+          })
+        )).then(results => results.filter(subject => subject !== null)); // Filter out failed requests
+        
+        // Create a map of subjectId -> subjectName
+        const subjectMap = subjects.reduce((map, subj) => {
+          if (subj && subj.id && subj.name) {
+            map[subj.id] = subj.name;
+          }
           return map;
-        }, {});
+        }, {} as Record<string, string>);
         
-        // Format records with class names
-        return records.map(record => ({
-          date: record.date,
-          subject: classMap[record.classId] || 'Unknown Class',
-          status: record.status,
-          time: new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        // Format records with subject names
+        return records
+          .filter(record => record.subjectId && record.date) // Filter out invalid records
+          .map(record => ({
+            date: record.date,
+            subject: subjectMap[record.subjectId] || `Subject ${record.subjectId}` || 'Unknown Subject',
+            status: record.status || 'absent',
+            time: new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       } catch (error) {
         console.error('Error fetching student attendance:', error);
+        // Log more details about the error
+        if (error instanceof Error) {
+          console.error('Error details:', error.message);
+        }
         return [];
       }
     },

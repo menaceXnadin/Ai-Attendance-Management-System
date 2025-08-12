@@ -43,6 +43,7 @@ import FaceRecognition from '@/components/FaceRecognition';
 import FaceRegistration from '@/components/FaceRegistration';
 import StudentSidebar from '@/components/StudentSidebar';
 import SmartNotificationSystem from '@/components/SmartNotificationSystem';
+import TodayClassSchedule from '@/components/TodayClassSchedule';
 
 
 const StudentDashboard = () => {
@@ -103,7 +104,7 @@ const StudentDashboard = () => {
   });
 
   // Check if attendance has been marked today
-  const { data: todayAttendance } = useQuery({
+  const { data: todayAttendance, refetch: refetchTodayAttendance } = useQuery({
     queryKey: ['today-attendance', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
@@ -128,39 +129,14 @@ const StudentDashboard = () => {
     }
   }, [todayAttendance]);
   
-  const handleFaceCapture = async (dataUrl: string, recognized: boolean) => {
+  const handleFaceCapture = async (_dataUrl: string, recognized: boolean) => {
     setLastAttendance({
       timestamp: new Date().toLocaleString(),
       recognized
     });
     
-    if (recognized) {
-      try {
-        // Mark attendance using face recognition API
-        const result = await api.faceRecognition.markAttendance(dataUrl, '1'); // Default subject ID
-        
-        if (result.success) {
-          setHasMarkedAttendanceToday(true);
-          toast({
-            title: "Attendance Marked Successfully",
-            description: `Face recognized with ${(result.confidenceScore * 100).toFixed(1)}% confidence`,
-          });
-        } else {
-          toast({
-            title: "Face Recognition Failed",
-            description: result.message || "Unable to mark attendance",
-            variant: "destructive",
-          });
-        }
-      } catch (error) {
-        console.error('Error marking attendance:', error);
-        toast({
-          title: "Error",
-          description: "Failed to mark attendance. Please try again.",
-          variant: "destructive",
-        });
-      }
-    }
+    // In dashboard quick scan, just show result coming from FaceRecognition onCapture
+    if (recognized) setHasMarkedAttendanceToday(true);
     
     // Hide the face recognition component after processing
     setTimeout(() => {
@@ -311,7 +287,7 @@ const StudentDashboard = () => {
                     <p className="text-sm font-medium text-slate-400 mb-1">Academic Status</p>
                     <div className="text-3xl font-bold text-green-400">Active</div>
                     <p className="text-xs text-slate-500 mt-1">
-                      Current Semester
+                      Current Semester: <span className="font-semibold text-blue-400">{studentData?.semester ?? 'N/A'}</span>
                     </p>
                   </div>
                   <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -340,6 +316,20 @@ const StudentDashboard = () => {
               </CardContent>
             </Card>
           </div>
+          
+          {/* Today's Class Schedule */}
+          <TodayClassSchedule 
+            studentData={studentData}
+            onAttendanceMarked={() => {
+              setHasMarkedAttendanceToday(true);
+              // Refresh attendance data
+              refetchTodayAttendance?.();
+              toast({
+                title: "Attendance Marked",
+                description: "Successfully marked attendance",
+              });
+            }}
+          />
           
           {/* Enhanced Attendance Card */}
           <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden mt-8">

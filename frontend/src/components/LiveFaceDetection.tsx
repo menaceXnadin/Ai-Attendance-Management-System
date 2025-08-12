@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Camera, Square, Users } from 'lucide-react';
@@ -29,140 +29,40 @@ const LiveFaceDetection: React.FC<LiveFaceDetectionProps> = ({
   const [faceCount, setFaceCount] = useState(0);
   const [error, setError] = useState<string>('');
 
-  // Face detection using browser's built-in FaceDetector API (if available)
-  // Fallback to simple motion detection if not available
-  const detectFaces = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    if (!ctx) return;
-
-    // Set canvas size to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    // Draw video frame to canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    try {
-      // Try to use browser's built-in face detection API
-      if ('FaceDetector' in window) {
-        const FaceDetectorClass = (window as { FaceDetector?: new (options: { maxDetectedFaces: number; fastMode: boolean }) => { detect: (canvas: HTMLCanvasElement) => Promise<unknown[]> } }).FaceDetector;
-        
-        if (FaceDetectorClass) {
-          const faceDetector = new FaceDetectorClass({
-            maxDetectedFaces: 10,
-            fastMode: false
-          });
-
-          const faces = await faceDetector.detect(canvas);
-          const detectedFaceData: DetectedFace[] = faces.map((face: unknown) => {
-            const faceData = face as { boundingBox: { x: number; y: number; width: number; height: number }; landmarks?: unknown };
-            return {
-          x: face.boundingBox.x,
-          y: face.boundingBox.y,
-          width: face.boundingBox.width,
-          height: face.boundingBox.height,
-          confidence: face.landmarks ? 0.9 : 0.7
-        }));
-
-        setDetectedFaces(detectedFaceData);
-        setFaceCount(detectedFaceData.length);
-        
-        if (onFaceDetected) {
-          onFaceDetected(detectedFaceData);
-        }
-
-        // Draw bounding boxes
-        drawBoundingBoxes(ctx, detectedFaceData);
-      } else {
-        // Fallback: Use a simple face detection simulation
-        // In a real app, you'd integrate with a proper face detection library
-        simulateFaceDetection(ctx, canvas.width, canvas.height);
-      }
-    } catch (err) {
-      console.error('Face detection error:', err);
-      // Fallback to simulation
-      simulateFaceDetection(ctx, canvas.width, canvas.height);
-    }
-  };
-
-  // Simulate face detection for demo purposes
-  const simulateFaceDetection = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
-    // Simple center face detection simulation
-    const faceWidth = width * 0.3;
-    const faceHeight = height * 0.4;
-    const x = (width - faceWidth) / 2;
-    const y = (height - faceHeight) / 2;
-
-    const simulatedFace: DetectedFace = {
-      x,
-      y,
-      width: faceWidth,
-      height: faceHeight,
-      confidence: 0.8
-    };
-
-    setDetectedFaces([simulatedFace]);
-    setFaceCount(1);
-    
-    if (onFaceDetected) {
-      onFaceDetected([simulatedFace]);
-    }
-
-    drawBoundingBoxes(ctx, [simulatedFace]);
-  };
-
-  // Draw bounding boxes around detected faces
-  const drawBoundingBoxes = (ctx: CanvasRenderingContext2D, faces: DetectedFace[]) => {
+  // Draw bounding boxes around detected faces (hoisted as function declaration)
+  function drawBoundingBoxes(ctx: CanvasRenderingContext2D, faces: DetectedFace[]) {
     faces.forEach((face) => {
       const { x, y, width, height, confidence } = face;
-      
-      // Choose color based on confidence
+
       const color = confidence > 0.8 ? '#00ff00' : confidence > 0.6 ? '#ffff00' : '#ff0000';
-      
-      // Draw rectangle
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, width, height);
-      
-      // Draw confidence label
+
       ctx.fillStyle = color;
       ctx.font = '16px Arial';
-      ctx.fillText(
-        `Face ${(confidence * 100).toFixed(0)}%`, 
-        x, 
-        y > 20 ? y - 5 : y + height + 20
-      );
-      
-      // Draw corner markers for better visibility
+      ctx.fillText(`Face ${(confidence * 100).toFixed(0)}%`, x, y > 20 ? y - 5 : y + height + 20);
+
       const cornerSize = 15;
       ctx.lineWidth = 2;
-      
       // Top-left corner
       ctx.beginPath();
       ctx.moveTo(x, y + cornerSize);
       ctx.lineTo(x, y);
       ctx.lineTo(x + cornerSize, y);
       ctx.stroke();
-      
       // Top-right corner
       ctx.beginPath();
       ctx.moveTo(x + width - cornerSize, y);
       ctx.lineTo(x + width, y);
       ctx.lineTo(x + width, y + cornerSize);
       ctx.stroke();
-      
       // Bottom-left corner
       ctx.beginPath();
       ctx.moveTo(x, y + height - cornerSize);
       ctx.lineTo(x, y + height);
       ctx.lineTo(x + cornerSize, y + height);
       ctx.stroke();
-      
       // Bottom-right corner
       ctx.beginPath();
       ctx.moveTo(x + width - cornerSize, y + height);
@@ -170,7 +70,69 @@ const LiveFaceDetection: React.FC<LiveFaceDetectionProps> = ({
       ctx.lineTo(x + width, y + height - cornerSize);
       ctx.stroke();
     });
-  };
+  }
+
+  // Simulate face detection for demo purposes (hoisted)
+  const simulateFaceDetection = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const faceWidth = width * 0.3;
+    const faceHeight = height * 0.4;
+    const x = (width - faceWidth) / 2;
+    const y = (height - faceHeight) / 2;
+
+    const simulatedFace: DetectedFace = { x, y, width: faceWidth, height: faceHeight, confidence: 0.8 };
+    setDetectedFaces([simulatedFace]);
+    setFaceCount(1);
+    if (onFaceDetected) onFaceDetected([simulatedFace]);
+    drawBoundingBoxes(ctx, [simulatedFace]);
+  }, [onFaceDetected]);
+
+  // Face detection using browser's built-in FaceDetector API (if available)
+  // Fallback to simple simulation if not available
+  const detectFaces = useCallback(async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Match canvas to video size
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    try {
+      type FaceDetectionResult = { boundingBox: { x: number; y: number; width: number; height: number }; landmarks?: unknown };
+
+      const FaceDetectorClass = (window as unknown as { FaceDetector?: new (options?: { maxDetectedFaces?: number; fastMode?: boolean }) => { detect: (image: CanvasImageSource) => Promise<FaceDetectionResult[]> } }).FaceDetector;
+
+      if (FaceDetectorClass) {
+        const faceDetector = new FaceDetectorClass({ maxDetectedFaces: 10, fastMode: false });
+        const faces = await faceDetector.detect(canvas);
+
+        const detectedFaceData: DetectedFace[] = faces.map((f) => ({
+          x: f.boundingBox.x,
+          y: f.boundingBox.y,
+          width: f.boundingBox.width,
+          height: f.boundingBox.height,
+          confidence: f.landmarks ? 0.9 : 0.7,
+        }));
+
+        setDetectedFaces(detectedFaceData);
+        setFaceCount(detectedFaceData.length);
+        if (onFaceDetected) onFaceDetected(detectedFaceData);
+        drawBoundingBoxes(ctx, detectedFaceData);
+      } else {
+        // Fallback to simulation when API isn't available
+        simulateFaceDetection(ctx, canvas.width, canvas.height);
+      }
+    } catch (err) {
+      console.error('Face detection error:', err);
+      simulateFaceDetection(ctx, canvas.width, canvas.height);
+    }
+  }, [onFaceDetected, simulateFaceDetection]);
+
+  // (helpers moved above to avoid use-before-declaration)
 
   // Start camera stream
   const startDetection = async () => {
@@ -241,7 +203,7 @@ const LiveFaceDetection: React.FC<LiveFaceDetectionProps> = ({
         cancelAnimationFrame(animationFrame);
       }
     };
-  }, [isActive]);
+  }, [isActive, detectFaces]);
 
   // Cleanup on unmount
   useEffect(() => {

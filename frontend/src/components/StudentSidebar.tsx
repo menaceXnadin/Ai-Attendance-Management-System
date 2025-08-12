@@ -31,7 +31,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
     if (path.includes('/student/attendance')) return 'My Attendance';
     if (path.includes('/student/marks')) return 'My Marks';
     if (path.includes('/student/profile')) return 'My Profile';
-    if (path.includes('/student/face-registration')) return 'Face Registration';
+    if (path.includes('/student/face-registration') || path === '/face-registration') return 'Face Registration';
     return 'Student Portal';
   };
 
@@ -76,6 +76,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
             <nav className="space-y-1">
               <NavLink
                 to="/student"
+                end
                 className={({ isActive }) =>
                   `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
@@ -88,9 +89,10 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 <HomeIcon className="w-6 h-6" />
                 {!isCollapsed && "Dashboard"}
               </NavLink>
-              
+
               <NavLink
                 to="/student/attendance/mark"
+                end
                 className={({ isActive }) =>
                   `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
@@ -103,9 +105,10 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 <CameraIcon className="w-6 h-6" />
                 {!isCollapsed && "Mark Attendance"}
               </NavLink>
-              
+
               <NavLink
                 to="/student/attendance"
+                end
                 className={({ isActive }) =>
                   `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
@@ -118,7 +121,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 <CalendarIcon className="w-6 h-6" />
                 {!isCollapsed && "My Attendance"}
               </NavLink>
-              
+
               <NavLink
                 to="/student/marks"
                 className={({ isActive }) =>
@@ -133,7 +136,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 <BarChart3Icon className="w-6 h-6" />
                 {!isCollapsed && "My Marks"}
               </NavLink>
-              
+
               <NavLink
                 to="/student/profile"
                 className={({ isActive }) =>
@@ -148,17 +151,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 <UserIcon className="w-6 h-6" />
                 {!isCollapsed && "My Profile"}
               </NavLink>
-            </nav>
-          </div>
 
-          {/* Settings Section */}
-          <div>
-            {!isCollapsed && (
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                Settings
-              </h3>
-            )}
-            <nav className="space-y-1">
               <NavLink
                 to="/face-registration"
                 className={({ isActive }) =>
@@ -175,6 +168,8 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
               </NavLink>
             </nav>
           </div>
+
+          {/* Settings Section (currently no additional items) */}
         </div>
         
         {/* Sidebar Footer */}
