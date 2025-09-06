@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Ensure ALL Saturdays in August 2025 are marked as holidays
+Nepal holiday schedule: Saturday is the official holiday
 """
 
 import asyncio
@@ -66,7 +67,7 @@ async def ensure_all_saturdays_holidays():
             for saturday in missing_saturdays:
                 holiday_event = AcademicEvent(
                     title="Saturday Holiday",
-                    description="Weekly Saturday holiday",
+                    description="Weekly Saturday holiday (Nepal standard)",
                     event_type=EventType.HOLIDAY,
                     start_date=saturday,
                     is_all_day=True,

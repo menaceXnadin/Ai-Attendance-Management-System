@@ -30,7 +30,7 @@ def test_calendar_endpoints():
             # Step 2: Test calendar events endpoint
             print("\n📅 Testing calendar events endpoint...")
             events_response = requests.get(
-                f"{base_url}/api/calendar/events?start_date=2025-08-01&end_date=2025-08-31",
+                f"{base_url}/api/calendar/events?start_date=2025-09-01&end_date=2025-09-30",
                 headers={
                     "Authorization": f"Bearer {token}",
                     "Content-Type": "application/json"

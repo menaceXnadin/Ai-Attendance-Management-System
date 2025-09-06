@@ -2,6 +2,7 @@
 """
 Script to automatically create Saturday holidays in the academic calendar
 This will populate Saturdays as holidays for the entire academic year
+Nepal holiday schedule: Saturday is the official holiday
 """
 
 import sys
@@ -39,7 +40,7 @@ def create_saturday_holidays(start_date: date, end_date: date, admin_user_id: in
         if not existing_holiday:
             saturday_holiday = AcademicEvent(
                 title="Saturday Holiday",
-                description="Weekly Saturday holiday - No classes scheduled",
+                description="Weekly Saturday holiday - No classes scheduled (Nepal standard)",
                 event_type=EventType.HOLIDAY,
                 start_date=current_date,
                 is_all_day=True,

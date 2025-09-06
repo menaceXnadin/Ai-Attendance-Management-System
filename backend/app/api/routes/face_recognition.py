@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, Date
+from sqlalchemy.orm import selectinload
 from datetime import datetime, date
 from typing import List, Optional, Dict, Any
 from app.core.database import get_db
@@ -24,6 +25,20 @@ class GlassesDetectionResponse(BaseModel):
     glasses_detected: Optional[bool] = None
     confidence: Optional[float] = None
     all_attributes: Optional[dict] = None
+
+# New schema for real-time recognition
+class LiveRecognitionRequest(BaseModel):
+    image_data: str  # Base64 encoded image
+
+class LiveRecognitionResponse(BaseModel):
+    success: bool
+    message: str
+    student_recognized: Optional[bool] = None
+    student_name: Optional[str] = None
+    student_id: Optional[int] = None
+    confidence_score: Optional[float] = None
+    faces_detected: int
+    recognition_quality: Optional[str] = None
 
 router = APIRouter(prefix="/face-recognition", tags=["face-recognition"])
 
@@ -594,3 +609,147 @@ async def detect_glasses(request: GlassesDetectionRequest):
             "faces": [],
             "feedback": "Try capturing a new image"
         }
+
+@router.post("/live-recognition", response_model=LiveRecognitionResponse)
+async def live_face_recognition(
+    request: LiveRecognitionRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Real-time face recognition that returns the recognized student's name.
+    Used for live feedback during attendance marking process.
+    """
+    try:
+        print(f"[DEBUG] 🔍 Live recognition requested")
+        
+        # Decode and analyze the image
+        image = insightface_service.decode_base64_image(request.image_data)
+        detected_faces = insightface_service.detect_faces(image)
+        
+        if len(detected_faces) == 0:
+            return LiveRecognitionResponse(
+                success=False,
+                message="No face detected",
+                student_recognized=False,
+                faces_detected=0,
+                recognition_quality="poor"
+            )
+        
+        if len(detected_faces) > 1:
+            return LiveRecognitionResponse(
+                success=False,
+                message=f"Multiple faces detected ({len(detected_faces)})",
+                student_recognized=False,
+                faces_detected=len(detected_faces),
+                recognition_quality="multiple_faces"
+            )
+        
+        # Single face detected - now try to recognize
+        face_data = detected_faces[0]
+        
+        # Check face quality first
+        is_valid, validation_message = insightface_service.validate_face_quality(image, face_data)
+        
+        if not is_valid:
+            return LiveRecognitionResponse(
+                success=False,
+                message=validation_message,
+                student_recognized=False,
+                faces_detected=1,
+                recognition_quality="poor"
+            )
+        
+        # Get all registered students with face encodings
+        result = await db.execute(
+            select(Student).options(selectinload(Student.user)).where(Student.face_encoding.isnot(None))
+        )
+        students = result.scalars().all()
+        
+        if not students:
+            return LiveRecognitionResponse(
+                success=False,
+                message="No registered students found",
+                student_recognized=False,
+                faces_detected=1,
+                recognition_quality="no_database"
+            )
+        
+        # Prepare known encodings for recognition
+        known_encodings = [
+            (student.id, student.face_encoding) 
+            for student in students 
+            if student.face_encoding
+        ]
+        
+        # Extract embedding from current face
+        face_info = insightface_service.extract_face_features(image)
+        
+        if not face_info or face_info['confidence'] < insightface_service.confidence_threshold:
+            return LiveRecognitionResponse(
+                success=False,
+                message="Face not clear enough for recognition",
+                student_recognized=False,
+                faces_detected=1,
+                recognition_quality="poor"
+            )
+        
+        unknown_embedding = face_info['embedding']
+        
+        # Find best match
+        best_match = None
+        best_similarity = 0.0
+        similarity_threshold = 0.6  # Lower threshold for live recognition
+        
+        for student_id, known_encoding in known_encodings:
+            is_match, similarity_score, _ = insightface_service.compare_embeddings(
+                [known_encoding], unknown_embedding
+            )
+            
+            if similarity_score > best_similarity:
+                best_similarity = similarity_score
+                if similarity_score >= similarity_threshold:
+                    best_match = student_id
+        
+        if best_match:
+            # Get student details
+            matched_student = next((s for s in students if s.id == best_match), None)
+            
+            if matched_student:
+                # Determine recognition quality based on confidence
+                if best_similarity >= 0.8:
+                    quality = "excellent"
+                elif best_similarity >= 0.7:
+                    quality = "good"
+                else:
+                    quality = "fair"
+                
+                return LiveRecognitionResponse(
+                    success=True,
+                    message=f"Recognized: {matched_student.user.full_name}",
+                    student_recognized=True,
+                    student_name=matched_student.user.full_name,
+                    student_id=matched_student.id,
+                    confidence_score=best_similarity * 100,  # Convert to percentage
+                    faces_detected=1,
+                    recognition_quality=quality
+                )
+        
+        # No match found
+        return LiveRecognitionResponse(
+            success=False,
+            message="Face not recognized",
+            student_recognized=False,
+            faces_detected=1,
+            confidence_score=best_similarity * 100 if best_similarity > 0 else 0,
+            recognition_quality="unrecognized"
+        )
+    
+    except Exception as e:
+        print(f"[ERROR] ❌ Live recognition error: {str(e)}")
+        return LiveRecognitionResponse(
+            success=False,
+            message=f"Error during recognition: {str(e)}",
+            student_recognized=False,
+            faces_detected=0,
+            recognition_quality="error"
+        )

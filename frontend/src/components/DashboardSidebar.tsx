@@ -118,6 +118,9 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     if (path.includes('/app/calendar')) return { title: 'Academic Calendar', description: 'Manage events, schedules, and academic calendar' };
     if (path.includes('/app/attendance')) return { title: 'Attendance', description: 'Track and analyze attendance data' };
     if (path.includes('/app/faculties')) return { title: 'Faculties', description: 'Manage faculties, semesters, and classes' };
+    if (path.includes('/app/analytics')) return { title: 'Analytics', description: 'System-wide analytics and reporting' };
+    if (path.includes('/app/monitoring')) return { title: 'Live Monitoring', description: 'Real-time system monitoring and alerts' };
+    if (path.includes('/app/notifications')) return { title: 'Notifications', description: 'System notifications and alerts management' };
     if (path.includes('/app/settings')) return { title: 'Settings', description: 'System configuration and preferences' };
     return { title: 'Dashboard', description: 'Welcome to AttendAI' };
   };
@@ -177,6 +180,11 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                     to="/app/faculties"
                     badge={classes.length > 0 ? classes.length.toString() : undefined}
                   />
+                  <SidebarNavItem 
+                    icon={<CalendarIcon className="w-5 h-5" />} 
+                    label="Schedules" 
+                    to="/app/schedules"
+                  />
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -214,6 +222,12 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
+                  <SidebarNavItem 
+                    icon={<CalendarIcon className="w-5 h-5" />} 
+                    label="Semester Config" 
+                    to="/app/admin/semester-configuration"
+                    isNew={true}
+                  />
                   <SidebarNavItem 
                     icon={<Bell className="w-5 h-5" />} 
                     label="Notifications" 

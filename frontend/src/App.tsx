@@ -1,4 +1,19 @@
-{/* Unified Analytics Standalone Demo */}
+{/* Unified Anaimport HomePage from "./pages/HomePage";
+import AboutPage from "./pages/AboutPage";
+import BlogPage from "./pages/BlogPage";
+import LoginPage from "./pages/LoginPage";
+import StudentDashboard from "./pages/StudentDashboard";
+import DashboardLayout from "./pages/DashboardLayout";
+import Dashboard from "./pages/Dashboard";
+import StudentsPage from "./pages/StudentsPage";
+import AttendancePage from "./pages/AttendancePage";
+import FacultiesPage from "./pages/FacultiesPage";
+import SettingsPage from "./pages/SettingsPage";
+import FaceIntegrationTest from "./pages/FaceIntegrationTest";
+import AdvancedAnalyticsDemo from "./pages/AdvancedAnalyticsDemo";
+import AttendanceAnalyticsDemo from "./pages/AttendanceAnalyticsDemo";
+import ScheduleManagement from "./components/ScheduleManagement";
+import NotFound from "./pages/NotFound";ne Demo */}
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -28,11 +43,13 @@ import FaceIntegrationTest from "./pages/FaceIntegrationTest";
 import AdvancedAnalyticsDemo from "./pages/AdvancedAnalyticsDemo";
 import AttendanceAnalyticsDemo from "./pages/AttendanceAnalyticsDemo";
 import NotFound from "./pages/NotFound";
+import ScheduleManagement from "./components/ScheduleManagement";
 
 import GlobalAnalyticsDemo from "./pages/UnifiedAnalyticsDemo";
 import MergedAnalyticsDemo from "./pages/MergedAnalyticsDemo";
 
 import AnalyticsPage from "./pages/AnalyticsPage";
+import SemesterConfigurationPage from "./pages/SemesterConfigurationPage";
 
 import AnalyticsShowcase from "./pages/AnalyticsShowcase";
 import SystemStatusPage from "./pages/SystemStatusPage";
@@ -46,7 +63,10 @@ import StudentFaceRegistrationPage from "./pages/StudentFaceRegistrationPage";
 import MarksPage from "./pages/MarksPage";
 import ProfilePage from "./pages/ProfilePage";
 import FaceRegistrationDemoPage from "./pages/FaceRegistrationDemoPage";
+import FaceRegistrationDebugPage from "./pages/FaceRegistrationDebugPage";
+import FaceTestingPage from "./components/FaceTestingPage";
 import AcademicCalendar from "./pages/AcademicCalendar";
+import StudentCalendar from "./pages/StudentCalendar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +105,8 @@ const App = () => {
               <Route path="/login" element={<LoginPage />} />
               {/* Face Integration Test Route - MediaPipe + InsightFace */}
               <Route path="/face-integration-test" element={<FaceIntegrationTest />} />
+              {/* Face Testing Page - Simple component testing */}
+              <Route path="/face-testing" element={<FaceTestingPage />} />
               {/* Attendance Analytics Standalone Demo */}
               <Route path="/attendance-analytics-demo" element={<AttendanceAnalyticsDemo />} />
               {/* Advanced Analytics Standalone Demo */}
@@ -97,6 +119,7 @@ const App = () => {
               <Route path="/register" element={<Navigate to="/login" replace />} />
               <Route path="/dashboard" element={<RoleRedirect />} />
               <Route path="/face-registration-demo" element={<FaceRegistrationDemoPage />} />
+              <Route path="/face-registration-debug" element={<FaceRegistrationDebugPage />} />
               
               {/* Student Route - Protected */}
               <Route path="/student" element={
@@ -137,7 +160,7 @@ const App = () => {
               <Route path="/student/calendar" element={
                 <ProtectedRoute>
                   <ApiErrorBoundary>
-                    <AcademicCalendar />
+                    <StudentCalendar />
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />
@@ -164,10 +187,12 @@ const App = () => {
                 <Route path="calendar" element={<AcademicCalendar />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="faculties" element={<FacultiesPage />} />
+                <Route path="schedules" element={<ScheduleManagement />} />
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="notifications" element={<AdminNotificationsPage />} />
                 <Route path="monitoring" element={<LiveMonitoringPage />} />
                 <Route path="analytics" element={<ApiErrorBoundary><AnalyticsPage /></ApiErrorBoundary>} />
+                <Route path="admin/semester-configuration" element={<SemesterConfigurationPage />} />
               </Route>
               
               <Route path="analytics-showcase" element={<AnalyticsShowcase />} />

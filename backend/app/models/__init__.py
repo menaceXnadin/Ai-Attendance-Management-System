@@ -8,7 +8,10 @@ import enum
 from .notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope, NotificationPriority, NotificationType
 
 # Import calendar models
-from .calendar import AcademicEvent, EventAttendance, CalendarSetting, AcademicYear, ClassScheduleTemplate, EventType, HolidayType
+from .calendar import AcademicEvent, EventAttendance, CalendarSetting, AcademicYear, SemesterConfiguration, ClassScheduleTemplate, EventType, HolidayType
+
+# Import schedule models
+from .schedule import ClassSchedule, DayOfWeek
 
 # Enums matching PostgreSQL ENUM types
 class UserRole(enum.Enum):

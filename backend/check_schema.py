@@ -1,15 +1,52 @@
-import asyncio
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.database import get_db
-from sqlalchemy import text
+#!/usr/bin/env python3
 
-async def check_schema():
-    async for db in get_db():
-        result = await db.execute(text("SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_name = 'students' ORDER BY ordinal_position"))
-        columns = result.fetchall()
-        print('Students table columns:')
-        for col in columns:
-            print(f'  {col[0]}: {col[1]} (nullable: {col[2]})')
-        break
+"""
+Check database schema
+"""
 
-asyncio.run(check_schema())
+import psycopg2
+from psycopg2.extras import RealDictCursor
+
+def check_schema():
+    conn = psycopg2.connect(host='localhost', database='attendancedb', user='postgres', password='nadin123')
+    
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            print("📋 SUBJECTS TABLE SCHEMA:")
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'subjects' 
+                ORDER BY ordinal_position
+            """)
+            
+            for row in cur.fetchall():
+                print(f"  {row['column_name']}: {row['data_type']}")
+            
+            print("\n📋 CLASS_SCHEDULES TABLE SCHEMA:")
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'class_schedules' 
+                ORDER BY ordinal_position
+            """)
+            
+            for row in cur.fetchall():
+                print(f"  {row['column_name']}: {row['data_type']}")
+            
+            print("\n📋 STUDENTS TABLE SCHEMA:")
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_name = 'students' 
+                ORDER BY ordinal_position
+            """)
+            
+            for row in cur.fetchall():
+                print(f"  {row['column_name']}: {row['data_type']}")
+    
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    check_schema()

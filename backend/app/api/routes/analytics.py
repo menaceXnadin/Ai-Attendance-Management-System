@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 from typing import Optional
 from datetime import datetime, date
 from app.core.database import get_db
@@ -17,34 +18,34 @@ async def get_class_averages(
 ):
     """Get class average attendance and marks for comparison."""
     try:
-        # Calculate average attendance percentage
-        attendance_query = select(
-            func.avg(
-                func.case(
-                    (AttendanceRecord.status == 'PRESENT', 100.0),
-                    else_=0.0
-                )
-            ).label('average_attendance')
-        )
-        
+        # Get all attendance records
+        attendance_query = select(AttendanceRecord)
         if class_id:
             # If we had a class system, we'd filter here
-            # For now, calculate overall averages
             pass
             
         attendance_result = await db.execute(attendance_query)
-        average_attendance = attendance_result.scalar() or 0.0
+        attendance_records = attendance_result.scalars().all()
+        
+        # Calculate average attendance manually
+        if attendance_records:
+            present_count = sum(1 for record in attendance_records if record.status == 'PRESENT')
+            total_count = len(attendance_records)
+            average_attendance = (present_count / total_count) * 100 if total_count > 0 else 0
+        else:
+            average_attendance = 0.0
         
         # Calculate average marks if marks system exists
         try:
-            marks_query = select(
-                func.avg(
-                    (Mark.marks_obtained / Mark.total_marks) * 100
-                ).label('average_marks')
-            )
-            
+            marks_query = select(Mark)
             marks_result = await db.execute(marks_query)
-            average_marks = marks_result.scalar() or 0.0
+            marks_records = marks_result.scalars().all()
+            
+            if marks_records:
+                total_percentage = sum((mark.marks_obtained / mark.total_marks) * 100 for mark in marks_records if mark.total_marks > 0)
+                average_marks = total_percentage / len(marks_records) if marks_records else 0
+            else:
+                average_marks = 0.0
         except:
             # If marks table doesn't exist or has no data
             average_marks = 0.0
@@ -82,78 +83,87 @@ async def get_student_insights(
         )
     
     try:
-        # Get student's attendance summary
-        attendance_query = select(
-            func.count().label('total_classes'),
-            func.sum(
-                func.case(
-                    (AttendanceRecord.status == 'PRESENT', 1),
-                    else_=0
-                )
-            ).label('present_classes'),
-            func.sum(
-                func.case(
-                    (AttendanceRecord.status == 'ABSENT', 1),
-                    else_=0
-                )
-            ).label('absent_classes'),
-            func.sum(
-                func.case(
-                    (AttendanceRecord.status == 'LATE', 1),
-                    else_=0
-                )
-            ).label('late_classes')
-        ).where(AttendanceRecord.student_id == student_id)
+        # First get the student info with user relationship loaded
+        student_query = select(Student).options(selectinload(Student.user)).where(Student.id == student_id)
+        student_result = await db.execute(student_query)
+        student = student_result.scalar_one_or_none()
+        
+        if not student:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Student not found"
+            )
+        
+        # Get student's attendance records with a simple query
+        attendance_query = select(AttendanceRecord).where(
+            AttendanceRecord.student_id == student_id
+        )
         
         attendance_result = await db.execute(attendance_query)
-        attendance_stats = attendance_result.first()
+        attendance_records = attendance_result.scalars().all()
         
-        total_classes = attendance_stats.total_classes or 0
-        present_classes = attendance_stats.present_classes or 0
-        absent_classes = attendance_stats.absent_classes or 0
-        late_classes = attendance_stats.late_classes or 0
+        # Calculate stats manually to avoid SQL function issues
+        total_classes = len(attendance_records)
+        present_classes = sum(1 for record in attendance_records if str(record.status).upper() == 'PRESENT')
+        absent_classes = sum(1 for record in attendance_records if str(record.status).upper() == 'ABSENT')
+        late_classes = sum(1 for record in attendance_records if str(record.status).upper() == 'LATE')
         
         attendance_percentage = (present_classes / total_classes * 100) if total_classes > 0 else 0
         
-        # Generate insights based on attendance pattern
-        insights = []
+        # Determine risk level
+        if attendance_percentage >= 90:
+            risk_level = "low"
+        elif attendance_percentage >= 80:
+            risk_level = "medium"
+        elif attendance_percentage >= 70:
+            risk_level = "high"
+        else:
+            risk_level = "critical"
+        
+        # Generate recommendations
+        recommendations = []
         
         if attendance_percentage >= 95:
-            insights.append({
-                "type": "success",
-                "title": "Excellent Attendance",
-                "message": f"Outstanding! You maintain {attendance_percentage:.1f}% attendance.",
-                "priority": "low"
-            })
+            recommendations.append("Excellent attendance! Keep up the great work.")
         elif attendance_percentage < 75:
-            insights.append({
-                "type": "warning",
-                "title": "Attendance Alert",
-                "message": f"Your attendance is {attendance_percentage:.1f}%, below the 75% requirement.",
-                "priority": "high"
-            })
+            recommendations.append(f"Attendance is {attendance_percentage:.1f}%, below the 75% requirement. Immediate improvement needed.")
+            recommendations.append("Consider meeting with your academic advisor to discuss strategies for better attendance.")
+        elif attendance_percentage < 85:
+            recommendations.append(f"Attendance is {attendance_percentage:.1f}%. Work on improving consistency.")
         
         if absent_classes > 5:
-            insights.append({
-                "type": "info",
-                "title": "Absence Pattern",
-                "message": f"You have {absent_classes} absences. Consider speaking with your advisor.",
-                "priority": "medium"
-            })
+            recommendations.append(f"You have {absent_classes} absences. Focus on attending all upcoming classes.")
+        
+        # Note: student info already retrieved with user relationship loaded at the beginning
         
         return {
-            "studentId": student_id,
+            "student": {
+                "id": student.id,
+                "student_id": student.student_id,
+                "name": student.user.full_name if student.user else "Unknown",
+                "email": student.user.email if student.user else "Unknown",
+                "semester": student.semester or 1,
+                "faculty": student.faculty_name if hasattr(student, 'faculty_name') else "Unknown",
+                "faculty_id": student.faculty_id or 0,
+            },
             "attendance": {
                 "totalClasses": total_classes,
-                "presentClasses": present_classes,
+                "attendedClasses": present_classes,
                 "absentClasses": absent_classes,
-                "lateClasses": late_classes,
                 "percentage": round(attendance_percentage, 2)
             },
-            "insights": insights,
-            "generatedAt": datetime.now().isoformat()
+            "riskLevel": risk_level,
+            "trends": {
+                "improving": False,  # Would need historical analysis
+                "declining": attendance_percentage < 80,
+                "stable": True
+            },
+            "recommendations": recommendations,
+            "subjects": []  # Will be populated by separate endpoint
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -169,65 +179,57 @@ async def get_attendance_trends(
 ):
     """Get attendance trends over the specified number of days."""
     
-    # Calculate date range
-    end_date = datetime.now().date()
-    start_date = date.fromordinal(end_date.toordinal() - days)
-    
     try:
-        # Build query
-        query = select(
-            func.date(AttendanceRecord.date).label('date'),
-            func.count().label('total_records'),
-            func.sum(
-                func.case(
-                    (AttendanceRecord.status == 'PRESENT', 1),
-                    else_=0
-                )
-            ).label('present_count')
-        ).where(
-            and_(
-                func.date(AttendanceRecord.date) >= start_date,
-                func.date(AttendanceRecord.date) <= end_date
-            )
-        )
+        # Build a simple query without complex SQL functions
+        base_query = select(AttendanceRecord)
         
         if student_id:
-            query = query.where(AttendanceRecord.student_id == student_id)
+            base_query = base_query.where(AttendanceRecord.student_id == student_id)
             
-        query = query.group_by(func.date(AttendanceRecord.date)).order_by(func.date(AttendanceRecord.date))
+        result = await db.execute(base_query)
+        all_records = result.scalars().all()
         
-        result = await db.execute(query)
-        trends = result.all()
+        # Group by date and calculate stats manually
+        date_stats = {}
+        for record in all_records:
+            try:
+                # Handle different date formats
+                record_date = record.date
+                if hasattr(record_date, 'date'):
+                    # If it's a datetime object, get the date part
+                    date_key = record_date.date().isoformat()
+                elif hasattr(record_date, 'isoformat'):
+                    # If it's already a date object
+                    date_key = record_date.isoformat()
+                else:
+                    # Skip records with invalid dates
+                    continue
+                
+                if date_key not in date_stats:
+                    date_stats[date_key] = {'total': 0, 'present': 0}
+                
+                date_stats[date_key]['total'] += 1
+                if record.status and str(record.status).upper() == 'PRESENT':
+                    date_stats[date_key]['present'] += 1
+                    
+            except Exception as e:
+                # Skip records with date parsing issues
+                continue
         
-        # Format for chart consumption
+        # Format for chart consumption - limit to recent dates
         chart_data = []
-        for trend in trends:
-            attendance_rate = (trend.present_count / trend.total_records * 100) if trend.total_records > 0 else 0
+        for date_str, stats in sorted(date_stats.items())[-days:]:  # Get last N days
+            attendance_rate = (stats['present'] / stats['total'] * 100) if stats['total'] > 0 else 0
             chart_data.append({
-                "date": trend.date.isoformat(),
-                "attendanceRate": round(attendance_rate, 2),
-                "totalClasses": trend.total_records,
-                "presentClasses": trend.present_count
+                "date": date_str,
+                "attendance_rate": round(attendance_rate, 2),
+                "total_classes": stats['total'],
+                "attended_classes": stats['present']
             })
         
-        return {
-            "trends": chart_data,
-            "period": {
-                "startDate": start_date.isoformat(),
-                "endDate": end_date.isoformat(),
-                "days": days
-            },
-            "studentId": student_id
-        }
+        return chart_data
         
     except Exception as e:
-        return {
-            "trends": [],
-            "period": {
-                "startDate": start_date.isoformat(),
-                "endDate": end_date.isoformat(),
-                "days": days
-            },
-            "studentId": student_id,
-            "error": str(e)
-        }
+        # Return empty data if there's an error, but log it
+        print(f"Error in attendance trends: {str(e)}")
+        return []

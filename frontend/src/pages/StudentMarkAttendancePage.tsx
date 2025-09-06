@@ -22,14 +22,14 @@ const StudentMarkAttendancePage = () => {
           <CardContent>
             {showScanner ? (
               <FaceRecognition 
-                subjectId="1"
+                subjectId="2"
                 onCapture={async (dataUrl, recognized) => {
                   if (!recognized) {
                     toast({ title: 'Face not recognized', variant: 'destructive' });
                     return;
                   }
                   try {
-                    const res = await api.faceRecognition.markAttendance(dataUrl, '1');
+                    const res = await api.faceRecognition.markAttendance(dataUrl, '2');
                     if (res.success) {
                       toast({ title: 'Attendance marked successfully' });
                     } else {

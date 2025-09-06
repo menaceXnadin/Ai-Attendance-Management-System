@@ -13,17 +13,13 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user."""
-    print(f"[DEBUG] Token received: {credentials.credentials[:50]}...")
     token = credentials.credentials
     payload = verify_token(token)
-    print(f"[DEBUG] Token payload: {payload}")
 
     user_id_str: str = payload.get("sub")
     role: str = payload.get("role")
-    print(f"[DEBUG] User ID: {user_id_str}, Role: {role}")
     
     if user_id_str is None or role is None:
-        print("[DEBUG] Missing user_id or role in token")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
@@ -32,7 +28,6 @@ async def get_current_user(
     try:
         user_id = int(user_id_str)
     except (ValueError, TypeError):
-        print("[DEBUG] Invalid user ID format")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid user ID in token"
@@ -40,17 +35,14 @@ async def get_current_user(
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    print(f"[DEBUG] User found: {user.email if user else 'None'}")
 
     if user is None:
-        print("[DEBUG] User not found in database")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found"
         )
 
     if not user.is_active:
-        print("[DEBUG] User is inactive")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive user"
@@ -59,7 +51,6 @@ async def get_current_user(
     # Ensure the role matches the user's role in the database (compare as strings)
     user_role_str = user.role.value if hasattr(user.role, 'value') else str(user.role)
     if user_role_str != role:
-        print(f"[DEBUG] Role mismatch: token={role}, db={user_role_str}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Role mismatch"
@@ -70,9 +61,9 @@ async def get_current_user(
         from app.services.system_monitor import SessionManager
         await SessionManager.update_activity(db=db, user_id=user.id)
     except Exception as e:
-        print(f"[DEBUG] Warning: Failed to update session activity: {e}")
+        # This is a non-critical operation, so we can just log a warning
+        print(f"Warning: Failed to update session activity: {e}")
 
-    print("[DEBUG] Authentication successful")
     return user
 
 async def get_current_student(

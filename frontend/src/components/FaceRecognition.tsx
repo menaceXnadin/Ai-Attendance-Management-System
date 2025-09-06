@@ -1,13 +1,14 @@
 
 import * as React from 'react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Camera, CheckCircle, X, Lock, Shield } from 'lucide-react';
+import { Camera, CheckCircle, X, Lock, Shield, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { FaceDetection } from '@mediapipe/face_detection';
 import { Camera as MPCamera } from '@mediapipe/camera_utils';
 import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
+import { getPreferredCamera, createCameraConstraints, testCameraWithFallback } from '@/utils/cameraSelector';
 
 type BackendFace = {
   bbox: [number, number, number, number];
@@ -28,9 +29,10 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   const [isActive, setIsActive] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecognized, setIsRecognized] = useState(false);
-  const [feedback, setFeedback] = useState<string>('');
   const [faceBox, setFaceBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
   const [boxColor, setBoxColor] = useState<string>('lime');
+  const [feedback, setFeedback] = useState<string>('');
+  
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mpCameraRef = useRef<MPCamera | null>(null);
@@ -45,11 +47,11 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
     timeUntilNext
   } = useTimeRestrictions();
 
-  // Time restrictions disabled - always allow verification
-  const finalCanVerify = true;
-  const finalRestrictionReason = "Face verification available";
+  // Time restrictions enabled - use actual time-based access control
+  const finalCanVerify = canVerify;
+  const finalRestrictionReason = restrictionReason;
 
-  // Start/stop the webcam stream with improved error handling and live detection
+  // Start/stop the webcam stream with MediaPipe face detection only
   useEffect(() => {
     if (!isActive) {
       // Cleanup
@@ -59,9 +61,9 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       }
       setFaceBox(null);
       setFeedback('');
-  // No facemesh cleanup needed
       return;
     }
+    
     // Setup MediaPipe Face Detection
     const faceDetection = new FaceDetection({
       locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
@@ -71,45 +73,86 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       minDetectionConfidence: 0.6
     });
     faceDetection.onResults((results: {detections?: Array<{boundingBox: {xCenter: number, yCenter: number, width: number, height: number}}>}) => {
-      if (results.detections && results.detections.length > 0) {
-        const det = results.detections[0];
-        const box = det.boundingBox;
-        setFaceBox({
-          x: box.xCenter - box.width / 2,
-          y: box.yCenter - box.height / 2,
-          width: box.width,
-          height: box.height
-        });
-        setBoxColor('lime');
-        setFeedback('Face detected. Ready to capture!');
-      } else {
-        setFaceBox(null);
-        setFeedback('No face detected.');
+      try {
+        if (results.detections && results.detections.length > 0) {
+          const det = results.detections[0];
+          const box = det.boundingBox;
+          setFaceBox({
+            x: box.xCenter - box.width / 2,
+            y: box.yCenter - box.height / 2,
+            width: box.width,
+            height: box.height
+          });
+          setBoxColor('lime');
+          setFeedback('Face detected. Ready to capture!');
+        } else {
+          setFaceBox(null);
+          setFeedback('No face detected.');
+        }
+      } catch (error) {
+        console.error('Face detection error:', error);
+        setFeedback('Face detection error. Please try again.');
       }
     });
     faceDetectionRef.current = faceDetection;
 
+    // Setup camera with smart camera selection
+    const initializeCamera = async () => {
+      if (!videoRef.current) return;
 
+      try {
+        setFeedback('Initializing camera...');
+        
+        // Use our smart camera selector to avoid virtual cameras like Camo Studio
+        const stream = await testCameraWithFallback();
+        
+        if (!stream) {
+          setFeedback('Failed to access camera. Please check permissions and ensure a camera is available.');
+          return;
+        }
 
-    // Setup camera
-    if (videoRef.current) {
-      mpCameraRef.current = new MPCamera(videoRef.current, {
-        onFrame: async () => {
-          await faceDetection.send({ image: videoRef.current });
-        },
-        width: 640,
-        height: 480
-      });
-      mpCameraRef.current.start();
-    }
+        // Set up video element with the stream
+        videoRef.current.srcObject = stream;
+        
+        // Create a custom frame capture loop instead of MediaPipe Camera
+        const captureLoop = () => {
+          if (videoRef.current && videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0 && isActive) {
+            faceDetection.send({ image: videoRef.current });
+          }
+          if (isActive) {
+            requestAnimationFrame(captureLoop);
+          }
+        };
+
+        // Wait for video to be ready, then start the detection loop
+        videoRef.current.onloadedmetadata = () => {
+          setFeedback('Camera ready. Position your face in the frame.');
+          requestAnimationFrame(captureLoop);
+        };
+
+        // Store the stream for cleanup
+        mpCameraRef.current = { 
+          stop: () => {
+            stream.getTracks().forEach(track => track.stop());
+          }
+        } as MPCamera;
+        
+      } catch (error) {
+        console.error('Camera initialization error:', error);
+        setFeedback('Failed to access camera. Please ensure camera permissions are granted and no other application is using the camera.');
+      }
+    };
+
+    initializeCamera();
+    
     return () => {
       if (mpCameraRef.current) {
         mpCameraRef.current.stop();
         mpCameraRef.current = null;
       }
+      
       setFaceBox(null);
       setFeedback('');
-  // No facemesh cleanup needed
     };
   }, [isActive]);
 
@@ -150,6 +193,17 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   // Real capture: use backend verification
   const captureImage = async () => {
     if (!canvasRef.current || !videoRef.current) return;
+    
+    // Check if video is ready
+    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+      toast({
+        title: 'Video Not Ready',
+        description: 'Please wait for the camera to initialize.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     if (!faceBox) {
       toast({
         title: 'No Face Detected',
@@ -158,17 +212,22 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       });
       return;
     }
+    
     setIsCapturing(true);
     const canvas = canvasRef.current;
     const video = videoRef.current;
     const context = canvas.getContext('2d');
     if (!context) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg');
-    const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    
+    let dataUrl = '';
+    
     try {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      dataUrl = canvas.toDataURL('image/jpeg');
+      const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    
       // 1) Verify identity against the logged-in user's saved embedding
       const token = localStorage.getItem('authToken');
       const commonHeaders: Record<string, string> = {
@@ -198,12 +257,24 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
 
       // 2) Optionally mark attendance if subjectId is provided
       if (subjectId) {
+        console.log('[DEBUG] Marking attendance for subject:', subjectId);
+        console.log('[DEBUG] Image data length:', base64?.length || 0);
+        
+        const attendancePayload = { 
+          image_data: base64, 
+          subject_id: Number(subjectId) 
+        };
+        console.log('[DEBUG] Attendance payload:', attendancePayload);
+        
         const attendRes = await fetch('/api/face-recognition/mark-attendance', {
           method: 'POST',
           headers: commonHeaders,
-          body: JSON.stringify({ image_data: base64, subject_id: Number(subjectId) })
+          body: JSON.stringify(attendancePayload)
         });
+        
+        console.log('[DEBUG] Attendance response status:', attendRes.status);
         const attendData = await attendRes.json();
+        console.log('[DEBUG] Attendance response data:', attendData);
 
         const ok = attendData.success && attendData.attendance_marked;
         onCapture(dataUrl, ok);
@@ -221,8 +292,9 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
         });
       }
     } catch (e) {
+      console.error('Face capture error:', e);
       setIsRecognized(false);
-      onCapture(dataUrl, false);
+      onCapture(dataUrl || '', false);
       toast({
         title: 'Verification Error',
         description: 'Error verifying identity. Please try again.',
@@ -230,7 +302,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       });
     }
     setIsCapturing(false);
-    setTimeout(() => setIsActive(false), 2000);
+    setIsActive(false); // Immediately close instead of waiting 2 seconds
   };
 
   const handleCancel = () => {
@@ -275,45 +347,51 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   };
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader>
+    <Card className="overflow-hidden bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 shadow-2xl">
+      <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700/50">
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2">
-            <Camera className="h-5 w-5" />
-            Facial Recognition
+          <CardTitle className="flex items-center gap-3 text-white">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Camera className="h-5 w-5 text-blue-400" />
+            </div>
+            Face Recognition
             {currentPeriod && (
-              <span className="text-sm font-normal text-muted-foreground">
-                - {currentPeriod.name}
+              <span className="text-sm font-normal text-slate-400 bg-slate-700/50 px-2 py-1 rounded-md">
+                {currentPeriod.name}
               </span>
             )}
           </CardTitle>
         </div>
-        <CardDescription>
-          Position your face in the frame and click "Capture" to mark attendance.
+        <CardDescription className="text-slate-300">
+          Position your face in the frame and capture to verify your identity for attendance.
         </CardDescription>
         
-        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
-          <div className="flex items-center gap-2">
-            <Shield className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium text-green-800">
-              Face Verification Available
-            </span>
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mt-4">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-green-500/20 rounded-lg">
+              <Shield className="h-4 w-4 text-green-400" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-green-300">
+                Face Verification Active
+              </span>
+              <p className="text-xs text-green-400/80 mt-1">
+                Advanced AI facial recognition ready for secure attendance marking
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-green-600 mt-1">
-            Time restrictions disabled - always available for testing
-          </p>
         </div>
       </CardHeader>
       
-      <CardContent className="flex flex-col items-center justify-center">
+      <CardContent className="flex flex-col items-center justify-center p-6 bg-slate-900/50">
         {isActive ? (
-          <div className="relative w-full max-w-md">
-            <div className="relative">
+          <div className="relative w-full max-w-lg">
+            <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl">
               <video 
                 ref={videoRef} 
                 autoPlay 
                 playsInline
-                className="w-full rounded-md border-2 border-brand-300 shadow-sm"
+                className="w-full aspect-video object-cover bg-slate-800"
                 style={{ transform: 'scaleX(-1)' }} // Mirror effect
                 width={640}
                 height={480}
@@ -329,107 +407,128 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
                   width: '100%',
                   height: '100%',
                   zIndex: 20,
-                  pointerEvents: 'none', // This should allow clicks to pass through
+                  pointerEvents: 'none',
                   background: 'none',
                 }}
               />
+              
+              {/* Modern scanning overlay */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-blue-400 rounded-tl-lg"></div>
+                <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-blue-400 rounded-tr-lg"></div>
+                <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-blue-400 rounded-bl-lg"></div>
+                <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-blue-400 rounded-br-lg"></div>
+              </div>
+              
               {isCapturing && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-20 rounded-md">
-                  <div className="animate-pulse text-white text-lg">Processing...</div>
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                  <div className="flex items-center gap-3 text-white">
+                    <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-lg font-medium">Processing...</span>
+                  </div>
                 </div>
               )}
             </div>
-            {/* Live feedback below video */}
-            <div className="mt-2 text-center min-h-[24px]">
-              <span className={`text-sm ${feedback.includes('Ready') ? 'text-green-500' : 'text-yellow-400'}`}>{feedback}</span>
+            
+            {/* Live feedback with modern design */}
+            <div className="mt-4 text-center">
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                feedback.includes('Ready') 
+                  ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  feedback.includes('Ready') ? 'bg-green-400' : 'bg-amber-400'
+                } animate-pulse`}></div>
+                {feedback || 'Initializing camera...'}
+              </div>
             </div>
           </div>
         ) : (
-          <div className="border-2 border-dashed border-gray-300 rounded-md w-full max-w-md h-64 flex items-center justify-center bg-gray-50">
+          <div className="border-2 border-dashed border-slate-600 rounded-xl w-full max-w-lg aspect-video flex items-center justify-center bg-slate-800/50 backdrop-blur-sm">
             {isRecognized ? (
-              <div className="text-center text-green-500">
-                <CheckCircle className="w-16 h-16 mx-auto mb-2" />
-                <p>Face successfully recognized!</p>
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-green-500/20 rounded-full">
+                  <CheckCircle className="w-full h-full text-green-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-green-300 mb-2">Face Successfully Recognized!</h3>
+                <p className="text-slate-400">Identity verified and attendance marked</p>
               </div>
             ) : (
-              <div className="text-center text-gray-500">
-                <Camera className="w-16 h-16 mx-auto mb-2 opacity-40" />
-                <p>Click "Start Camera" to begin facial recognition</p>
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-slate-700/50 rounded-full">
+                  <Camera className="w-full h-full text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-300 mb-2">Ready for Face Recognition</h3>
+                <p className="text-slate-400">Click "Start Camera" to begin secure identity verification</p>
               </div>
             )}
           </div>
         )}
       </CardContent>
       
-      <CardFooter className="flex justify-center space-x-4 pb-6" style={{ pointerEvents: 'auto' }}>
+      <CardFooter className="flex justify-center space-x-4 p-6 bg-slate-800/50 border-t border-slate-700/50">
         {!isActive ? (
-          <div className="flex space-x-3" style={{ pointerEvents: 'auto' }}>
-            <div className="relative group">
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-400 to-brand-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200"></div>
-              <Button 
-                onClick={() => setIsActive(true)} 
-                disabled={disabled || isCapturing}
-                className="relative bg-gradient-to-r from-blue-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white px-6 py-3 text-base shadow-lg rounded-lg"
-                style={{ pointerEvents: 'auto' }}
-              >
-                <Camera className="mr-2 h-5 w-5" /> Start Camera
-              </Button>
-            </div>
+          <div className="flex space-x-3">
+            <Button 
+              onClick={() => setIsActive(true)} 
+              disabled={disabled || isCapturing}
+              className="relative group overflow-hidden bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <Camera className="mr-2 h-5 w-5 relative z-10" /> 
+              <span className="relative z-10">Start Camera</span>
+            </Button>
             {onCancel && (
-              <div className="relative group" style={{ pointerEvents: 'auto' }}>
-                <div className="absolute -inset-0.5 bg-gradient-to-r from-red-400 to-red-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200"></div>
-                <Button 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('Cancel button clicked (when camera inactive)');
-                    handleCancel();
-                  }}
-                  className="relative bg-red-600 hover:bg-red-700 text-white px-6 py-3 text-base rounded-lg"
-                  style={{ pointerEvents: 'auto' }}
-                >
-                  <X className="mr-2 h-5 w-5 text-white" /> Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex space-x-3" style={{ pointerEvents: 'auto' }}>
-            <div className="relative group">
-              <div className={`absolute -inset-0.5 ${
-                isCapturing || !finalCanVerify 
-                  ? 'bg-gray-300' 
-                  : 'bg-gradient-to-r from-green-400 to-green-600'
-              } rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200`}></div>
-              <Button 
-                onClick={captureImage} 
-                disabled={isCapturing}
-                className={`relative px-6 py-3 text-base shadow-lg rounded-lg ${
-                  isCapturing 
-                    ? 'bg-gray-400 cursor-not-allowed' 
-                    : 'bg-green-500 hover:bg-green-600'
-                }`}
-                style={{ pointerEvents: 'auto' }}
-              >
-                {isCapturing ? "Processing..." : "Capture"}
-              </Button>
-            </div>
-            <div className="relative group" style={{ pointerEvents: 'auto' }}>
-              <div className="absolute -inset-0.5 bg-gradient-to-r from-red-400 to-red-600 rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200"></div>
               <Button 
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log('Cancel button clicked (when camera active)');
                   handleCancel();
                 }}
-                disabled={isCapturing}
-                className="relative inline-flex items-center justify-center gap-2 px-6 py-3 text-base font-semibold rounded-lg shadow-lg bg-red-600 hover:bg-red-700 text-white"
-                style={{ pointerEvents: 'auto' }}
+                variant="outline"
+                className="px-8 py-3 text-base font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
               >
-                <X className="mr-2 h-5 w-5 text-white" /> Cancel
+                <X className="mr-2 h-5 w-5" /> Cancel
               </Button>
-            </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex space-x-3">
+            <Button 
+              onClick={captureImage} 
+              disabled={isCapturing}
+              className={`relative group overflow-hidden px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0 ${
+                isCapturing 
+                  ? 'bg-slate-600 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
+              }`}
+            >
+              {isCapturing ? (
+                <>
+                  <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <Camera className="mr-2 h-5 w-5 relative z-10" />
+                  <span className="relative z-10">Capture & Verify</span>
+                </>
+              )}
+            </Button>
+            <Button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCancel();
+              }}
+              disabled={isCapturing}
+              variant="outline"
+              className="px-8 py-3 text-base font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
+            >
+              <X className="mr-2 h-5 w-5" /> Cancel
+            </Button>
           </div>
         )}
       </CardFooter>

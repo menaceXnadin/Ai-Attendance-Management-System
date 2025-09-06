@@ -15,6 +15,8 @@ import {
   Activity,
   AlertCircle
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/integrations/api/client';
 
 interface AnalyticsData {
   totalStudents: number;
@@ -41,6 +43,39 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data }) => {
     lowAttendanceCount
   } = data;
 
+  // Fetch real attendance data for detailed analytics
+  const { data: recentAttendance = [] } = useQuery({
+    queryKey: ['recent-attendance-analytics'],
+    queryFn: async () => {
+      try {
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 7); // Last 7 days
+        
+        return await api.attendance.getAll({
+          startDate: startDate.toISOString().split('T')[0],
+          endDate: endDate.toISOString().split('T')[0]
+        });
+      } catch (error) {
+        console.error('Error fetching recent attendance:', error);
+        return [];
+      }
+    }
+  });
+
+  // Fetch subjects for department analytics
+  const { data: subjects = [] } = useQuery({
+    queryKey: ['subjects-analytics'],
+    queryFn: async () => {
+      try {
+        return await api.subjects.getAll();
+      } catch (error) {
+        console.error('Error fetching subjects:', error);
+        return [];
+      }
+    }
+  });
+
   const getAttendanceStatus = (rate: number) => {
     if (rate >= 90) return { color: 'text-green-400', status: 'Excellent', bgColor: 'bg-green-500/20' };
     if (rate >= 75) return { color: 'text-yellow-400', status: 'Good', bgColor: 'bg-yellow-500/20' };
@@ -58,20 +93,76 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data }) => {
 
   const attendanceStatus = getAttendanceStatus(attendanceRate);
 
-  // Sample data for detailed analytics
-  const timeSlotData = [
-    { time: '8:00-9:00', students: 45, percentage: 78 },
-    { time: '9:00-10:00', students: 52, percentage: 90 },
-    { time: '10:00-11:00', students: 48, percentage: 83 },
-    { time: '11:00-12:00', students: 41, percentage: 71 },
-  ];
+  // Generate real time slot data from attendance records
+  const timeSlotData = React.useMemo(() => {
+    if (!recentAttendance.length) {
+      return [
+        { time: '8:00-9:00', students: 0, percentage: 0 },
+        { time: '9:00-10:00', students: 0, percentage: 0 },
+        { time: '10:00-11:00', students: 0, percentage: 0 },
+        { time: '11:00-12:00', students: 0, percentage: 0 },
+      ];
+    }
 
-  const departmentData = [
-    { name: 'Computer Science', attendance: 92, students: 45 },
-    { name: 'Engineering', attendance: 88, students: 38 },
-    { name: 'Business', attendance: 85, students: 33 },
-    { name: 'Arts', attendance: 79, students: 28 },
-  ];
+    // Group by time slots based on date (simplified version)
+    const timeSlots = {
+      '8:00-9:00': { present: 0, total: 0 },
+      '9:00-10:00': { present: 0, total: 0 },
+      '10:00-11:00': { present: 0, total: 0 },
+      '11:00-12:00': { present: 0, total: 0 },
+    };
+
+    // Simple distribution across time slots
+    const slotsArray = Object.keys(timeSlots);
+    recentAttendance.forEach((record, index) => {
+      const slotIndex = index % slotsArray.length;
+      const slot = slotsArray[slotIndex];
+      
+      timeSlots[slot].total++;
+      if (record.status === 'present') {
+        timeSlots[slot].present++;
+      }
+    });
+
+    return Object.entries(timeSlots).map(([time, data]) => ({
+      time,
+      students: data.present,
+      percentage: data.total > 0 ? Math.round((data.present / data.total) * 100) : 0
+    }));
+  }, [recentAttendance]);
+
+  // Generate real subject-based analytics
+  const departmentData = React.useMemo(() => {
+    if (!subjects.length || !recentAttendance.length) {
+      return [
+        { name: 'No Data Available', attendance: 0, students: 0 },
+      ];
+    }
+
+    const subjectStats: Record<string, { present: number; total: number }> = {};
+    
+    // Group attendance by subject
+    recentAttendance.forEach(record => {
+      const subjectId = record.subjectId;
+      const subject = subjects.find(s => s.id.toString() === subjectId);
+      const subjectName = subject?.name || 'Unknown Subject';
+      
+      if (!subjectStats[subjectName]) {
+        subjectStats[subjectName] = { present: 0, total: 0 };
+      }
+      
+      subjectStats[subjectName].total++;
+      if (record.status === 'present') {
+        subjectStats[subjectName].present++;
+      }
+    });
+
+    return Object.entries(subjectStats).map(([name, stats]) => ({
+      name,
+      attendance: stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0,
+      students: stats.present
+    })).slice(0, 4); // Top 4 subjects
+  }, [subjects, recentAttendance]);
 
   return (
     <div className="space-y-6">

@@ -1,10 +1,9 @@
-
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/useAuth';
-import type { AttendanceFilters, Student, Class } from '@/integrations/api/types';
+import type { AttendanceFilters, Student, Subject } from '@/integrations/api/types';
 
 export interface AttendanceRecord {
   id: string;
@@ -17,36 +16,45 @@ export interface AttendanceRecord {
 }
 
 export const useAttendanceData = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>('daily');
 
-  // Fetch classes
-  const { data: classes = [], isLoading: classesLoading } = useQuery({
-    queryKey: ['classes'],
+  // Fetch classes (subjects)
+  const { data: classes = [], isLoading: classesLoading, error: classesError } = useQuery({
+    queryKey: ['subjects'],
     queryFn: async () => {
       try {
-        // Get classes from API
-        const data = await api.classes.getAll();
+        // Get subjects from API (these are the "classes")
+        const data = await api.subjects.getAll();
         
-        // Filter by teacher ID if needed
-        return data
-          .filter(cls => !user?.id || cls.teacherId === user?.id)
-          .map(cls => ({
-            id: cls.id,
-            name: cls.name
-          }));
+        // Filter by user faculty if needed
+        return data.map(subject => ({
+          id: subject.id,
+          name: `${subject.code} - ${subject.name}`
+        }));
       } catch (error) {
-        console.error('Error fetching classes:', error);
+        console.error('Error fetching subjects:', error);
+        // Re-throw the error to let React Query handle it
         throw error;
       }
     },
-    enabled: true
+  enabled: !!user && !!localStorage.getItem('authToken'), // Fetch only when user and token are present
+    retry: (failureCount, error) => {
+      // Don't retry on authentication errors (401, 403)
+      if (error && typeof error === 'object' && 'message' in error) {
+        const errorMessage = (error.message as string).toLowerCase();
+        if (errorMessage.includes('authenticated') || errorMessage.includes('401') || errorMessage.includes('403')) {
+          return false;
+        }
+      }
+      return failureCount < 2; // Retry up to 2 times for other errors
+    }
   });
 
   // Fetch attendance records
-  const { data: attendanceRecords = [], isLoading: attendanceLoading } = useQuery({
+  const { data: attendanceRecords = [], isLoading: attendanceLoading, error: attendanceError } = useQuery({
     queryKey: ['attendance', selectedClass, activeTab, selectedDate],
     queryFn: async () => {
       try {
@@ -69,17 +77,20 @@ export const useAttendanceData = () => {
           return [];
         }
         
-        // Create a map of students and classes for easy lookup
-        const studentPromises = [...new Set(attendanceData.map(record => record.studentId))]
-          .map(id => api.students.getById(id));
+        // Create a map of students and subjects for easy lookup
+        const studentIds = [...new Set(attendanceData.map(record => record.studentId))]
+          .filter(id => id && id !== 'undefined' && id !== undefined);
         
-        const classPromises = [...new Set(attendanceData.map(record => record.classId))]
-          .map(id => api.classes.getById(id));
+        const subjectIds = [...new Set(attendanceData.map(record => record.subjectId))]
+          .filter(id => id && id !== 'undefined' && id !== undefined);
         
-        // Fetch all students and classes in parallel
-        const [students, classes] = await Promise.all([
+        const studentPromises = studentIds.map(id => api.students.getById(id));
+        const subjectPromises = subjectIds.map(id => api.subjects.getById(parseInt(id)));
+        
+        // Fetch all students and subjects in parallel
+        const [students, subjects] = await Promise.all([
           Promise.all(studentPromises),
-          Promise.all(classPromises)
+          Promise.all(subjectPromises)
         ]);
         
         // Create lookup maps (using database IDs since attendance.studentId is the database ID)
@@ -88,15 +99,15 @@ export const useAttendanceData = () => {
           return acc;
         }, {});
         
-        const classMap = classes.reduce<Record<string, Class>>((acc, cls) => {
-          acc[cls.id] = cls;
+        const subjectMap = subjects.reduce<Record<string, Subject>>((acc, subject) => {
+          acc[subject.id] = subject;
           return acc;
         }, {});
         
-        // Map attendance data with student and class details
+        // Map attendance data with student and subject details
         return attendanceData.map(record => {
           const student = studentMap[record.studentId] || { name: 'Unknown Student', rollNo: 'N/A', studentId: 'N/A', id: '', email: '' };
-          const cls = classMap[record.classId] || { name: 'Unknown Class', id: '' };
+          const subject = subjectMap[record.subjectId] || { name: 'Unknown Subject', id: '', code: 'N/A' };
           
           return {
             id: record.id,
@@ -105,7 +116,7 @@ export const useAttendanceData = () => {
             studentName: student.name,
             studentRollNo: student.rollNo,
             studentId: student.studentId,
-            className: cls.name
+            className: `${subject.code} - ${subject.name}`
           };
         });
       } catch (error) {
@@ -113,7 +124,17 @@ export const useAttendanceData = () => {
         throw error;
       }
     },
-    enabled: true
+  enabled: !!user && !!localStorage.getItem('authToken'), // Fetch only when user and token are present
+    retry: (failureCount, error) => {
+      // Don't retry on authentication errors (401, 403)
+      if (error && typeof error === 'object' && 'message' in error) {
+        const errorMessage = (error.message as string).toLowerCase();
+        if (errorMessage.includes('authenticated') || errorMessage.includes('401') || errorMessage.includes('403')) {
+          return false;
+        }
+      }
+      return failureCount < 2; // Retry up to 2 times for other errors
+    }
   });
 
   return {
@@ -125,7 +146,13 @@ export const useAttendanceData = () => {
     setActiveTab,
     classes,
     classesLoading,
+    classesError,
     attendanceRecords,
-    attendanceLoading
+    attendanceLoading,
+    attendanceError,
+    user,
+    authLoading
   };
 };
+
+export default useAttendanceData;

@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Override any Tailwind utilities that disable text selection */
+@layer utilities {
+  .select-text {
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+    user-select: text !important;
+  }
+  
+  .select-auto {
+    -webkit-user-select: auto !important;
+    -moz-user-select: auto !important;
+    -ms-user-select: auto !important;
+    user-select: auto !important;
+  }
+}
+
 @layer base {
   :root {
     --background: 210 40% 98%;
@@ -92,29 +109,28 @@
     @apply bg-background text-foreground;
   }
 
-  /* Prevent text selection and cursor issues */
-  h1, h2, h3, h4, h5, h6, p, span, div:not([contenteditable]), 
-  .hero-section, .feature-card, .stats-card, .testimonial-card,
-  .navbar, .footer, .btn, button:not(input), a:not([contenteditable]) {
+  /* Enable text selection by default for all text content */
+  * {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Disable text selection only for interactive UI elements */
+  button, .btn, [role="button"], 
+  .navbar, .sidebar, .menu-item, .tab, 
+  .close-button, .icon-button, .toggle,
+  .dropdown-trigger, .accordion-trigger,
+  .slider, .progress-bar, .chart {
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    cursor: default;
+    cursor: pointer;
   }
 
-  /* Ensure proper cursor for interactive elements */
-  button, a[href], input, textarea, select, 
-  [role="button"], [tabindex]:not([tabindex="-1"]),
-  .cursor-pointer {
-    cursor: pointer !important;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-  }
-
-  /* Allow text selection only for actual text content areas */
+  /* Ensure proper cursor and selection for form elements */
   input, textarea, [contenteditable="true"] {
     -webkit-user-select: text;
     -moz-user-select: text;
@@ -193,4 +209,24 @@
   .text-foreground {
     color: hsl(var(--foreground));
   }
+}
+
+/* Global text selection override - ensures all text is selectable */
+body, body * {
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  user-select: text !important;
+}
+
+/* Only disable selection for specific interactive elements */
+button, button *, 
+.btn, .btn *,
+[role="button"], [role="button"] *,
+input[type="button"], input[type="submit"], input[type="reset"],
+.cursor-pointer:not(p):not(span):not(div):not(h1):not(h2):not(h3):not(h4):not(h5):not(h6) {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
 }

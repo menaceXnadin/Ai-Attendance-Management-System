@@ -18,7 +18,9 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
+import { Attendance, Student } from '@/integrations/api/types';
 import { useAuth } from '@/contexts/useAuth';
 import FaceRecognition from '@/components/FaceRecognition';
 import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
@@ -56,15 +58,18 @@ interface StudentData {
 
 interface TodayClassScheduleProps {
   studentData: StudentData | null;
+  todayAttendance?: Attendance[];
   onAttendanceMarked?: () => void;
 }
 
 const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({ 
   studentData, 
+  todayAttendance: todayAttendanceProp,
   onAttendanceMarked 
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [activeSubjectId, setActiveSubjectId] = useState<number | null>(null);
   const [showFaceRecognition, setShowFaceRecognition] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -89,205 +94,63 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Mock schedule data - In real implementation, this would come from backend
-  // For now, creating a realistic schedule based on student's faculty and semester
-  const generateTodaySchedule = React.useCallback((): SubjectSchedule[] => {
-    if (!studentData?.faculty_id || !studentData?.semester) {
-      return [];
+  // NEW: Fetch real schedules from database - using student-specific endpoint
+  const { data: realSchedules, isLoading: isLoadingSchedules } = useQuery({
+    queryKey: ['student-today-schedule', studentData?.faculty_id, studentData?.semester],
+    queryFn: async () => {
+      if (!studentData?.semester) return [];
+      try {
+        console.log('[DEBUG] Fetching student-specific today schedules for faculty_id:', studentData.faculty_id, 'semester:', studentData.semester);
+        
+        // Use the proper student-specific endpoint that handles faculty and semester filtering
+        const schedules = await api.schedules.getStudentToday();
+          
+        console.log('[DEBUG] Student-specific schedules fetched:', schedules);
+        return schedules;
+      } catch (error) {
+        console.error('Error fetching student schedules:', error);
+        return [];
+      }
+    },
+    enabled: !!studentData?.semester && !!studentData?.faculty_id,
+  });
+
+  // Generate today's schedule from real database schedules
+  const generateTodayScheduleFromDB = React.useCallback((): SubjectSchedule[] => {
+    // Debug log student data
+    console.log('[DEBUG] TodayClassSchedule studentData:', {
+      faculty_id: studentData?.faculty_id,
+      faculty: studentData?.faculty,
+      semester: studentData?.semester,
+      fullData: studentData
+    });
+
+    // Check if we have real schedule data from the database
+    if (realSchedules && realSchedules.length > 0) {
+      console.log('[DEBUG] Using real schedules from database:', realSchedules.length, 'schedules found');
+      
+      // Convert real schedules to frontend format
+      const schedule: SubjectSchedule[] = realSchedules.map((dbSchedule) => ({
+        subjectId: dbSchedule.subject_id,
+        subjectName: dbSchedule.subject_name,
+        subjectCode: dbSchedule.subject_code,
+        startTime: dbSchedule.start_time,
+        endTime: dbSchedule.end_time,
+        status: 'Starts Soon' as const,
+        attendanceMarked: false,
+        isCurrentPeriod: false,
+        isBeforeStart: true,
+        isAfterEnd: false
+      }));
+
+      console.log('[DEBUG] Generated schedule from real database schedules:', schedule);
+      return schedule;
     }
 
-    const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    
-    // Skip weekends
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      return [];
-    }
-
-    // Mock schedule based on day and student data
-    const mockSchedules: { [key: number]: SubjectSchedule[] } = {
-      1: [ // Monday
-        {
-          subjectId: 1,
-          subjectName: 'Default Subject',
-          subjectCode: 'DEF101',
-          startTime: '09:00',
-          endTime: '10:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 21,
-          subjectName: 'Programming Fundamentals',
-          subjectCode: 'CSE101',
-          startTime: '11:00',
-          endTime: '12:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 22,
-          subjectName: 'Mathematics for Computing',
-          subjectCode: 'CSE102',
-          startTime: '14:00',
-          endTime: '15:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        }
-      ],
-      2: [ // Tuesday
-        {
-          subjectId: 23,
-          subjectName: 'Digital Logic Design',
-          subjectCode: 'CSE103',
-          startTime: '10:00',
-          endTime: '11:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 1,
-          subjectName: 'Default Subject',
-          subjectCode: 'DEF101',
-          startTime: '13:00',
-          endTime: '14:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        }
-      ],
-      3: [ // Wednesday
-        {
-          subjectId: 24,
-          subjectName: 'Computer Architecture',
-          subjectCode: 'CSE104',
-          startTime: '08:00',
-          endTime: '09:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 21,
-          subjectName: 'Programming Fundamentals',
-          subjectCode: 'CSE101',
-          startTime: '09:45',
-          endTime: '11:15',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 25,
-          subjectName: 'Data Structures',
-          subjectCode: 'CSE105',
-          startTime: '11:30',
-          endTime: '13:00',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 22,
-          subjectName: 'Mathematics for Computing',
-          subjectCode: 'CSE102',
-          startTime: '14:00',
-          endTime: '15:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 26,
-          subjectName: 'Database Systems',
-          subjectCode: 'CSE106',
-          startTime: '15:45',
-          endTime: '17:00',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        }
-      ],
-      4: [ // Thursday
-        {
-          subjectId: 1,
-          subjectName: 'Default Subject',
-          subjectCode: 'DEF101',
-          startTime: '08:30',
-          endTime: '10:00',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 23,
-          subjectName: 'Digital Logic Design',
-          subjectCode: 'CSE103',
-          startTime: '11:30',
-          endTime: '13:00',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        }
-      ],
-      5: [ // Friday
-        {
-          subjectId: 22,
-          subjectName: 'Mathematics for Computing',
-          subjectCode: 'CSE102',
-          startTime: '10:00',
-          endTime: '11:30',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        },
-        {
-          subjectId: 21,
-          subjectName: 'Programming Fundamentals',
-          subjectCode: 'CSE101',
-          startTime: '14:30',
-          endTime: '16:00',
-          status: 'Starts Soon' as const,
-          attendanceMarked: false,
-          isCurrentPeriod: false,
-          isBeforeStart: true,
-          isAfterEnd: false
-        }
-      ]
-    };
-
-    return mockSchedules[dayOfWeek] || [];
-  }, [studentData?.faculty_id, studentData?.semester]);
+    console.log('[DEBUG] No real schedules found - realSchedules:', realSchedules);
+    // Return empty schedule if no real schedules are available
+    return [];
+  }, [realSchedules, studentData]);
 
   // Calculate status based on current time and attendance rules
   const calculateSubjectStatus = React.useCallback((schedule: SubjectSchedule[]): SubjectSchedule[] => {
@@ -305,15 +168,31 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       const isCurrentPeriod = currentMinutes >= startTimeMinutes && currentMinutes <= endTimeMinutes;
       const isAfterEnd = currentMinutes > endTimeMinutes;
 
+      // Determine status based on attendance and time
       let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
+      
+      console.log(`[DEBUG] Status calculation for ${subject.subjectName}:`, {
+        attendanceMarked: subject.attendanceMarked,
+        isAfterEnd,
+        isCurrentPeriod,
+        isBeforeStart,
+        currentMinutes,
+        startTimeMinutes,
+        endTimeMinutes
+      });
+      
       if (subject.attendanceMarked) {
         status = 'Present';
-      } else if (isCurrentPeriod) {
-        status = 'Pending';
+        console.log(`[DEBUG] ${subject.subjectName} set to Present due to attendanceMarked: true`);
       } else if (isAfterEnd) {
         status = 'Absent';
-      } else if (isBeforeStart) {
+        console.log(`[DEBUG] ${subject.subjectName} set to Absent due to isAfterEnd: true`);
+      } else if (isCurrentPeriod) {
+        status = 'Pending';
+        console.log(`[DEBUG] ${subject.subjectName} set to Pending due to isCurrentPeriod: true`);
+      } else {
         status = 'Starts Soon';
+        console.log(`[DEBUG] ${subject.subjectName} set to Starts Soon (default)`);
       }
 
       return {
@@ -326,15 +205,26 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     });
   }, [currentTime]);
 
-  // Get today's attendance records to check which subjects already have attendance marked
-  const { data: todayAttendance, refetch: refetchAttendance } = useQuery({
-    queryKey: ['today-attendance-by-subject', user?.id],
+  // Use attendance data from props or fetch if not provided
+  const { data: fetchedAttendance, refetch: refetchAttendance } = useQuery({
+    queryKey: ['today-attendance-by-subject', user?.id, studentData?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
+      if (!user?.id || !studentData?.id) {
+        console.log('[DEBUG] Missing IDs - user?.id:', user?.id, 'studentData?.id:', studentData?.id);
+        console.log('[DEBUG] Full studentData:', JSON.stringify(studentData, null, 2));
+        return [];
+      }
       try {
         const today = new Date().toISOString().split('T')[0];
+        console.log('[DEBUG] Fetching attendance for student ID:', studentData.id, 'user ID:', user.id, 'date:', today);
+        console.log('[DEBUG] StudentData fields:', {
+          id: studentData.id,
+          student_id: (studentData as Student & { student_id?: string }).student_id,
+          name: studentData.name,
+          email: studentData.email
+        });
         const records = await api.attendance.getAll({
-          studentId: user.id,
+          studentId: studentData.id, // Use student record ID, not user ID
           date: today
         });
         return records;
@@ -343,27 +233,147 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         return [];
       }
     },
-    enabled: !!user?.id,
-    refetchInterval: 30000 // Refresh every 30 seconds
+    enabled: !!user?.id && !!studentData?.id && !todayAttendanceProp, // Only fetch if not provided via prop
+    staleTime: 30 * 1000,
   });
+
+  // Use prop data if available, otherwise use fetched data
+  const todayAttendance = React.useMemo(() => {
+    return todayAttendanceProp || fetchedAttendance || [];
+  }, [todayAttendanceProp, fetchedAttendance]);
+
+  // Enhanced status calculation that uses database records as authoritative source
+  const calculateSubjectStatusWithDB = React.useCallback((schedule: SubjectSchedule[]): SubjectSchedule[] => {
+    const now = currentTime;
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    return schedule.map(subject => {
+      const [startHour, startMin] = subject.startTime.split(':').map(Number);
+      const [endHour, endMin] = subject.endTime.split(':').map(Number);
+      const startTimeMinutes = startHour * 60 + startMin;
+      const endTimeMinutes = endHour * 60 + endMin;
+
+      const isBeforeStart = currentMinutes < startTimeMinutes;
+      const isCurrentPeriod = currentMinutes >= startTimeMinutes && currentMinutes <= endTimeMinutes;
+      const isAfterEnd = currentMinutes > endTimeMinutes;
+
+      // Find matching attendance record in database
+      const attendanceRecord = todayAttendance?.find(record => {
+        // Get subject IDs for comparison - handle both string and integer types
+        const recordSubjectId = record.subjectId || '';
+        const scheduleSubjectId = subject.subjectId;
+        
+        // Normalize both IDs to integers for reliable comparison
+        const recordSubjectIdInt = recordSubjectId ? parseInt(recordSubjectId.toString()) : null;
+        const scheduleSubjectIdInt = scheduleSubjectId ? parseInt(scheduleSubjectId.toString()) : null;
+        
+        // Debug: Check ID matching
+        const idsMatch = recordSubjectIdInt === scheduleSubjectIdInt;
+        
+        // Primary strategy: Integer comparison (most reliable)
+        if (recordSubjectIdInt && scheduleSubjectIdInt && recordSubjectIdInt === scheduleSubjectIdInt) {
+          return true;
+        }
+        
+        // Fallback strategies for edge cases
+        const extendedRecord = record as Attendance & { 
+          subjectName?: string; 
+          subjectCode?: string; 
+        };
+        
+        // Strategy 2: Subject code matching
+        if (extendedRecord.subjectCode && extendedRecord.subjectCode === subject.subjectCode) {
+          console.log(`[DEBUG] ✅ MATCH FOUND for ${subject.subjectName} - Subject Code: ${subject.subjectCode}`);
+          return true;
+        }
+        
+        // Strategy 3: Subject name matching (case-insensitive)
+        if (extendedRecord.subjectName?.toLowerCase() === subject.subjectName?.toLowerCase()) {
+          console.log(`[DEBUG] ✅ MATCH FOUND for ${subject.subjectName} - Subject Name match`);
+          return true;
+        }
+        
+        return false;
+      });
+
+      // Determine status - prioritize database record over time-based calculation
+      let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
+      let attendanceMarked = false;
+
+      if (attendanceRecord) {
+        // Use database status as authoritative source
+        attendanceMarked = true;
+        if (attendanceRecord.status === 'present' || attendanceRecord.status === 'late') {
+          status = 'Present';
+        } else if (attendanceRecord.status === 'absent') {
+          status = 'Absent';
+        } else {
+          status = 'Present'; // Default for any other status
+        }
+      } else {
+        // No database record - calculate based on time
+        if (isAfterEnd) {
+          status = 'Absent';
+        } else if (isCurrentPeriod) {
+          status = 'Pending';
+        } else {
+          status = 'Starts Soon';
+        }
+      }
+
+      return {
+        ...subject,
+        status,
+        attendanceMarked,
+        isCurrentPeriod,
+        isBeforeStart,
+        isAfterEnd
+      };
+    });
+  }, [currentTime, todayAttendance]);
 
   // Combine schedule with attendance status
   const todaySchedule = React.useMemo(() => {
-    const baseSchedule = generateTodaySchedule();
-    const scheduleWithStatus = calculateSubjectStatus(baseSchedule);
+    const baseSchedule = generateTodayScheduleFromDB();
     
-    // Mark attendance status based on today's records
-    // Now correctly using subjectId since we fixed the type mismatch
-    return scheduleWithStatus.map(subject => ({
-      ...subject,
-      attendanceMarked: todayAttendance?.some(record => 
-        record.subjectId === subject.subjectId.toString() // Now correctly using subjectId
-      ) || false
-    }));
-  }, [generateTodaySchedule, calculateSubjectStatus, todayAttendance]);
+    console.log('[DEBUG] Recalculating todaySchedule...');
+    console.log('[DEBUG] Base schedule:', baseSchedule);
+    console.log('[DEBUG] Today attendance records:', todayAttendance);
+    
+    // Log detailed attendance record structure
+    if (todayAttendance && todayAttendance.length > 0) {
+      console.log('[DEBUG] First attendance record structure:', JSON.stringify(todayAttendance[0], null, 2));
+      todayAttendance.forEach((record, index) => {
+        console.log(`[DEBUG] Attendance Record ${index + 1}:`, {
+          id: record.id,
+          subjectId: record.subjectId,
+          subjectName: (record as Attendance & { subjectName?: string }).subjectName,
+          subjectCode: (record as Attendance & { subjectCode?: string }).subjectCode,
+          status: record.status
+        });
+      });
+    }
+    // Log today's schedule subjects for comparison
+    if (baseSchedule && baseSchedule.length > 0) {
+      baseSchedule.forEach((subject, idx) => {
+        console.log(`[DEBUG] Schedule Subject ${idx + 1}:`, {
+          subjectId: subject.subjectId,
+          subjectName: subject.subjectName,
+          subjectCode: subject.subjectCode,
+          startTime: subject.startTime,
+          endTime: subject.endTime
+        });
+      });
+    }
+    
+    // Use enhanced calculation that prioritizes database records
+    const scheduleWithStatus = calculateSubjectStatusWithDB(baseSchedule);
+    
+    return scheduleWithStatus;
+  }, [generateTodayScheduleFromDB, calculateSubjectStatusWithDB, todayAttendance]);
 
   const handleMarkAttendance = (subjectId: number) => {
-    // Time restrictions disabled - direct access to face recognition
+    // Time restrictions enabled - subject to school hours and class periods
     setActiveSubjectId(subjectId);
     setShowFaceRecognition(true);
     toast({
@@ -375,6 +385,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   const handleFaceCapture = async (_dataUrl: string, recognized: boolean) => {
     if (!activeSubjectId) return;
 
+    console.log('[DEBUG] Face capture result - recognized:', recognized, 'subjectId:', activeSubjectId);
+
     // FaceRecognition component already attempted attendance when subjectId is provided
     if (recognized) {
       // Mark verification as complete for this period
@@ -384,9 +396,32 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         title: "Attendance Marked Successfully",
         description: `Face verified and attendance recorded for ${currentPeriod?.name || 'current period'}`,
       });
-      // Refresh attendance data and notify parent
-      refetchAttendance();
+      
+      console.log('[DEBUG] Calling refetchAttendance and onAttendanceMarked...');
+      // Refresh attendance data and notify parent - use multiple strategies with correct query keys
+      await Promise.all([
+        refetchAttendance(),
+        queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
+        queryClient.refetchQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
+        // Also invalidate other attendance-related queries
+        queryClient.invalidateQueries({ queryKey: ['attendance-summary', user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['student-attendance-summary', user?.id] }),
+        queryClient.invalidateQueries({ queryKey: ['today-attendance-data', user?.id, studentData?.id] })
+      ]);
       onAttendanceMarked?.();
+      
+      // Force a small delay to ensure backend has processed the data
+      setTimeout(async () => {
+        await Promise.all([
+          refetchAttendance(),
+          queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
+          queryClient.refetchQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
+          // Also refresh other related queries
+          queryClient.invalidateQueries({ queryKey: ['attendance-summary', user?.id] }),
+          queryClient.invalidateQueries({ queryKey: ['student-attendance-summary', user?.id] }),
+          queryClient.invalidateQueries({ queryKey: ['today-attendance-data', user?.id, studentData?.id] })
+        ]);
+      }, 1000);
     } else {
       toast({
         title: "Face Verification Failed",
@@ -453,11 +488,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
             <div className="h-16 w-16 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
               <Calendar className="h-8 w-8 text-slate-400" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">No Classes Today</h3>
+            <h3 className="text-lg font-medium text-white mb-2">No Classes Scheduled</h3>
             <p className="text-slate-400">
-              {new Date().getDay() === 0 || new Date().getDay() === 6 
-                ? "Enjoy your weekend!" 
-                : "You have a free day today!"}
+              {new Date().getDay() === 5 || new Date().getDay() === 6 
+                ? "It's weekend - no classes scheduled." 
+                : "No class schedules available for today. Please contact your admin to set up class schedules."}
             </p>
           </div>
         </CardContent>
@@ -520,7 +555,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Time restrictions disabled - face verification always available */}
+        {/* Time restrictions enabled - verification controlled by school hours and periods */}
 
         {/* Time Restriction Status */}
         <div className={`border rounded-xl p-4 ${
@@ -573,7 +608,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         </div>
         {todaySchedule.map((subject, index) => (
           <div
-            key={subject.subjectId}
+            key={`${subject.subjectId}-${subject.startTime}-${index}`}
             className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all"
           >
             <div className="flex items-center justify-between">
@@ -639,7 +674,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
                       <Button
                         onClick={() => handleMarkAttendance(subject.subjectId)}
                         className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg"
-                        disabled={!subject.isCurrentPeriod}
+                        // TESTING: Disabled attribute removed for testing purposes
+                        // disabled={!subject.isCurrentPeriod}
                       >
                         <Scan className="h-4 w-4 mr-2" />
                         Mark Attendance

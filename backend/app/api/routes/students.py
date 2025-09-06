@@ -100,7 +100,10 @@ async def get_student(
 ):
     """Get a specific student by ID."""
     result = await db.execute(
-        select(Student).options(selectinload(Student.user)).where(Student.id == student_id)
+        select(Student).options(
+            selectinload(Student.user),
+            selectinload(Student.faculty_rel)  # Eagerly load faculty
+        ).where(Student.id == student_id)
     )
     student = result.scalar_one_or_none()
     

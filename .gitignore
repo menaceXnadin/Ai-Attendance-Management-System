@@ -23,3 +23,57 @@ Thumbs.db
 
 # Uploads (if not demo data)
 uploads/
+
+# Test files and folders
+tests/
+test/
+__tests__/
+*.test.js
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.ts
+*.spec.tsx
+
+# Python development/testing files
+test_*.py
+*_test.py
+check_*.py
+debug_*.py
+analyze_*.py
+create_test_*.py
+create_*_data.py
+create_sample*.py
+*_debug.py
+*_check.py
+comprehensive_*.py
+simple_check*.py
+
+# Development utility scripts
+decode_*.py
+compare_*.py
+cleanup_*.py
+
+# Database files (keeping data private)
+*.db
+*.sqlite
+*.sqlite3
+
+# Markdown debug/development docs
+*_COMPLETE.md
+*_SUMMARY.md
+*_DIAGNOSIS.md
+*_DEBUG.md
+*_INSTRUCTIONS.md
+*_GUIDE.md
+*_NOTES.md
+*_FIXES*.md
+*_FIX*.md
+*_SOLUTION*.md
+*_OVERRIDE*.md
+*_OVERVIEW.md
+
+# HTML/JS debug files
+debug-*.html
+debug*.html
+debug*.js

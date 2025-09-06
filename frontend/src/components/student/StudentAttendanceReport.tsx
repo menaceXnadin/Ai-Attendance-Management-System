@@ -3,107 +3,107 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CalendarIcon, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { CalendarIcon, CheckCircle, XCircle, Clock, Loader2, BookOpen, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts/useAuth';
+import { Attendance } from '@/integrations/api/types';
 
 const StudentAttendanceReport = () => {
   const { user } = useAuth();
   
   // Get student ID from user context if available
   const studentId = user?.id;
-  
-  // Fetch attendance data from API
-  const { data: attendanceData = [], isLoading } = useQuery({
-    queryKey: ['student-attendance', studentId],
+
+  // Fetch attendance summary from the dedicated endpoint
+  const { data: attendanceSummary, isLoading: isLoadingSummary } = useQuery({
+    queryKey: ['student-attendance-summary', studentId],
     queryFn: async () => {
       try {
-        if (!studentId) return [];
-        
-        // Get the current month's data
-        const today = new Date();
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        
-        const filters = {
-          studentId: studentId,
-          startDate: startOfMonth.toISOString().split('T')[0],
-          endDate: today.toISOString().split('T')[0]
-        };
-        
-        const records = await api.attendance.getAll(filters);
-        
-        // Get subject details for each record
-        const subjectIds = [...new Set(records.map(record => record.subjectId))]
-          .filter(id => id && !isNaN(parseInt(id))); // Filter out invalid IDs
-        
-        if (subjectIds.length === 0) {
-          console.warn('[StudentAttendanceReport] No valid subject IDs found in attendance records');
-          return [];
-        }
-        
-        const subjectPromises = subjectIds.map(id => {
-          const numericId = parseInt(id);
-          console.log('[StudentAttendanceReport] Fetching subject with ID:', numericId);
-          return api.subjects.getById(numericId);
-        });
-        
-        const subjects = await Promise.all(subjectPromises.map(promise => 
-          promise.catch(error => {
-            console.error('[StudentAttendanceReport] Failed to fetch subject:', error);
-            return null; // Return null for failed requests
-          })
-        )).then(results => results.filter(subject => subject !== null)); // Filter out failed requests
-        
-        // Create a map of subjectId -> subjectName
-        const subjectMap = subjects.reduce((map, subj) => {
-          if (subj && subj.id && subj.name) {
-            map[subj.id] = subj.name;
-          }
-          return map;
-        }, {} as Record<string, string>);
-        
-        // Format records with subject names
-        return records
-          .filter(record => record.subjectId && record.date) // Filter out invalid records
-          .map(record => ({
-            date: record.date,
-            subject: subjectMap[record.subjectId] || `Subject ${record.subjectId}` || 'Unknown Subject',
-            status: record.status || 'absent',
-            time: new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }))
-          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return await api.studentAttendance.getSummary();
       } catch (error) {
-        console.error('Error fetching student attendance:', error);
-        // Log more details about the error
-        if (error instanceof Error) {
-          console.error('Error details:', error.message);
-        }
+        console.error('Error fetching attendance summary:', error);
+        return null;
+      }
+    },
+    enabled: !!studentId
+  });
+
+  // Fetch subject-wise breakdown
+  const { data: subjectBreakdown = [], isLoading: isLoadingBreakdown } = useQuery({
+    queryKey: ['student-attendance-breakdown', studentId],
+    queryFn: async () => {
+      try {
+        return await api.studentAttendance.getSubjectBreakdown();
+      } catch (error) {
+        console.error('Error fetching subject breakdown:', error);
         return [];
       }
     },
     enabled: !!studentId
   });
   
-  // Calculate attendance statistics
-  const attendanceStats = React.useMemo(() => {
-    if (!attendanceData.length) {
-      return { 
-        total: 0, 
-        present: 0, 
-        absent: 0, 
-        late: 0,
-        percentage: 0 
+  // Fetch recent attendance records for the activity feed
+  const { data: recentRecords = [], isLoading: isLoadingRecords } = useQuery({
+    queryKey: ['student-attendance-recent', studentId],
+    queryFn: async () => {
+      try {
+        const today = new Date();
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(today.getDate() - 14);
+        
+        // Use the working attendance endpoint instead of the broken student-attendance/records endpoint
+        return await api.attendance.getAll({
+          startDate: twoWeeksAgo.toISOString().split('T')[0],
+          endDate: today.toISOString().split('T')[0]
+        });
+      } catch (error) {
+        console.error('Error fetching recent records:', error);
+        return [];
+      }
+    },
+    enabled: !!studentId
+  });
+
+  const isLoading = isLoadingSummary || isLoadingBreakdown || isLoadingRecords;
+  
+  // Calculate enhanced statistics
+  const enhancedStats = React.useMemo(() => {
+    if (!attendanceSummary) {
+      return {
+        overallPercentage: 0,
+        totalClasses: 0,
+        presentClasses: 0,
+        absentClasses: 0,
+        lateClasses: 0,
+        attendanceGoal: 85,
+        isOnTrack: false,
+        classesNeeded: 0
       };
     }
+
+    const overallPercentage = attendanceSummary.percentage_present || 0;
+    const totalClasses = attendanceSummary.total_academic_days || 0;
+    const presentClasses = attendanceSummary.present || 0;
+    const absentClasses = attendanceSummary.absent || 0;
+    const lateClasses = attendanceSummary.late || 0;
+    const attendanceGoal = 85;
+    const isOnTrack = overallPercentage >= attendanceGoal;
     
-    const present = attendanceData.filter(record => record.status === 'present').length;
-    const absent = attendanceData.filter(record => record.status === 'absent').length;
-    const late = attendanceData.filter(record => record.status === 'late').length;
-    const total = attendanceData.length;
-    const percentage = Math.round((present / total) * 100);
-    
-    return { total, present, absent, late, percentage };
-  }, [attendanceData]);
+    // Calculate classes needed to reach goal
+    const classesNeeded = Math.max(0, Math.ceil((attendanceGoal * totalClasses / 100) - presentClasses));
+
+    return {
+      overallPercentage,
+      totalClasses,
+      presentClasses,
+      absentClasses,
+      lateClasses,
+      attendanceGoal,
+      isOnTrack,
+      classesNeeded
+    };
+  }, [attendanceSummary]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -143,14 +143,14 @@ const StudentAttendanceReport = () => {
   }
   
   // Show empty state
-  if (!attendanceData.length) {
+  if (!attendanceSummary && !isLoading) {
     return (
-      <Card className="p-12">
+      <Card className="p-12 bg-slate-900/60 backdrop-blur-md border-slate-700/50">
         <div className="text-center">
-          <CalendarIcon className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
-          <h3 className="text-lg font-medium mb-2">No Attendance Records</h3>
-          <p className="text-muted-foreground">
-            No attendance records found for the current month.
+          <CalendarIcon className="h-12 w-12 mx-auto text-slate-400 opacity-30 mb-4" />
+          <h3 className="text-lg font-medium mb-2 text-white">No Attendance Records</h3>
+          <p className="text-slate-400">
+            No attendance records found. Start attending classes to see your statistics.
           </p>
         </div>
       </Card>
@@ -159,73 +159,261 @@ const StudentAttendanceReport = () => {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
+      {/* Enhanced Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">This Month</CardTitle>
+            <CardTitle className="text-lg text-white flex items-center gap-2">
+              <Target className="h-5 w-5 text-blue-400" />
+              Overall Attendance
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${
-              attendanceStats.percentage >= 90 ? 'text-green-600' :
-              attendanceStats.percentage >= 75 ? 'text-amber-500' : 'text-red-600'
+            <div className={`text-3xl font-bold mb-2 ${
+              enhancedStats.overallPercentage >= 90 ? 'text-green-400' :
+              enhancedStats.overallPercentage >= 75 ? 'text-amber-400' : 'text-red-400'
             }`}>
-              {attendanceStats.percentage}%
+              {enhancedStats.overallPercentage.toFixed(1)}%
             </div>
-            <p className="text-sm text-muted-foreground">Attendance Rate</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Present Days</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{attendanceStats.present}</div>
-            <p className="text-sm text-muted-foreground">
-              Out of {attendanceStats.total} days
+            <Progress 
+              value={enhancedStats.overallPercentage} 
+              className="h-2 mb-2"
+            />
+            <p className="text-sm text-slate-400">
+              {enhancedStats.presentClasses} / {enhancedStats.totalClasses} classes
             </p>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Absent Days</CardTitle>
+            <CardTitle className="text-lg text-white flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-400" />
+              Present
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{attendanceStats.absent}</div>
-            <p className="text-sm text-muted-foreground">
-              {attendanceStats.late > 0 && `+ ${attendanceStats.late} late`}
-            </p>
+            <div className="text-3xl font-bold text-green-400 mb-2">
+              {enhancedStats.presentClasses}
+            </div>
+            <p className="text-sm text-slate-400">Classes attended</p>
+            {enhancedStats.lateClasses > 0 && (
+              <p className="text-xs text-amber-400 mt-1">
+                + {enhancedStats.lateClasses} late arrivals
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-white flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-400" />
+              Absent
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-400 mb-2">
+              {enhancedStats.absentClasses}
+            </div>
+            <p className="text-sm text-slate-400">Classes missed</p>
+            {enhancedStats.absentClasses > 0 && (
+              <p className="text-xs text-red-300 mt-1">
+                {((enhancedStats.absentClasses / enhancedStats.totalClasses) * 100).toFixed(1)}% of total
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg text-white flex items-center gap-2">
+              {enhancedStats.isOnTrack ? (
+                <TrendingUp className="h-5 w-5 text-green-400" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-amber-400" />
+              )}
+              Goal Progress
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`text-3xl font-bold mb-2 ${
+              enhancedStats.overallPercentage >= 90 ? 'text-green-400' :
+              enhancedStats.overallPercentage >= 50 ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              {Math.min(100, (enhancedStats.overallPercentage / enhancedStats.attendanceGoal * 100)).toFixed(1)}%
+            </div>
+            <p className="text-sm text-slate-400">Progress to {enhancedStats.attendanceGoal}% goal</p>
+            <Progress 
+              value={Math.min(100, (enhancedStats.overallPercentage / enhancedStats.attendanceGoal * 100))} 
+              className="h-2 mt-2 mb-2"
+            />
+            {!enhancedStats.isOnTrack && enhancedStats.classesNeeded > 0 && (
+              <p className="text-xs text-amber-400">
+                Need {enhancedStats.classesNeeded} more classes
+              </p>
+            )}
+            {enhancedStats.isOnTrack && (
+              <p className="text-xs text-green-400">
+                ✓ Goal achieved!
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarIcon className="h-5 w-5" />
-            Recent Attendance
-          </CardTitle>
-          <CardDescription>
-            Your attendance record for the last {Math.min(attendanceData.length, 10)} days
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {attendanceData.slice(0, 10).map((record, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center space-x-3">
-                  {getStatusIcon(record.status)}
-                  <div>
-                    <p className="font-medium">{record.subject}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {new Date(record.date).toLocaleDateString()} at {record.time}
-                    </p>
+      {/* Subject-wise Breakdown */}
+      {subjectBreakdown.length > 0 && (
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-blue-400" />
+              Subject-wise Performance
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Your attendance breakdown by subject
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {subjectBreakdown.map((subject: {
+                subject_name: string;
+                present_classes: number;
+                total_classes: number;
+                absent_classes: number;
+              }, index: number) => {
+                const percentage = subject.total_classes > 0 
+                  ? (subject.present_classes / subject.total_classes) * 100 
+                  : 0;
+                
+                return (
+                  <div key={index} className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-white">{subject.subject_name}</p>
+                        <p className="text-sm text-slate-400">
+                          {subject.present_classes} / {subject.total_classes} classes
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-lg font-bold ${
+                          percentage >= 90 ? 'text-green-400' :
+                          percentage >= 75 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          {percentage.toFixed(1)}%
+                        </div>
+                        {subject.absent_classes > 0 && (
+                          <p className="text-xs text-red-400">
+                            {subject.absent_classes} absent
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <Progress value={percentage} className="h-2" />
                   </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Activity */}
+      {recentRecords.length > 0 && (
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5 text-blue-400" />
+              Recent Activity
+            </CardTitle>
+            <CardDescription className="text-slate-400">
+              Your latest attendance records
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {recentRecords.slice(0, 8).map((record, index) => {
+                // Handle different response formats from different endpoints
+                const status = record.status || 'unknown';
+                const date = record.date || new Date().toISOString().split('T')[0];
+                const recordWithExtendedProps = record as Attendance & { 
+                  subject_name?: string; 
+                  subjectName?: string;
+                  marked_at?: string;
+                  markedAt?: string;
+                };
+                const subjectName = recordWithExtendedProps.subject_name || 
+                                   recordWithExtendedProps.subjectName || 
+                                   `Subject ${record.subjectId || 'Unknown'}`;
+                const markedAt = recordWithExtendedProps.marked_at || 
+                                recordWithExtendedProps.markedAt || 
+                                null;
+                
+                return (
+                  <div key={index} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center space-x-3">
+                      {getStatusIcon(status)}
+                      <div>
+                        <p className="font-medium text-white">{subjectName}</p>
+                        <p className="text-sm text-slate-400">
+                          {new Date(date).toLocaleDateString()} 
+                          {markedAt && ` at ${new Date(markedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                        </p>
+                      </div>
+                    </div>
+                    {getStatusBadge(status)}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Attendance Goal Card */}
+      <Card className={`border-2 ${
+        enhancedStats.isOnTrack 
+          ? 'bg-green-500/10 border-green-500/30' 
+          : 'bg-amber-500/10 border-amber-500/30'
+      }`}>
+        <CardContent className="p-6">
+          <div className="flex items-center gap-4">
+            <div className={`h-12 w-12 rounded-full flex items-center justify-center ${
+              enhancedStats.isOnTrack 
+                ? 'bg-green-500/20' 
+                : 'bg-amber-500/20'
+            }`}>
+              {enhancedStats.isOnTrack ? (
+                <CheckCircle className="h-6 w-6 text-green-400" />
+              ) : (
+                <Target className="h-6 w-6 text-amber-400" />
+              )}
+            </div>
+            <div className="flex-1">
+              <h3 className={`font-semibold ${
+                enhancedStats.isOnTrack ? 'text-green-300' : 'text-amber-300'
+              }`}>
+                {enhancedStats.isOnTrack ? 'Great Job!' : 'Attendance Goal'}
+              </h3>
+              <p className="text-slate-300 mb-2">
+                {enhancedStats.isOnTrack 
+                  ? `You're maintaining excellent attendance above ${enhancedStats.attendanceGoal}%`
+                  : `You need ${enhancedStats.classesNeeded} more classes to reach your ${enhancedStats.attendanceGoal}% goal`
+                }
+              </p>
+              {!enhancedStats.isOnTrack && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-400">Current: {enhancedStats.overallPercentage.toFixed(1)}%</span>
+                    <span className="text-slate-400">Target: {enhancedStats.attendanceGoal}%</span>
+                  </div>
+                  <Progress 
+                    value={enhancedStats.overallPercentage} 
+                    className="h-2"
+                  />
                 </div>
-                {getStatusBadge(record.status)}
-              </div>
-            ))}
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

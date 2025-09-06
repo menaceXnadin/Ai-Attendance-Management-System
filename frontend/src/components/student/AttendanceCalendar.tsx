@@ -91,20 +91,29 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const getDayClassName = (dayStatus: string, isToday: boolean) => {
     const base = "w-10 h-10 rounded-lg flex items-center justify-center text-sm font-medium transition-colors relative";
     
-    if (isToday) {
-      return `${base} ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900`;
-    }
-    
+    // Attendance status takes priority over "today" highlighting
     switch (dayStatus) {
       case 'present':
-        return `${base} bg-green-500/20 text-green-400 border border-green-500/30`;
+        return `${base} bg-green-500/20 text-green-400 border border-green-500/30 ${
+          isToday ? 'ring-2 ring-green-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
       case 'absent':
-        return `${base} bg-red-500/20 text-red-400 border border-red-500/30`;
+        return `${base} bg-red-500/20 text-red-400 border border-red-500/30 ${
+          isToday ? 'ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
       case 'excused':
-        return `${base} bg-blue-500/20 text-blue-400 border border-blue-500/30`;
+        return `${base} bg-blue-500/20 text-blue-400 border border-blue-500/30 ${
+          isToday ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
       case 'partial':
-        return `${base} bg-yellow-500/20 text-yellow-400 border border-yellow-500/30`;
+        return `${base} bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ${
+          isToday ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
       default:
+        // Only show "today" styling if there's no attendance data
+        if (isToday) {
+          return `${base} ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900 text-slate-400`;
+        }
         return `${base} text-slate-400 hover:bg-slate-800/50`;
     }
   };

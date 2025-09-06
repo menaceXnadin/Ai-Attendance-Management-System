@@ -3,6 +3,7 @@ import StudentFormEnhanced, { StudentFormData } from '@/components/StudentFormEn
 import StudentList from '@/components/StudentList';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Search, X, GraduationCap, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 import { StudentCreateData } from '@/integrations/api/types';
@@ -15,6 +16,7 @@ const StudentsPage = () => {
   const [selectedStudent, setSelectedStudent] = useState<StudentFormData | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<string>('list');
   const [selectedFaculty, setSelectedFaculty] = useState<string>('');
+  const [searchStudentId, setSearchStudentId] = useState<string>('');
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -78,10 +80,29 @@ const StudentsPage = () => {
     return allFaculties; // Return full faculty objects with id and name
   }, [allFaculties]);
 
-  // Filter students by selected faculty
-  const filteredStudents = selectedFaculty
-    ? students.filter(s => s.faculty_id === Number(selectedFaculty))
-    : [];
+  // Enhanced filtering with multiple search criteria
+  const filteredStudents = React.useMemo(() => {
+    let filtered = students;
+    
+    // Filter by faculty if selected
+    if (selectedFaculty) {
+      filtered = filtered.filter(s => s.faculty_id === Number(selectedFaculty));
+    }
+    
+    // Enhanced search across multiple fields
+    if (searchStudentId.trim()) {
+      const query = searchStudentId.toLowerCase().trim();
+      filtered = filtered.filter(s => 
+        s.full_name?.toLowerCase().includes(query) ||
+        s.student_id?.toLowerCase().includes(query) ||
+        s.studentId?.toLowerCase().includes(query) ||
+        s.email?.toLowerCase().includes(query) ||
+        s.faculty?.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [students, selectedFaculty, searchStudentId]);
 
   React.useEffect(() => {
     console.log('[StudentsPage] Mapped students for StudentList:', students);
@@ -359,32 +380,112 @@ const StudentsPage = () => {
         </TabsList>
         
         <TabsContent value="list" className="mt-6">
-          <div className="mb-4 flex flex-col md:flex-row md:items-center gap-4">
-            <label className="font-medium text-slate-700 dark:text-slate-200">Select Faculty:</label>
-            <select
-              className="border rounded px-3 py-2 min-w-[200px] bg-slate-900 text-white"
-              value={selectedFaculty}
-              onChange={e => setSelectedFaculty(e.target.value)}
-            >
-              <option value="">-- Choose Faculty --</option>
-              {faculties.map(faculty => (
-                <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
-              ))}
-            </select>
+          <div className="mb-4 space-y-4">
+            {/* Enhanced Search Bar */}
+            <div className="flex flex-col md:flex-row md:items-center gap-4">
+              <div className="flex-1">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by name, student ID, email, or faculty... (supports partial matching)"
+                    className="w-full border rounded px-10 py-3 bg-slate-900 text-white placeholder:text-slate-400 border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    value={searchStudentId}
+                    onChange={e => setSearchStudentId(e.target.value)}
+                  />
+                  {searchStudentId && (
+                    <button
+                      onClick={() => setSearchStudentId('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {searchStudentId && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Searching across: Name, Student ID, Email, Faculty
+                  </p>
+                )}
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <label className="font-medium text-slate-200 whitespace-nowrap">Faculty:</label>
+                <select
+                  className="border rounded px-3 py-3 min-w-[180px] bg-slate-900 text-white border-slate-600 focus:border-blue-500"
+                  value={selectedFaculty}
+                  onChange={e => setSelectedFaculty(e.target.value)}
+                >
+                  <option value="">All Faculties</option>
+                  {faculties.map(faculty => (
+                    <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Active Filters Display */}
+            {(selectedFaculty || searchStudentId.trim()) && (
+              <div className="flex flex-wrap gap-2">
+                {searchStudentId.trim() && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 text-blue-300 border border-blue-400/30 rounded-full text-sm">
+                    <Search className="h-3 w-3" />
+                    <span>Search: "{searchStudentId}"</span>
+                    <button
+                      onClick={() => setSearchStudentId('')}
+                      className="hover:text-blue-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                {selectedFaculty && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 text-green-300 border border-green-400/30 rounded-full text-sm">
+                    <GraduationCap className="h-3 w-3" />
+                    <span>Faculty: {faculties.find(f => f.id === Number(selectedFaculty))?.name}</span>
+                    <button
+                      onClick={() => setSelectedFaculty('')}
+                      className="hover:text-green-100"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          {selectedFaculty ? (
+          {selectedFaculty || searchStudentId.trim() ? (
             filteredStudents.length > 0 ? (
-              <StudentList 
-                students={filteredStudents} 
-                onEdit={handleEditStudent}
-                onDelete={handleDeleteStudent}
-                isLoading={isLoading}
-              />
+              <>
+                <div className="mb-4 text-sm text-slate-400">
+                  Showing {filteredStudents.length} student(s)
+                  {selectedFaculty && ` from ${faculties.find(f => f.id === Number(selectedFaculty))?.name}`}
+                  {searchStudentId.trim() && ` matching "${searchStudentId}"`}
+                </div>
+                <StudentList 
+                  students={filteredStudents} 
+                  onEdit={handleEditStudent}
+                  onDelete={handleDeleteStudent}
+                  isLoading={isLoading}
+                />
+              </>
             ) : (
-              <div className="text-center text-slate-500 py-12">No students found for this faculty.</div>
+              <div className="text-center text-slate-500 py-12">
+                <Search className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                <p className="text-lg mb-2">No students found</p>
+                <p className="text-sm">
+                  {selectedFaculty && `No students found for the selected faculty`}
+                  {searchStudentId.trim() && ` matching "${searchStudentId}"`}
+                </p>
+                <p className="text-sm mt-2">Try adjusting your search criteria or filters.</p>
+              </div>
             )
           ) : (
-            <div className="text-center text-slate-500 py-12">Please select a faculty to view students.</div>
+            <div className="text-center text-slate-500 py-12">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-30" />
+              <p className="text-lg mb-2">Search for Students</p>
+              <p className="text-sm">Use the search bar above to find students by name, ID, email, or select a faculty to filter results.</p>
+            </div>
           )}
         </TabsContent>
         

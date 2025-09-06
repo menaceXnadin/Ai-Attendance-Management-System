@@ -72,6 +72,10 @@ export interface Attendance {
   subjectId: string;  // Fixed: should be subjectId, not classId
   date: string;
   status: 'present' | 'absent' | 'late' | 'excused';
+  // Optional timestamps for accurate time displays
+  timeIn?: string;   // HH:MM:SS when attendance was marked (from backend time_in)
+  timeOut?: string;  // HH:MM:SS when student left (from backend time_out)
+  createdAt?: string; // ISO datetime when record was created (from backend created_at)
   student?: Student;
   subject?: Subject;  // Fixed: should be subject, not class
 }
@@ -80,9 +84,39 @@ export interface AttendanceSummary {
   present: number;
   absent: number;
   late: number;
-  excused: number;
-  total: number;
-  percentagePresent: number;
+  excused?: number;
+  total?: number;
+  percentage_present: number;
+  // Backend response fields from student-attendance API
+  total_academic_days?: number;
+  total_periods?: number;
+  total_marked?: number;
+  percentage_absent?: number;
+  percentage_late?: number;
+  average_confidence?: number;
+  academic_metrics?: {
+    total_academic_days: number;
+    total_periods: number;
+    class_days_breakdown?: Array<{
+      date: string;
+      day_of_week: string;
+      periods_count: number;
+    }>;
+  };
+  // Backward compatibility
+  percentagePresent?: number;
+  // New semester-based fields
+  days_with_any_attendance?: number;
+  partial_attendance_percentage?: number;
+  semester_start_date?: string;
+  semester_end_date?: string;
+  // Record-based metrics for detailed views
+  present_records?: number;
+  absent_records?: number;
+  late_records?: number;
+  excused_records?: number;
+  total_records?: number;
+  percentage_present_records?: number;
 }
 
 export interface AttendanceFilters {
@@ -127,4 +161,99 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'late' | 'excused';
   confidenceScore: number;
   markedBy: string;
+}
+
+// Schedule types
+export enum DayOfWeek {
+  SUNDAY = 'sunday',
+  MONDAY = 'monday',
+  TUESDAY = 'tuesday',
+  WEDNESDAY = 'wednesday',
+  THURSDAY = 'thursday',
+  FRIDAY = 'friday',
+  SATURDAY = 'saturday'
+}
+
+export interface Schedule {
+  id: number;
+  subject_id: number;
+  subject_name: string;
+  subject_code: string;
+  faculty_id: number;
+  faculty_name: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+  semester: number;
+  academic_year: number;
+  classroom?: string;
+  instructor_name?: string;
+  is_active: boolean;
+  notes?: string;
+  duration_minutes: number;
+  time_slot_display: string;
+}
+
+export interface ScheduleCreateData {
+  subject_id: number;
+  faculty_id: number;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+  semester: number;
+  academic_year: number;
+  classroom?: string;
+  instructor_name?: string;
+  notes?: string;
+}
+
+export interface ScheduleFilters {
+  faculty_id?: number;
+  semester?: number;
+  academic_year?: number;
+  day_of_week?: string;
+  is_active?: boolean;
+}
+
+export interface SemesterConfiguration {
+  id: number;
+  semester_number: number;
+  academic_year: number;
+  semester_name: string;
+  start_date: string;
+  end_date: string;
+  total_weeks?: number;
+  exam_week_start?: string;
+  exam_week_end?: string;
+  is_current: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by?: number;
+}
+
+export interface SemesterConfigurationCreateData {
+  semester_number: number;
+  academic_year: number;
+  semester_name: string;
+  start_date: string;
+  end_date: string;
+  total_weeks?: number;
+  exam_week_start?: string;
+  exam_week_end?: string;
+  is_current?: boolean;
+  is_active?: boolean;
+}
+
+export interface SemesterConfigurationUpdateData {
+  semester_number?: number;
+  academic_year?: number;
+  semester_name?: string;
+  start_date?: string;
+  end_date?: string;
+  total_weeks?: number;
+  exam_week_start?: string;
+  exam_week_end?: string;
+  is_current?: boolean;
+  is_active?: boolean;
 }

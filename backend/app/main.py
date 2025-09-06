@@ -6,6 +6,12 @@ from app.api.routes import auth, face_recognition, students, classes, attendance
 from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
 from app.api.routes.admins import router as admins_router
+from app.api.routes.schedules import router as schedules_router
+from app.api.routes.face_testing import router as face_testing_router
+from app.api.routes.event_sessions import router as event_sessions_router
+from app.api.routes.academic_metrics import router as academic_metrics_router
+from app.api.routes.student_attendance import router as student_attendance_router
+from app.api.routes.admin_semester_config import router as admin_semester_config_router
 from app.api.endpoints.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
@@ -48,6 +54,17 @@ app.add_middleware(
 # Add response time tracking middleware
 app.add_middleware(ResponseTimeMiddleware)
 
+# Add debug middleware to see all requests
+@app.middleware("http")
+async def debug_requests(request, call_next):
+    print(f"[MIDDLEWARE DEBUG] {request.method} {request.url}")
+    print(f"[MIDDLEWARE DEBUG] Headers: {dict(request.headers)}")
+    
+    response = await call_next(request)
+    
+    print(f"[MIDDLEWARE DEBUG] Response status: {response.status_code}")
+    return response
+
 # Add trusted host middleware
 app.add_middleware(
     TrustedHostMiddleware,
@@ -57,6 +74,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(face_recognition.router, prefix="/api")
+app.include_router(face_testing_router, prefix="/api")
 app.include_router(students.router, prefix="/api")
 app.include_router(classes.router, prefix="/api")
 app.include_router(attendance.router, prefix="/api")
@@ -65,8 +83,13 @@ app.include_router(comprehensive.router, prefix="/api")
 app.include_router(faculties_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
 app.include_router(admins_router, prefix="/api")
+app.include_router(schedules_router, prefix="/api")
+app.include_router(academic_metrics_router, prefix="/api")
+app.include_router(student_attendance_router, prefix="/api")
+app.include_router(admin_semester_config_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
+app.include_router(event_sessions_router, prefix="/api")
 
 @app.get("/")
 async def root():

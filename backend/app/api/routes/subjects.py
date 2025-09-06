@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, Integer, text
@@ -10,6 +10,32 @@ from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
 
+@router.get("/debug-auth")
+async def debug_auth_endpoint(request: Request):
+    """Debug endpoint to test HTTPBearer dependency."""
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    from fastapi import Depends
+    
+    print(f"[DEBUG AUTH] Raw Authorization header: {request.headers.get('authorization')}")
+    
+    security = HTTPBearer()
+    try:
+        credentials: HTTPAuthorizationCredentials = await security(request)
+        print(f"[DEBUG AUTH] HTTPBearer parsed successfully: {credentials.credentials[:50]}...")
+        return {"message": "HTTPBearer working", "token": credentials.credentials[:50] + "..."}
+    except Exception as e:
+        print(f"[DEBUG AUTH] HTTPBearer failed: {e}")
+        return {"error": f"HTTPBearer failed: {str(e)}"}
+
+@router.get("/debug-test")
+async def debug_test_endpoint(request: Request):
+    """Debug endpoint to test without authentication."""
+    headers = dict(request.headers)
+    print(f"[DEBUG TEST] Headers received: {headers}")
+    auth_header = headers.get('authorization')
+    print(f"[DEBUG TEST] Authorization header: {auth_header}")
+    return {"message": "Debug test successful", "auth_header": auth_header}
+
 @router.get("/", response_model=List[SubjectSchema])
 async def get_subjects(
     faculty_id: Optional[int] = None,
@@ -18,6 +44,7 @@ async def get_subjects(
     db: AsyncSession = Depends(get_db)
 ):
     """Get subjects with optional filters for faculty and semester."""
+    print(f"[DEBUG SUBJECTS] User: {current_user.email}, Role: {current_user.role}")
     query = select(Subject)
     
     # Apply filters

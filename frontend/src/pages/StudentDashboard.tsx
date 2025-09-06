@@ -31,6 +31,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
+import { Attendance } from '@/integrations/api/types';
 import StudentAttendanceReport from '@/components/student/StudentAttendanceReport';
 import StudentMarksReport from '@/components/student/StudentMarksReport';
 import StudentProfile from '@/components/student/StudentProfile';
@@ -90,37 +91,93 @@ const StudentDashboard = () => {
     queryFn: async () => {
       if (!user?.id) return null;
       try {
-        return await api.attendance.getSummary({ studentId: user.id });
+        // Use the fixed student attendance endpoint
+        return await api.studentAttendance.getSummary();
       } catch (error) {
         console.error('Error fetching attendance summary:', error);
-        return { present: 0, absent: 0, late: 0, total: 0, percentagePresent: 0 };
+        return { 
+          present: 0, 
+          absent: 0, 
+          late: 0, 
+          total_academic_days: 0, 
+          percentage_present: 0,
+          days_with_any_attendance: 0,
+          partial_attendance_percentage: 0,
+          semester_start_date: '',
+          semester_end_date: ''
+        };
       }
     },
     enabled: !!user?.id
   });
 
+  // Fetch dynamic academic metrics
+  const { data: academicMetrics, isLoading: isLoadingMetrics } = useQuery({
+    queryKey: ['academic-metrics-current'],
+    queryFn: async () => {
+      try {
+        return await api.academicMetrics.getCurrentSemester();
+      } catch (error) {
+        console.error('Error fetching academic metrics:', error);
+        return { total_academic_days: 0, total_periods: 0 };
+      }
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes since this data doesn't change often
+  });
+
   // Check if attendance has been marked today and get records
   const { data: todayAttendanceData, refetch: refetchTodayAttendance } = useQuery({
-    queryKey: ['today-attendance-data', user?.id],
+    queryKey: ['today-attendance-data', user?.id, studentData?.id],
     queryFn: async () => {
-      if (!user?.id) return { hasAttendance: false, records: [] };
+      if (!user?.id || !studentData?.id) return { hasAttendance: false, records: [] };
       try {
         const today = new Date().toISOString().split('T')[0];
+        console.log('[DEBUG] Dashboard fetching attendance for student ID:', studentData.id, 'user ID:', user.id);
         const records = await api.attendance.getAll({
-          studentId: user.id,
+          studentId: studentData.id, // Use student record ID, not user ID
           date: today
         });
+        console.log('[DEBUG] Dashboard attendance records:', records);
         return { hasAttendance: records.length > 0, records };
       } catch (error) {
         console.error('Error checking today attendance:', error);
         return { hasAttendance: false, records: [] };
       }
     },
-    enabled: !!user?.id
+    enabled: !!user?.id && !!studentData?.id
+  });
+
+  // Fetch today's real schedule data for dashboard overview - using student-specific endpoint
+  const { data: todaySchedules = [], isLoading: isLoadingSchedules } = useQuery({
+    queryKey: ['student-today-schedules-dashboard', studentData?.faculty_id, studentData?.semester],
+    queryFn: async () => {
+      if (!studentData?.semester || !studentData?.faculty_id) return [];
+      try {
+        console.log('[DEBUG] Fetching student-specific today schedules for dashboard overview - faculty_id:', studentData.faculty_id, 'semester:', studentData.semester);
+        
+        // Use the proper student-specific endpoint that handles all filtering internally
+        const schedules = await api.schedules.getStudentToday();
+        console.log('[DEBUG] Student-specific dashboard schedules fetched:', schedules);
+        return schedules;
+      } catch (error) {
+        console.error('Error fetching student today schedules for dashboard:', error);
+        return [];
+      }
+    },
+    enabled: !!studentData?.semester && !!studentData?.faculty_id
   });
 
   const todayAttendance = todayAttendanceData?.hasAttendance || false;
   const todayAttendanceRecords = todayAttendanceData?.records || [];
+  
+  // Filter attendance records to only include subjects that are in today's schedule
+  const relevantAttendanceRecords = todayAttendanceRecords.filter(record => {
+    const extendedRecord = record as Attendance & { classId?: string };
+    return todaySchedules.some(schedule => 
+      schedule.subject_id === parseInt(record.subjectId) || 
+      schedule.subject_id === parseInt(extendedRecord.classId || '0')
+    );
+  });
 
   React.useEffect(() => {
     if (todayAttendance) {
@@ -188,16 +245,21 @@ const StudentDashboard = () => {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-slate-400 mb-1">Attendance Rate</p>
+                    <p className="text-sm font-medium text-slate-400 mb-1">Semester Attendance</p>
                     <div className={`text-3xl font-bold ${
-                      (attendanceSummary?.percentagePresent || 0) >= 90 ? 'text-green-400' :
-                      (attendanceSummary?.percentagePresent || 0) >= 75 ? 'text-blue-400' : 'text-red-400'
+                      (attendanceSummary?.percentage_present || 0) >= 90 ? 'text-green-400' :
+                      (attendanceSummary?.percentage_present || 0) >= 75 ? 'text-blue-400' : 'text-red-400'
                     }`}>
-                      {attendanceSummary?.percentagePresent || 0}%
+                      {attendanceSummary?.percentage_present || 0}%
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
-                      {attendanceSummary?.present || 0} / {attendanceSummary?.total || 0} days
+                      {attendanceSummary?.present || 0} / {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0} academic days
                     </p>
+                    {attendanceSummary?.days_with_any_attendance && attendanceSummary?.days_with_any_attendance !== attendanceSummary?.present && (
+                      <p className="text-xs text-amber-400 mt-0.5">
+                        {attendanceSummary.days_with_any_attendance} days with partial attendance
+                      </p>
+                    )}
                   </div>
                   <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                     <CalendarIcon className="h-6 w-6 text-white" />
@@ -205,7 +267,61 @@ const StudentDashboard = () => {
                 </div>
                 <div className="mt-4">
                   <Progress 
-                    value={attendanceSummary?.percentagePresent || 0} 
+                    value={attendanceSummary?.percentage_present || 0} 
+                    className="h-2"
+                  />
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 hover:border-amber-500/30 transition-all group">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-400 mb-1">Semester Progress</p>
+                    <div className="text-3xl font-bold text-amber-400">
+                      {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
+                        (() => {
+                          const now = new Date();
+                          const start = new Date(attendanceSummary.semester_start_date);
+                          const end = new Date(attendanceSummary.semester_end_date);
+                          const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                          const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+                          const progressPercent = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
+                          return `${progressPercent}%`;
+                        })()
+                      ) : 'N/A'}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Days with classes: {attendanceSummary?.days_with_any_attendance || 0} / {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0}
+                    </p>
+                    {academicMetrics?.total_periods && (
+                      <p className="text-xs text-blue-400 mt-0.5">
+                        Total periods: {academicMetrics.total_periods.toLocaleString()}
+                      </p>
+                    )}
+                    {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date && (
+                      <p className="text-xs text-blue-400 mt-0.5">
+                        {new Date(attendanceSummary.semester_start_date).toLocaleDateString()} - {new Date(attendanceSummary.semester_end_date).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Clock className="h-6 w-6 text-white" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Progress 
+                    value={attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
+                      (() => {
+                        const now = new Date();
+                        const start = new Date(attendanceSummary.semester_start_date);
+                        const end = new Date(attendanceSummary.semester_end_date);
+                        const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                        const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+                        return Math.min(100, Math.round((elapsedDays / totalDays) * 100));
+                      })()
+                    ) : 0} 
                     className="h-2"
                   />
                 </div>
@@ -271,6 +387,7 @@ const StudentDashboard = () => {
           {/* Today's Class Schedule */}
           <TodayClassSchedule 
             studentData={studentData}
+            todayAttendance={todayAttendanceRecords}
             onAttendanceMarked={() => {
               setHasMarkedAttendanceToday(true);
               // Refresh attendance data
@@ -301,7 +418,7 @@ const StudentDashboard = () => {
                 {hasMarkedAttendanceToday && (
                   <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    {todayAttendanceRecords.filter(record => record.status === 'present').length || 0} classes attended
+                    {relevantAttendanceRecords.filter(record => record.status === 'present').length || 0} classes attended
                   </Badge>
                 )}
               </div>
@@ -317,7 +434,7 @@ const StudentDashboard = () => {
                         </div>
                         <div>
                           <p className="text-2xl font-bold text-white">
-                            {todayAttendanceRecords.filter(record => record.status === 'present').length}
+                            {relevantAttendanceRecords.filter(record => record.status === 'present').length}
                           </p>
                           <p className="text-sm text-slate-400">Present Today</p>
                         </div>
@@ -330,7 +447,9 @@ const StudentDashboard = () => {
                           <BookOpen className="h-5 w-5 text-blue-400" />
                         </div>
                         <div>
-                          <p className="text-2xl font-bold text-white">5</p>
+                          <p className="text-2xl font-bold text-white">
+                            {todaySchedules.length}
+                          </p>
                           <p className="text-sm text-slate-400">Total Classes</p>
                         </div>
                       </div>
@@ -345,34 +464,140 @@ const StudentDashboard = () => {
                     </h4>
                     
                     <div className="space-y-3">
-                      {['Computer Architecture', 'Programming Fundamentals', 'Data Structures', 'Mathematics for Computing', 'Database Systems'].map((subject, index) => {
-                        const times = ['08:00-09:30', '09:45-11:15', '11:30-13:00', '14:00-15:30', '15:45-17:00'];
-                        const isPresent = todayAttendanceRecords.some(record => 
-                          record.subject?.name?.includes(subject.split(' ')[0]) || 
-                          record.subject?.name?.includes(subject.split(' ')[1])
-                        );
-                        
-                        return (
-                          <div key={index} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className={`h-2 w-2 rounded-full ${isPresent ? 'bg-green-400' : 'bg-slate-500'}`}></div>
-                              <div>
-                                <p className="text-white text-sm font-medium">{subject}</p>
-                                <p className="text-slate-400 text-xs">{times[index]}</p>
-                              </div>
-                            </div>
-                            <Badge 
-                              variant={isPresent ? "default" : "secondary"}
-                              className={isPresent 
-                                ? "bg-green-500/20 text-green-300 border-green-400/30" 
-                                : "bg-slate-600/20 text-slate-400 border-slate-500/30"
+                      {todaySchedules.length > 0 ? (
+                        todaySchedules.map((schedule, index) => {
+                          // Check if student has attendance record for this subject today
+                          const attendanceRecord = todayAttendanceRecords.find(record => {
+                            console.log(`[ATTENDANCE-DEBUG] Checking attendance record for ${schedule.subject_name}:`);
+                            console.log(`[ATTENDANCE-DEBUG] Record subject ID: ${record.subjectId} (type: ${typeof record.subjectId})`);
+                            console.log(`[ATTENDANCE-DEBUG] Schedule subject ID: ${schedule.subject_id} (type: ${typeof schedule.subject_id})`);
+                            console.log(`[ATTENDANCE-DEBUG] Record subject object ID: ${record.subject?.id}`);
+                            console.log(`[ATTENDANCE-DEBUG] Record subject name: ${record.subject?.name}`);
+                            
+                            // Strategy 1: Direct subject ID matching (string vs number)
+                            if (record.subjectId === schedule.subject_id.toString()) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 1 (subjectId string)`);
+                              return true;
+                            }
+                            
+                            // Strategy 2: Subject object ID matching  
+                            if (record.subject?.id === schedule.subject_id.toString()) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 2 (subject.id string)`);
+                              return true;
+                            }
+                            
+                            // Strategy 3: Subject name matching
+                            if (record.subject?.name?.toLowerCase() === schedule.subject_name.toLowerCase()) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 3 (subject name)`);
+                              return true;
+                            }
+                            
+                            // Strategy 4: Extended record type check for subjectName field
+                            const extendedRecord = record as Attendance & { subjectName?: string };
+                            if (extendedRecord.subjectName?.toLowerCase() === schedule.subject_name.toLowerCase()) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 4 (subjectName)`);
+                              return true;
+                            }
+                            
+                            // Strategy 5: Integer comparison for subject IDs
+                            if (parseInt(record.subjectId) === schedule.subject_id) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 5 (integer comparison)`);
+                              return true;
+                            }
+                            
+                            console.log(`[ATTENDANCE-DEBUG] ❌ No match found for ${schedule.subject_name}`);
+                            return false;
+                          });
+                          
+                          // Determine status based on database record or time-based calculation
+                          let status = 'Pending';
+                          let statusColor = 'bg-slate-600/20 text-slate-400 border-slate-500/30';
+                          
+                          if (attendanceRecord) {
+                            // Use database record as authoritative source
+                            if (attendanceRecord.status === 'present') {
+                              status = 'Present';
+                              statusColor = 'bg-green-500/20 text-green-300 border-green-400/30';
+                            } else if (attendanceRecord.status === 'absent') {
+                              status = 'Absent';
+                              statusColor = 'bg-red-500/20 text-red-300 border-red-400/30';
+                            } else if (attendanceRecord.status === 'late') {
+                              status = 'Late';
+                              statusColor = 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30';
+                            } else {
+                              status = 'Present'; // Default for other statuses
+                              statusColor = 'bg-green-500/20 text-green-300 border-green-400/30';
+                            }
+                          } else {
+                            // No database record - check if class time has passed
+                            const now = new Date();
+                            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                            
+                            // Parse schedule time from separate start_time and end_time fields
+                            let endTimeMinutes = 0;
+                            
+                            if (schedule.end_time) {
+                              // Parse time in HH:MM format from backend
+                              const [endHour, endMin] = schedule.end_time.split(':').map(Number);
+                              endTimeMinutes = endHour * 60 + endMin;
+                            } else if (schedule.time_slot_display) {
+                              // Fallback: Parse from display format "HH:MM - HH:MM"
+                              const timeMatch = schedule.time_slot_display.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+                              if (timeMatch) {
+                                const [, , , endHour, endMin] = timeMatch;
+                                endTimeMinutes = parseInt(endHour) * 60 + parseInt(endMin);
                               }
-                            >
-                              {isPresent ? 'Present' : 'Pending'}
-                            </Badge>
-                          </div>
-                        );
-                      })}
+                            }
+                            
+                            if (endTimeMinutes > 0) {
+                              // Add 30-minute window after class end for attendance marking
+                              const attendanceWindowEnd = endTimeMinutes + 30;
+                              
+                              if (currentMinutes > attendanceWindowEnd) {
+                                // Class ended and attendance window passed - should be absent
+                                status = 'Absent';
+                                statusColor = 'bg-red-500/20 text-red-300 border-red-400/30';
+                              } else {
+                                // Still within attendance window or class hasn't started
+                                status = 'Pending';
+                                statusColor = 'bg-slate-600/20 text-slate-400 border-slate-500/30';
+                              }
+                            }
+                          }
+                          
+                          return (
+                            <div key={schedule.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <div className={`h-2 w-2 rounded-full ${
+                                  status === 'Present' ? 'bg-green-400' : 
+                                  status === 'Absent' ? 'bg-red-400' :
+                                  status === 'Late' ? 'bg-yellow-400' :
+                                  'bg-slate-500'
+                                }`}></div>
+                                <div>
+                                  <p className="text-white text-sm font-medium">{schedule.subject_name}</p>
+                                  <p className="text-slate-400 text-xs">{schedule.time_slot_display}</p>
+                                  {schedule.classroom && (
+                                    <p className="text-slate-500 text-xs">{schedule.classroom}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <Badge 
+                                variant={status === 'Present' || status === 'Late' ? "default" : "secondary"}
+                                className={statusColor}
+                              >
+                                {status}
+                              </Badge>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-slate-400 text-sm">
+                            {isLoadingSchedules ? 'Loading today\'s schedule...' : 'No classes scheduled for today'}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

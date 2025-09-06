@@ -48,6 +48,7 @@ class EventCreate(EventBase):
 class EventUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
+    event_type: Optional[EventType] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
     start_time: Optional[str] = None
@@ -513,9 +514,8 @@ async def delete_event(
             detail="Event not found"
         )
     
-    # Soft delete by setting is_active to False
-    event.is_active = False
-    event.updated_at = datetime.utcnow()
+    # Hard delete - actually remove the record from database
+    await db.delete(event)
     await db.commit()
     
     return {"message": "Event deleted successfully"}

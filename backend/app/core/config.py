@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Face Recognition (using InsightFace)
     face_recognition_tolerance: float = 0.6  # Cosine similarity threshold
     insightface_det_size: int = 640  # Detection size for InsightFace
-    development_mode: bool = True  # Enable mock face detection for testing
+    development_mode: bool = False  # Enable real face detection for production
     
     # File Storage
     upload_dir: str = "uploads"

@@ -4,7 +4,7 @@ Academic Calendar Database Schema
 Creates tables for calendar events, holidays, exams, and class schedules
 """
 
-from sqlalchemy import Column, Integer, String, Text, Date, Time, DateTime, Boolean, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, String, Text, Date, Time, DateTime, Boolean, ForeignKey, Enum as SQLEnum, JSON, CheckConstraint
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import enum
@@ -76,6 +76,70 @@ class AcademicEvent(Base):
     faculty = relationship("Faculty", back_populates="academic_events")
     creator = relationship("User")
     attendance_records = relationship("EventAttendance", back_populates="event")
+    event_sessions = relationship("EventSession", back_populates="parent_event", cascade="all, delete-orphan")
+
+class EventSession(Base):
+    """
+    Sub-events/sessions within a main academic event
+    For detailed time breakdowns like agenda items, activities, etc.
+    """
+    __tablename__ = "event_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    parent_event_id = Column(Integer, ForeignKey("academic_events.id"), nullable=False)
+    
+    # Session details
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Time information (within parent event timeframe)
+    start_time = Column(Time, nullable=False)
+    end_time = Column(Time, nullable=False)
+    
+    # Session metadata
+    session_type = Column(String(100), nullable=True)  # presentation, break, lunch, activity, etc.
+    presenter = Column(String(255), nullable=True)  # Who's presenting/leading
+    location = Column(String(255), nullable=True)  # Specific room if different from main event
+    color_code = Column(String(7), nullable=True)  # Custom color, inherits from parent if null
+    
+    # Administrative fields
+    display_order = Column(Integer, default=0)  # For ordering sessions
+    is_active = Column(Boolean, default=True)
+    attendance_required = Column(Boolean, default=False)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    parent_event = relationship("AcademicEvent", back_populates="event_sessions")
+    session_attendance = relationship("SessionAttendance", back_populates="session", cascade="all, delete-orphan")
+
+class SessionAttendance(Base):
+    """
+    Track attendance for specific event sessions
+    """
+    __tablename__ = "session_attendance"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("event_sessions.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
+    
+    # Attendance information
+    status = Column(SQLEnum(AttendanceStatus), default=AttendanceStatus.PENDING)
+    marked_at = Column(DateTime, nullable=True)
+    marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # Session-specific info
+    participation_score = Column(Integer, nullable=True)  # 0-100 for participation
+    notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    session = relationship("EventSession", back_populates="session_attendance")
 
 class EventAttendance(Base):
     """
@@ -160,6 +224,50 @@ class AcademicYear(Base):
     # Administrative fields
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SemesterConfiguration(Base):
+    """
+    Dynamic configuration for semester dates and academic calendar
+    Replaces hardcoded semester dates throughout the system
+    """
+    __tablename__ = "semester_configurations"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Semester identification
+    semester_number = Column(Integer, nullable=False)  # 1-8 for 4-year program
+    academic_year = Column(Integer, nullable=False)    # e.g., 2025
+    semester_name = Column(String(100), nullable=False)  # e.g., "Fall 2025", "Spring 2026"
+    
+    # Semester dates
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    
+    # Academic metrics
+    total_weeks = Column(Integer, nullable=True)  # e.g., 16 weeks
+    exam_week_start = Column(Date, nullable=True)
+    exam_week_end = Column(Date, nullable=True)
+    
+    # Status flags
+    is_current = Column(Boolean, default=False)    # Only one semester can be current
+    is_active = Column(Boolean, default=True)      # For soft delete
+    
+    # Administrative fields
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    created_by_user = relationship("User", foreign_keys=[created_by])
+    
+    # Constraints
+    __table_args__ = (
+        # Semester numbers should be valid (1-8)
+        CheckConstraint("semester_number BETWEEN 1 AND 8", name="valid_semester_number"),
+        # End date after start date
+        CheckConstraint("end_date > start_date", name="valid_date_range"),
+    )
 
 class ClassScheduleTemplate(Base):
     """

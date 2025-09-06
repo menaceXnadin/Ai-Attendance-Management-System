@@ -1,10 +1,10 @@
 // Time-based access control for face verification
 // Ensures attendance can only be marked during valid periods
 
-// � TIME RESTRICTIONS DISABLED - Always allow face verification for easier development
-export const DEVELOPMENT_MODE = true;
-export const FORCE_DEVELOPMENT_OVERRIDE = true; 
-export const TIME_RESTRICTIONS_ENABLED = true; // Master switch to enable time restrictions
+// � TIME RESTRICTIONS ENABLED - Attendance marking controlled by school hours and class periods
+export const DEVELOPMENT_MODE = false;
+export const FORCE_DEVELOPMENT_OVERRIDE = false; 
+export const TIME_RESTRICTIONS_ENABLED = true; // Master switch to enable time restrictions - ENABLED FOR PRODUCTION
 
 import { isDevelopmentOverrideEnabled } from './developmentOverride';
 
@@ -26,18 +26,18 @@ export interface TimeRestrictionConfig {
   classPeriods: ClassPeriod[];
 }
 
-// Default school hours and periods configuration
+// Default school hours and periods configuration - Generic fallback when no real schedule is available
 export const DEFAULT_TIME_CONFIG: TimeRestrictionConfig = {
   schoolHours: {
     startTime: "08:00",
-    endTime: "17:00"
+    endTime: "16:00"  // 8 AM to 4 PM - generic school hours
   },
   classPeriods: [
-    { id: "period-1", name: "First Period", startTime: "08:30", endTime: "10:00" },
-    { id: "period-2", name: "Second Period", startTime: "10:15", endTime: "11:45" },
-    { id: "period-3", name: "Third Period", startTime: "12:00", endTime: "13:30" },
-    { id: "period-4", name: "Fourth Period", startTime: "14:00", endTime: "15:30" },
-    { id: "period-5", name: "Fifth Period", startTime: "15:45", endTime: "17:15" }
+    { id: "period-1", name: "First Period", startTime: "08:00", endTime: "09:00" },
+    { id: "period-2", name: "Second Period", startTime: "09:15", endTime: "10:15" },
+    { id: "period-3", name: "Third Period", startTime: "10:30", endTime: "11:30" },
+    { id: "period-4", name: "Fourth Period", startTime: "12:30", endTime: "13:30" },
+    { id: "period-5", name: "Fifth Period", startTime: "13:45", endTime: "14:45" }
   ]
 };
 
@@ -116,7 +116,7 @@ export const isFaceVerificationAllowed = (
   nextPeriod?: ClassPeriod;
   timeUntilNext?: string;
 } => {
-  // � TIME RESTRICTIONS DISABLED - Always allow access
+  // ✅ TIME RESTRICTIONS ENABLED - Check actual conditions
   if (!TIME_RESTRICTIONS_ENABLED) {
     const mockPeriod: ClassPeriod = {
       id: 'always-available',

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Auto-generate Saturday holidays for any year/month
+Nepal holiday schedule: Saturday is the official holiday
 Future-proof system that automatically creates Saturday holidays
 """
 
@@ -80,7 +81,7 @@ async def auto_generate_saturday_holidays(year: int, month: int = None):
             for saturday in missing_saturdays:
                 holiday_event = AcademicEvent(
                     title="Saturday Holiday",
-                    description=f"Weekly Saturday holiday - {saturday.strftime('%B %d, %Y')}",
+                    description=f"Weekly Saturday holiday - {saturday.strftime('%B %d, %Y')} (Nepal standard)",
                     event_type=EventType.HOLIDAY,
                     start_date=saturday,
                     is_all_day=True,
@@ -91,7 +92,7 @@ async def auto_generate_saturday_holidays(year: int, month: int = None):
                 db.add(holiday_event)
             
             await db.commit()
-            print(f"✅ Successfully created {len(missing_saturdays)} Saturday holidays!")
+            print(f"✅ Successfully created {len(missing_saturdays)} Saturday holidays (Nepal standard)!")
         else:
             print("✅ All Saturdays already have holiday events!")
         

@@ -262,8 +262,9 @@ class InsightFaceService:
             best_similarity = similarities[best_index]
             
             # Convert similarity to percentage and check threshold
-            similarity_percentage = best_similarity * 100
-            is_match = best_similarity > self.tolerance
+            similarity_percentage = float(best_similarity * 100)
+            is_match = bool(best_similarity > self.tolerance)
+            best_index = int(best_index)
             
             logger.info(f"🔍 Face comparison - Best similarity: {similarity_percentage:.1f}%, "
                        f"Threshold: {self.tolerance*100:.1f}%, Match: {is_match}")

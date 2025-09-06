@@ -8,6 +8,7 @@ import AttendanceFilters from '@/components/attendance/AttendanceFilters';
 import AttendanceTable from '@/components/attendance/AttendanceTable';
 import AttendanceSummary from '@/components/attendance/AttendanceSummary';
 import EnhancedAttendanceManagement from '@/components/attendance/EnhancedAttendanceManagement';
+import IndividualStudentAnalysis from '@/components/attendance/IndividualStudentAnalysis';
 
 const AttendancePage = () => {
   const {
@@ -19,9 +20,58 @@ const AttendancePage = () => {
     setActiveTab,
     classes,
     classesLoading,
+    classesError,
     attendanceRecords,
-    attendanceLoading
+    attendanceLoading,
+    attendanceError,
+    user,
+    authLoading
   } = useAttendanceData();
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-slate-300">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Only show authentication error if we're sure the user is not authenticated
+  // and we've finished loading and have actually tried to make API calls
+  const showAuthError = !authLoading && !user && classesError && 
+    (classesError.message === 'Not authenticated' || 
+     (classesError as { response?: { status?: number } })?.response?.status === 403 || 
+     (classesError as { response?: { status?: number } })?.response?.status === 401);
+
+  if (showAuthError) {
+    return (
+      <div className="flex justify-center items-center min-h-[400px]">
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 max-w-md">
+          <CardContent className="p-8 text-center">
+            <Users className="h-16 w-16 mx-auto mb-4 text-yellow-400" />
+            <h3 className="text-xl font-semibold text-white mb-2">Session Expired</h3>
+            <p className="text-slate-300 mb-4">
+              Your session has expired. Please log in again to continue.
+            </p>
+            <Button 
+              variant="outline" 
+              className="border-slate-600 text-slate-300 hover:bg-slate-800"
+              onClick={() => {
+                localStorage.removeItem('authToken');
+                window.location.href = '/login';
+              }}
+            >
+              Re-login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -41,7 +91,7 @@ const AttendancePage = () => {
       </div>
 
       <Tabs defaultValue="admin-workflow" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700/50">
+        <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50">
           <TabsTrigger 
             value="admin-workflow"
             className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500"
@@ -62,6 +112,13 @@ const AttendancePage = () => {
           >
             <FileText className="h-4 w-4 mr-2" />
             Summary Report
+          </TabsTrigger>
+          <TabsTrigger 
+            value="individual-analysis"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500"
+          >
+            <UserCheck className="h-4 w-4 mr-2" />
+            Individual Analysis
           </TabsTrigger>
         </TabsList>
 
@@ -108,6 +165,10 @@ const AttendancePage = () => {
               />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="individual-analysis" className="mt-6">
+          <IndividualStudentAnalysis />
         </TabsContent>
       </Tabs>
     </div>

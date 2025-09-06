@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -32,7 +32,7 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
         return await api.attendance.getSummary({ studentId: user.id });
       } catch (error) {
         console.error('Error fetching attendance summary:', error);
-        return { present: 0, absent: 0, late: 0, total: 0, percentagePresent: 0 };
+        return { present: 0, absent: 0, late: 0, total: 0, percentage_present: 0, percentagePresent: 0 };
       }
     },
     enabled: !!user?.id
@@ -61,6 +61,42 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
     enabled: !!user?.id
   });
 
+  // Calculate recent attendance pattern - last 7 calendar days
+  const recentDays = useMemo(() => {
+    const days = [];
+    const today = new Date();
+    
+    // Create a map of attendance records by date for quick lookup
+    const recordsByDate = new Map();
+    attendanceRecords.forEach(record => {
+      const recordDate = new Date(record.date).toDateString();
+      // If multiple records on same date, prioritize present > late > absent
+      const existing = recordsByDate.get(recordDate);
+      if (!existing || 
+          (record.status === 'present') ||
+          (record.status === 'late' && existing !== 'present')) {
+        recordsByDate.set(recordDate, record.status);
+      }
+    });
+    
+    // Generate last 7 days
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      
+      const dateString = date.toDateString();
+      const status = recordsByDate.get(dateString) || 'absent';
+      
+      days.push({
+        date: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        status: status,
+        fullDate: date.toISOString().split('T')[0] // For debugging
+      });
+    }
+    
+    return days;
+  }, [attendanceRecords]);
+
   if (isLoading) {
     return (
       <div className={`space-y-6 ${className}`}>
@@ -86,7 +122,7 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
     absent: attendanceSummary?.absent || 0,
     late: attendanceSummary?.late || 0,
     total: attendanceSummary?.total || 0,
-    attendanceRate: attendanceSummary?.percentagePresent || 0,
+    attendanceRate: attendanceSummary?.percentage_present || 0,
   };
 
   // Calculate weekly trend
@@ -113,12 +149,6 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
     ? (previousWeekRecords.filter(r => r.status === 'present').length / previousWeekRecords.length) * 100 
     : 0;
   const weeklyTrend = currentWeekRate - previousWeekRate;
-
-  // Calculate recent attendance pattern
-  const recentDays = attendanceRecords.slice(-7).map(record => ({
-    date: new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' }),
-    status: record.status
-  }));
 
   const getAttendanceStatus = (rate: number) => {
     if (rate >= 90) return { status: 'Excellent', color: 'text-green-400', bgColor: 'bg-green-500/20' };

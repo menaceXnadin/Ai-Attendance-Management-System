@@ -17,28 +17,84 @@ const API_BASE = '/api';
 // Core fetch wrapper that injects Authorization header and parses JSON
 const apiRequest = async <T = any>(
   path: string,
-  options: (RequestInit & { skipAuth?: boolean }) = {}
+  options: (RequestInit & { skipAuth?: boolean; _retry?: boolean }) = {}
 ): Promise<T> => {
-  const token = localStorage.getItem('authToken');
+  const tokenRaw = localStorage.getItem('authToken');
+  const token = tokenRaw ? tokenRaw.trim() : tokenRaw;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string> | undefined),
   };
-  if (!options.skipAuth && token) headers['Authorization'] = `Bearer ${token}`;
+  
+  // Always include Authorization header if token exists and skipAuth is not true
+  if (!options.skipAuth && token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    // Ensure credentials are included for CORS
+    credentials: 'include',
   });
 
+  // Handle authentication errors
   if (res.status === 401 || res.status === 403) {
-    const text = await res.text().catch(() => '');
-    console.warn(`[API] Permission error ${res.status}:`, text || res.statusText);
-    throw new Error('Not authenticated');
+    const errorText = await res.text().catch(() => '');
+    console.warn(`[API] Authentication error ${res.status}:`, errorText || res.statusText);
+
+    // Try to parse error details
+    let errorDetails: any;
+    try {
+      errorDetails = errorText ? JSON.parse(errorText) : null;
+    } catch {
+      errorDetails = { detail: errorText || 'Authentication failed' };
+    }
+
+    // Attempt a one-time token refresh on 401/403 if not already retried
+    const shouldAttemptRefresh = !options.skipAuth && !options._retry && (res.status === 401 || res.status === 403);
+    if (shouldAttemptRefresh) {
+      try {
+        // Lazy import via existing api reference below
+        const refreshed = await api.auth.refreshToken();
+        if (refreshed?.token) {
+          // Retry original request with _retry flag to avoid loops
+          return await apiRequest<T>(path, { ...options, _retry: true });
+        }
+      } catch (refreshErr) {
+        console.warn('[API] Token refresh failed:', refreshErr);
+        // fall through to throw original auth error
+      }
+    }
+
+    // If it's a 401, the token might be expired - clear it
+    if (res.status === 401) {
+      localStorage.removeItem('authToken');
+      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        console.warn('[API] Token expired, clearing localStorage');
+      }
+    }
+
+    const error = new Error(errorDetails?.detail || 'Not authenticated');
+    (error as any).status = res.status;
+    (error as any).response = { status: res.status, data: errorDetails };
+    throw error;
   }
+
+  // Handle other HTTP errors
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `Request failed: ${res.status}`);
+    const errorText = await res.text().catch(() => '');
+    let errorDetails;
+    try {
+      errorDetails = errorText ? JSON.parse(errorText) : null;
+    } catch {
+      errorDetails = { detail: errorText || `Request failed: ${res.status}` };
+    }
+    
+    const error = new Error(errorDetails?.detail || `Request failed: ${res.status}`);
+    (error as any).status = res.status;
+    (error as any).response = { status: res.status, data: errorDetails };
+    throw error;
   }
 
   const contentType = res.headers.get('content-type') || '';
@@ -87,10 +143,19 @@ export const api = {
       const response = await apiRequest('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
+        skipAuth: true, // Don't include auth header for login
       });
+
+      // Validate response structure
+      if (!response || !response.access_token) {
+        throw new Error('Invalid login response: missing access token');
+      }
 
       // Store token in localStorage
       localStorage.setItem('authToken', response.access_token);
+      
+      // Log successful login (remove in production)
+      console.log('[AUTH] Login successful for:', response.user?.email);
 
       return {
         user: {
@@ -305,13 +370,16 @@ export const api = {
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
       const endpoint = params.toString() ? `/attendance?${params}` : '/attendance';
-  const response = await apiRequest(endpoint);
-  return (Array.isArray(response) ? response : []).map((record: Record<string, unknown>) => ({
+      const response = await apiRequest(endpoint);
+      return (Array.isArray(response) ? response : []).map((record: Record<string, unknown>) => ({
         id: record?.id?.toString?.() || '',
         studentId: record?.student_id?.toString?.() || record?.studentId?.toString?.() || '',
-        subjectId: record?.subject_id?.toString?.() || record?.class_id?.toString?.() || '',
+        subjectId: record?.subjectId?.toString?.() || record?.subject_id?.toString?.() || record?.class_id?.toString?.() || '',
         date: (record?.date ?? '').toString(),
         status: (record?.status ?? 'absent') as Attendance['status'],
+        timeIn: (record as any)?.timeIn?.toString?.() || (record as any)?.time_in?.toString?.(),
+        timeOut: (record as any)?.timeOut?.toString?.() || (record as any)?.time_out?.toString?.(),
+        createdAt: (record as any)?.createdAt?.toString?.() || (record as any)?.created_at?.toString?.(),
       }));
     },
 
@@ -323,6 +391,9 @@ export const api = {
         subjectId: response.subject_id?.toString() || response.class_id?.toString() || '',
         date: response.date,
         status: response.status,
+        timeIn: (response as any)?.timeIn || (response as any)?.time_in,
+        timeOut: (response as any)?.timeOut || (response as any)?.time_out,
+        createdAt: (response as any)?.createdAt || (response as any)?.created_at,
       } as Attendance;
     },
 
@@ -342,6 +413,9 @@ export const api = {
         subjectId: (response.subject_id ?? response.class_id)?.toString?.() || '',
         date: response.date,
         status: response.status,
+        timeIn: (response as any)?.timeIn || (response as any)?.time_in,
+        timeOut: (response as any)?.timeOut || (response as any)?.time_out,
+        createdAt: (response as any)?.createdAt || (response as any)?.created_at,
       } as Attendance;
     },
 
@@ -362,6 +436,25 @@ export const api = {
         total: response.total || 0,
         percentagePresent: response.percentage_present ?? response.percentagePresent ?? 0,
       } as AttendanceSummary;
+    },
+
+    getCalendar: async (year: number, month: number) => {
+      console.log('API: Calling attendance calendar with:', { year, month });
+      try {
+        const response = await apiRequest(`/attendance/calendar?year=${year}&month=${month}`);
+        console.log('API: Calendar response received:', response);
+        
+        // The backend returns { calendar_data: [...], month: X, year: Y }
+        // We need to extract calendar_data
+        return {
+          calendar_data: response.calendar_data || response || []
+        };
+      } catch (error) {
+        console.error('API: Calendar request failed:', error);
+        return {
+          calendar_data: []
+        };
+      }
     },
 
     getStudentsBySubject: async (
@@ -389,13 +482,19 @@ export const api = {
         body: JSON.stringify(attendanceData),
       });
     },
+
+    getStudentSubjectBreakdown: async (studentId: number) => {
+      return apiRequest(`/attendance/student-subject-breakdown/${studentId}`);
+    },
   },
+
+
 
   // Classes methods (legacy wrapper around subjects)
   classes: {
     getAll: async (): Promise<Subject[]> => {
-  const response = await apiRequest('/classes');
-  return (response as unknown[]).map((cls: Record<string, unknown>) => ({
+      const response = await apiRequest('/classes');
+      return (response as unknown[]).map((cls: Record<string, unknown>) => ({
         id: cls.id?.toString() || '',
         name: cls.name?.toString() || '',
         code: cls.code?.toString() || '',
@@ -486,7 +585,7 @@ export const api = {
     },
 
     registerFace: async (imageData: string | string[] | { image_data: string | string[] }) => {
-  let requestBody: Record<string, unknown>;
+      let requestBody: Record<string, unknown>;
       if (typeof imageData === 'string') {
         requestBody = { image_data: imageData };
       } else if (Array.isArray(imageData)) {
@@ -543,8 +642,8 @@ export const api = {
     },
 
     getMyAttendance: async () => {
-  const response = await apiRequest('/face-recognition/my-attendance');
-  return (response as unknown[]).map((record: Record<string, unknown>) => ({
+      const response = await apiRequest('/face-recognition/my-attendance');
+      return (response as unknown[]).map((record: Record<string, unknown>) => ({
         id: record.id?.toString() || '',
         studentId: record.student_id?.toString() || '',
         subjectId: record.subject_id?.toString() || '',
@@ -574,8 +673,9 @@ export const api = {
   // Subjects methods
   subjects: {
     getAll: async (facultyId?: number) => {
+      // Use trailing slash to avoid 307 redirect (which can drop Authorization header across proxy)
       const params = facultyId ? `?faculty_id=${facultyId}` : '';
-      return apiRequest(`/subjects${params}`);
+      return apiRequest(`/subjects/${params}`);
     },
 
     getByFaculty: async (facultyId: number) => {
@@ -648,6 +748,94 @@ export const api = {
     delete: async (facultyId: number) => apiRequest(`/faculties/${facultyId}`, { method: 'DELETE' }),
   },
 
+  // Schedules methods
+  schedules: {
+    getStudentToday: async () => {
+      const today = new Date();
+      const dayOfWeek = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][today.getDay()];
+      return apiRequest(`/schedules/student/today?day=${dayOfWeek}`);
+    },
+
+    getByFacultyAndSemester: async (facultyId: number, semester: number, dayOfWeek?: string) => {
+      const params = new URLSearchParams({
+        faculty_id: facultyId.toString(),
+        semester: semester.toString(),
+      });
+      if (dayOfWeek) params.append('day_of_week', dayOfWeek);
+      return apiRequest(`/schedules?${params}`);
+    },
+
+    getAll: async (filters: {
+      faculty_id?: number | string;
+      semester?: number | string;
+      day_of_week?: string;
+      academic_year?: number | string;
+      is_active?: boolean | string;
+      skip?: number;
+      limit?: number;
+    } = {}) => {
+      const params = new URLSearchParams();
+      if (filters.faculty_id !== undefined && filters.faculty_id !== 'all') params.append('faculty_id', String(filters.faculty_id));
+      if (filters.semester !== undefined && filters.semester !== 'all') params.append('semester', String(filters.semester));
+      if (filters.day_of_week && filters.day_of_week !== 'all') params.append('day_of_week', filters.day_of_week);
+      if (filters.academic_year) params.append('academic_year', String(filters.academic_year));
+      if (filters.is_active !== undefined && filters.is_active !== 'all') params.append('is_active', String(filters.is_active));
+      if (typeof filters.skip === 'number') params.append('skip', String(filters.skip));
+      if (typeof filters.limit === 'number') params.append('limit', String(filters.limit));
+      const endpoint = params.toString() ? `/schedules?${params}` : '/schedules';
+      return apiRequest(endpoint);
+    },
+
+    create: async (data: {
+      subject_id: number;
+      faculty_id: number;
+      day_of_week: string;
+      start_time: string;
+      end_time: string;
+      semester: number;
+      academic_year: number;
+      classroom?: string;
+      instructor_name?: string;
+      notes?: string;
+    }) => {
+      return apiRequest('/schedules', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    update: async (id: number, data: Partial<{
+      subject_id: number;
+      faculty_id: number;
+      day_of_week: string;
+      start_time: string;
+      end_time: string;
+      semester: number;
+      academic_year: number;
+      classroom?: string;
+      instructor_name?: string;
+      is_active?: boolean;
+      notes?: string;
+    }>) => {
+      return apiRequest(`/schedules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete: async (id: number) => {
+      return apiRequest(`/schedules/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    toggle: async (id: number) => {
+      return apiRequest(`/schedules/${id}/toggle`, {
+        method: 'POST',
+      });
+    },
+  },
+
   // Dashboard and sidebar statistics
   dashboard: {
     getSidebarStats: async () => apiRequest('/sidebar/stats'),
@@ -655,6 +843,177 @@ export const api = {
     getSystemHealth: async () => apiRequest('/system/health'),
     getStudentPerformance: async () => apiRequest('/student-performance/'),
     getRealtimeMetrics: async () => apiRequest('/realtime/metrics'),
+  },
+
+
+
+  // Student Attendance methods (comprehensive)
+  studentAttendance: {
+    getSummary: async () => {
+      return apiRequest('/student-attendance/summary');
+    },
+
+    getRecords: async (filters: {
+      startDate?: string;
+      endDate?: string;
+      subjectId?: number;
+      status?: string;
+      limit?: number;
+      offset?: number;
+    } = {}) => {
+      const params = new URLSearchParams();
+      if (filters.startDate) params.append('start_date', filters.startDate);
+      if (filters.endDate) params.append('end_date', filters.endDate);
+      if (filters.subjectId) params.append('subject_id', filters.subjectId.toString());
+      if (filters.status) params.append('status', filters.status);
+      if (filters.limit) params.append('limit', filters.limit.toString());
+      if (filters.offset) params.append('offset', filters.offset.toString());
+
+      const endpoint = params.toString() ? `/student-attendance/records?${params}` : '/student-attendance/records';
+      return apiRequest(endpoint);
+    },
+
+    getSubjectBreakdown: async () => {
+      return apiRequest('/student-attendance/subject-breakdown');
+    },
+
+    getAnalytics: async (period: string = 'semester') => {
+      return apiRequest(`/student-attendance/analytics?period=${period}`);
+    },
+
+    getGoals: async () => {
+      return apiRequest('/student-attendance/goals');
+    },
+  },
+
+  // Academic Metrics methods
+  academicMetrics: {
+    getCurrentSemester: async () => {
+      const response = await apiRequest('/academic-metrics/current-semester');
+      // Handle wrapped response format: { success: true, data: {...}, semester_info: {...} }
+      return response.data || response;
+    },
+
+    getSummary: async (startDate: string, endDate: string, semester?: number, academicYear?: number) => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (semester) params.append('semester', semester.toString());
+      if (academicYear) params.append('academic_year', academicYear.toString());
+      return apiRequest(`/academic-metrics/summary?${params}`);
+    },
+
+    calculate: async (startDate: string, endDate: string, semester?: number, academicYear?: number) => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (semester) params.append('semester', semester.toString());
+      if (academicYear) params.append('academic_year', academicYear.toString());
+      const response = await apiRequest(`/academic-metrics/calculate?${params}`);
+      // Handle wrapped response format: { success: true, data: {...} }
+      return response.data || response;
+    },
+
+    getDetailedBreakdown: async (startDate: string, endDate: string, semester?: number, academicYear?: number) => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      if (semester) params.append('semester', semester.toString());
+      if (academicYear) params.append('academic_year', academicYear.toString());
+      const response = await apiRequest(`/academic-metrics/detailed-breakdown?${params}`);
+      // Handle wrapped response format: { success: true, data: {...} }
+      return response.data || response;
+    },
+
+    validateData: async (startDate: string, endDate: string) => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      const response = await apiRequest(`/academic-metrics/validate-data?${params}`);
+      // Handle wrapped response format: { success: true, validation: {...} }
+      return response.validation || response;
+    },
+  },
+
+  // Semester Configuration methods
+  semesterConfiguration: {
+    getAll: async () => {
+      return apiRequest('/admin/semester-config/');
+    },
+
+    create: async (data: {
+      semester_number: number;
+      academic_year: number;
+      semester_name: string;
+      start_date: string;
+      end_date: string;
+      total_weeks?: number;
+      exam_week_start?: string;
+      exam_week_end?: string;
+      is_current?: boolean;
+      is_active?: boolean;
+    }) => {
+      return apiRequest('/admin/semester-config/', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    update: async (id: number, data: {
+      semester_number?: number;
+      academic_year?: number;
+      semester_name?: string;
+      start_date?: string;
+      end_date?: string;
+      total_weeks?: number;
+      exam_week_start?: string;
+      exam_week_end?: string;
+      is_current?: boolean;
+      is_active?: boolean;
+    }) => {
+      return apiRequest(`/admin/semester-config/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete: async (id: number) => {
+      return apiRequest(`/admin/semester-config/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    setCurrent: async (id: number) => {
+      return apiRequest(`/admin/semester-config/${id}/set-current`, {
+        method: 'POST',
+      });
+    },
+  },
+
+  // Analytics methods
+  analytics: {
+    getStudentInsights: async (studentId: number) => {
+      return apiRequest(`/analytics/student-insights/${studentId}`);
+    },
+
+    getAttendanceTrends: async (studentId?: number, days: number = 30) => {
+      const params = new URLSearchParams();
+      if (studentId) params.append('student_id', studentId.toString());
+      if (days !== 30) params.append('days', days.toString());
+      const endpoint = params.toString() ? `/analytics/attendance-trends?${params}` : '/analytics/attendance-trends';
+      return apiRequest(endpoint);
+    },
+
+    getClassAverages: async (classId?: number) => {
+      const params = new URLSearchParams();
+      if (classId) params.append('class_id', classId.toString());
+      const endpoint = params.toString() ? `/analytics/class-averages?${params}` : '/analytics/class-averages';
+      return apiRequest(endpoint);
+    },
   },
 };
 

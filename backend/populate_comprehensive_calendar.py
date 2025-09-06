@@ -2,6 +2,7 @@
 """
 Populate comprehensive calendar data for the academic calendar
 Creates a full month of varied events: classes, exams, holidays, special events
+Nepal holiday schedule: Saturday is the official holiday
 """
 
 import asyncio
@@ -144,13 +145,13 @@ async def populate_calendar_events():
             {"date": date(2025, 8, 29), "title": "End of Month Assembly", "type": EventType.SPECIAL_EVENT},
         ]
         
-        # Keep existing Saturday holidays and add new events
+        # Keep existing Saturday holidays and add new events (Nepal standard)
         for i in range(1, 32):
             event_date = date(2025, 8, i)
-            if event_date.weekday() == 5:  # Saturday
+            if event_date.weekday() == 5:  # Saturday (Nepal holiday)
                 events_to_create.append(AcademicEvent(
                     title="Saturday Holiday",
-                    description="Weekly Saturday holiday",
+                    description="Weekly Saturday holiday (Nepal standard)",
                     event_type=EventType.HOLIDAY,
                     start_date=event_date,
                     is_all_day=True,

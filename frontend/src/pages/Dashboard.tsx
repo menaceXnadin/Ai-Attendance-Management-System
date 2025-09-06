@@ -76,6 +76,8 @@ import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts/useAuth';
 import RealTimeAnalytics from '@/components/RealTimeAnalytics';
 import UnifiedAnalytics from '@/components/UnifiedAnalytics';
+import AcademicMetricsTest from '@/components/AcademicMetricsTest';
+import { useCurrentSemesterMetrics } from '@/hooks/useAcademicMetrics';
 
 
 const Dashboard = () => {
@@ -166,6 +168,25 @@ const Dashboard = () => {
     retry: false,
   });
 
+  // Fetch dynamic academic metrics
+  const { data: academicMetrics, isLoading: metricsLoading } = useQuery({
+    queryKey: ['academic-metrics-current'],
+    queryFn: async () => {
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated - skipping API call');
+      }
+      try {
+        return await api.academicMetrics.getCurrentSemester();
+      } catch (error) {
+        console.error('Error fetching academic metrics:', error);
+        return { total_academic_days: 0, total_periods: 0 };
+      }
+    },
+    enabled: isAuthenticated && !authLoading,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    retry: false,
+  });
+
   // Fetch weekly attendance data
   const { data: weeklyAttendance = [], isLoading: weeklyLoading } = useQuery({
     queryKey: ['weekly-attendance'],
@@ -185,7 +206,9 @@ const Dashboard = () => {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       
       records.forEach(record => {
-        const date = new Date(record.date);
+        // Support both date-only (YYYY-MM-DD) and ISO strings
+        const dateStr = (record.date || '').toString();
+        const date = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
         const dayName = dayNames[date.getDay()];
         
         if (!dayMap[dayName]) {
@@ -237,7 +260,21 @@ const Dashboard = () => {
         );
 
         // Get recent records and attach student info - only include records with valid students
-        const recentRecords = records.slice(0, 8); // Get more records to filter from
+        // Sort by the most relevant timestamp (timeIn > createdAt > date) descending
+        const sorted = [...records].sort((a, b) => {
+          const getTs = (r: import('@/integrations/api/types').Attendance) => {
+            if (r.timeIn && /^\d{2}:\d{2}:\d{2}$/.test(r.timeIn)) {
+              const d = (r.date || new Date().toISOString().split('T')[0]).toString();
+              const datePart = d.includes('T') ? d.split('T')[0] : d;
+              return new Date(`${datePart}T${r.timeIn}`).getTime();
+            }
+            const src = r.createdAt || r.date || '';
+            const iso = typeof src === 'string' && src.includes('T') ? src : `${src}T00:00:00`;
+            return new Date(iso).getTime();
+          };
+          return getTs(b) - getTs(a);
+        });
+        const recentRecords = sorted.slice(0, 8); // Get top records after sorting
         
         const validActivities = recentRecords
           .map(record => {
@@ -246,10 +283,24 @@ const Dashboard = () => {
             
             // Only return activity if we found a valid student
             if (student && student.name && student.name !== 'Unknown Student') {
+              // Prefer timeIn (HH:MM:SS) when available; else use createdAt or date
+              const timeSource = record.timeIn || record.createdAt || record.date;
+              let displayTime = '';
+              if (timeSource) {
+                // Build a Date using the record's date for HH:MM:SS-only values
+                if (record.timeIn && /^\d{2}:\d{2}:\d{2}$/.test(record.timeIn)) {
+                  const recDate = (record.date || new Date().toISOString().split('T')[0]).toString();
+                  const datePart = recDate.includes('T') ? recDate.split('T')[0] : recDate;
+                  displayTime = new Date(`${datePart}T${record.timeIn}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                } else {
+                  const iso = timeSource.includes('T') ? timeSource : `${timeSource}T00:00:00`;
+                  displayTime = new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+              }
               return {
                 id: record.id,
                 name: student.name,
-                time: new Date(record.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                time: displayTime,
                 status: record.status.charAt(0).toUpperCase() + record.status.slice(1),
                 imageUrl: student.profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name)}&background=random`,
               };
@@ -312,7 +363,7 @@ const Dashboard = () => {
     const classMap = {};
     
     todayAttendance.forEach(record => {
-      const classId = record.classId;
+      const classId = record.subjectId;
       if (!classMap[classId]) {
         classMap[classId] = { present: 0, absent: 0, late: 0 };
       }
@@ -427,6 +478,9 @@ const Dashboard = () => {
             </Button>
           </div>
         </div>
+
+        {/* Academic Metrics Test Component */}
+        <AcademicMetricsTest />
 
         {/* Enhanced Header Stats */}
         <RealTimeAnalytics />

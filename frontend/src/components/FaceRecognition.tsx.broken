@@ -1,0 +1,694 @@
+
+import * as React from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Camera, CheckCircle, X, Lock, Shield, Sparkles } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { FaceDetection } from '@mediapipe/face_detection';
+import { Camera as MPCamera } from '@mediapipe/camera_utils';
+import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
+
+type BackendFace = {
+  bbox: [number, number, number, number];
+  confidence: number;
+  width: number;
+  height: number;
+  area_percentage: number;
+};
+
+interface FaceRecognitionProps {
+  onCapture: (dataUrl: string, recognized: boolean) => void;
+  onCancel?: () => void;
+  disabled?: boolean;
+  subjectId?: string; // optional, used when marking attendance
+}
+
+const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecognitionProps) => {
+  const [isActive, setIsActive] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isRecognized, setIsRecognized] = useState(false);
+  const [feedback, setFeedback] = useState<string>('');
+  const [faceBox, setFaceBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
+  const [boxColor, setBoxColor] = useState<string>('lime');
+  
+  // Live recognition state
+  const [liveRecognition, setLiveRecognition] = useState<{
+    recognizedName: string | null;
+    confidence: number | null;
+    isProcessing: boolean;
+  }>({
+    recognizedName: null,
+    confidence: null,
+    isProcessing: false
+  });
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const liveRecognitionCanvasRef = useRef<HTMLCanvasElement>(null); // Separate canvas for live recognition
+  const mpCameraRef = useRef<MPCamera | null>(null);
+  const faceDetectionRef = useRef<FaceDetection | null>(null);
+  const liveRecognitionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isProcessingRef = useRef<boolean>(false);
+  const lastRecognitionTimeRef = useRef<number>(0);
+  const lastRecognizedNameRef = useRef<string | null>(null);
+  const { toast } = useToast();
+
+  // Time restriction management
+  const {
+    isAllowed: canVerify,
+    reason: restrictionReason,
+    currentPeriod,
+    timeUntilNext
+  } = useTimeRestrictions();
+
+  // Time restrictions disabled - always allow verification
+  const finalCanVerify = true;
+  const finalRestrictionReason = "Face verification available";
+
+  // Live recognition function
+  const performLiveRecognition = useCallback(async () => {
+    console.log('🔍 performLiveRecognition called');
+    
+    if (!videoRef.current || !liveRecognitionCanvasRef.current) {
+      console.log('❌ Missing video or canvas ref');
+      return;
+    }
+    
+    const canvas = liveRecognitionCanvasRef.current;
+    const video = videoRef.current;
+    
+    // Check if video is ready
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log('❌ Video not ready:', video.videoWidth, 'x', video.videoHeight);
+      return;
+    }
+    
+    // Skip if already processing or too soon since last recognition (debounce)
+    const now = Date.now();
+    if (isProcessingRef.current || (now - lastRecognitionTimeRef.current) < 1000) {
+      console.log('⏩ Skipping - processing or too soon');
+      return;
+    }
+    
+    console.log('✅ Starting live recognition...');
+    lastRecognitionTimeRef.current = now;
+    isProcessingRef.current = true;
+    setLiveRecognition(prev => ({ ...prev, isProcessing: true }));
+    
+    try {
+      const context = canvas.getContext('2d');
+      if (!context) return;
+      
+      // Use separate canvas for live recognition - optimize for speed
+      canvas.width = Math.min(video.videoWidth, 320); // Reduce size for faster processing
+      canvas.height = Math.min(video.videoHeight, 240);
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // Lower quality for speed
+      const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+      
+      // Get auth token
+      const token = localStorage.getItem('authToken');
+      
+      // Call live recognition API
+      console.log('📡 Calling live recognition API...');
+      const response = await fetch('/api/face-recognition/live-recognition', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ image_data: base64 }),
+      });
+      
+      const result = await response.json();
+      console.log('📨 API Response:', result);
+      
+      if (result.success && result.student_recognized) {
+        lastRecognizedNameRef.current = result.student_name;
+        setLiveRecognition(prev => ({
+          ...prev,
+          recognizedName: result.student_name,
+          confidence: result.confidence_score,
+          isProcessing: false
+        }));
+        
+        // Update feedback based on recognition quality - less intrusive
+        if (result.recognition_quality === 'excellent') {
+          setFeedback(`✨ ${result.student_name} (${Math.round(result.confidence_score)}%)`);
+        } else if (result.recognition_quality === 'good') {
+          setFeedback(`👤 ${result.student_name} (${Math.round(result.confidence_score)}%)`);
+        } else {
+          setFeedback(`🔍 ${result.student_name} (${Math.round(result.confidence_score)}%)`);
+        }
+      } else {
+        setLiveRecognition(prev => ({
+          ...prev,
+          recognizedName: null,
+          confidence: null,
+          isProcessing: false
+        }));
+        
+        // Only update feedback if no face detected - don't override positive feedback
+        if (result.faces_detected === 0) {
+          setFeedback('Position your face in frame');
+        } else if (result.recognition_quality === 'multiple_faces') {
+          setFeedback('Multiple faces - ensure only you are visible');
+        } else if (!lastRecognizedNameRef.current) {
+          setFeedback('Face detected - verifying identity...');
+        }
+      }
+    } catch (error) {
+      console.error('Live recognition error:', error);
+      setLiveRecognition(prev => ({
+        ...prev,
+        recognizedName: null,
+        confidence: null,
+        isProcessing: false
+      }));
+      // Don't override good feedback with error messages
+      if (!lastRecognizedNameRef.current) {
+        setFeedback('Recognition temporarily unavailable');
+      }
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, []); // No dependencies to prevent camera restarts
+
+  // Start/stop the webcam stream with improved error handling and live detection
+  useEffect(() => {
+    if (!isActive) {
+      // Cleanup
+      if (mpCameraRef.current) {
+        mpCameraRef.current.stop();
+        mpCameraRef.current = null;
+      }
+      setFaceBox(null);
+      setFeedback('');
+  // No facemesh cleanup needed
+      return;
+    }
+    // Setup MediaPipe Face Detection
+    const faceDetection = new FaceDetection({
+      locateFile: (file: string) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+    });
+    faceDetection.setOptions({
+      model: 'short',
+      minDetectionConfidence: 0.6
+    });
+    faceDetection.onResults((results: {detections?: Array<{boundingBox: {xCenter: number, yCenter: number, width: number, height: number}}>}) => {
+      try {
+        if (results.detections && results.detections.length > 0) {
+          const det = results.detections[0];
+          const box = det.boundingBox;
+          setFaceBox({
+            x: box.xCenter - box.width / 2,
+            y: box.yCenter - box.height / 2,
+            width: box.width,
+            height: box.height
+          });
+          setBoxColor('lime');
+          setFeedback('Face detected. Ready to capture!');
+        } else {
+          setFaceBox(null);
+          setFeedback('No face detected.');
+        }
+      } catch (error) {
+        console.error('Face detection error:', error);
+        setFeedback('Face detection error. Please try again.');
+      }
+    });
+    faceDetectionRef.current = faceDetection;
+
+
+
+    // Setup camera
+    if (videoRef.current) {
+      mpCameraRef.current = new MPCamera(videoRef.current, {
+        onFrame: async () => {
+          // Add null checks before sending to MediaPipe
+          if (videoRef.current && videoRef.current.videoWidth > 0 && videoRef.current.videoHeight > 0) {
+            await faceDetection.send({ image: videoRef.current });
+          }
+        },
+        width: 640,
+        height: 480
+      });
+      mpCameraRef.current.start();
+      
+      // Start live recognition interval (every 1 second for faster response)
+      liveRecognitionIntervalRef.current = setInterval(() => {
+        console.log('🔍 Live recognition interval triggered');
+        performLiveRecognition();
+      }, 1000);
+    }
+    return () => {
+      if (mpCameraRef.current) {
+        mpCameraRef.current.stop();
+        mpCameraRef.current = null;
+      }
+      
+      // Clear live recognition interval
+      if (liveRecognitionIntervalRef.current) {
+        clearInterval(liveRecognitionIntervalRef.current);
+        liveRecognitionIntervalRef.current = null;
+      }
+      
+      // Reset live recognition state
+      setLiveRecognition({
+        recognizedName: null,
+        confidence: null,
+        isProcessing: false
+      });
+      isProcessingRef.current = false;
+      
+      setFaceBox(null);
+      setFeedback('');
+  // No facemesh cleanup needed
+    };
+  }, [isActive, performLiveRecognition]);
+
+  // Draw bounding box overlay on canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (!canvas || !video) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Draw bounding box if detected
+    if (faceBox) {
+      ctx.save();
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      grad.addColorStop(0, '#38bdf8');
+      grad.addColorStop(1, '#06b6d4');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#06b6d4AA';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      // Mirror X for bounding box
+      const x = (1 - faceBox.x - faceBox.width) * canvas.width;
+      const y = faceBox.y * canvas.height;
+      const w = faceBox.width * canvas.width;
+      const h = faceBox.height * canvas.height;
+      if (ctx.roundRect) {
+        ctx.roundRect(x, y, w, h, 18);
+      } else {
+        ctx.rect(x, y, w, h);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [faceBox]);
+
+  // Real capture: use backend verification
+  const captureImage = async () => {
+    if (!canvasRef.current || !videoRef.current) return;
+    
+    // Check if video is ready
+    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+      toast({
+        title: 'Video Not Ready',
+        description: 'Please wait for the camera to initialize.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    if (!faceBox) {
+      toast({
+        title: 'No Face Detected',
+        description: 'Please ensure your face is visible in the frame.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsCapturing(true);
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    
+    let dataUrl = '';
+    
+    try {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      dataUrl = canvas.toDataURL('image/jpeg');
+      const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
+    
+      // 1) Verify identity against the logged-in user's saved embedding
+      const token = localStorage.getItem('authToken');
+      const commonHeaders: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
+      const idRes = await fetch('/api/face-recognition/verify-identity', {
+        method: 'POST',
+        headers: commonHeaders,
+        body: JSON.stringify({ image_data: base64 })
+      });
+      const idData = await idRes.json();
+
+      const matched = !!idData.matched;
+      setIsRecognized(matched);
+
+      if (!matched) {
+        onCapture(dataUrl, false);
+        toast({
+          title: 'Identity Mismatch',
+          description: idData.message || 'Face does not match the current user.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // 2) Optionally mark attendance if subjectId is provided
+      if (subjectId) {
+        console.log('[DEBUG] Marking attendance for subject:', subjectId);
+        console.log('[DEBUG] Image data length:', base64?.length || 0);
+        
+        const attendancePayload = { 
+          image_data: base64, 
+          subject_id: Number(subjectId) 
+        };
+        console.log('[DEBUG] Attendance payload:', attendancePayload);
+        
+        const attendRes = await fetch('/api/face-recognition/mark-attendance', {
+          method: 'POST',
+          headers: commonHeaders,
+          body: JSON.stringify(attendancePayload)
+        });
+        
+        console.log('[DEBUG] Attendance response status:', attendRes.status);
+        const attendData = await attendRes.json();
+        console.log('[DEBUG] Attendance response data:', attendData);
+
+        const ok = attendData.success && attendData.attendance_marked;
+        onCapture(dataUrl, ok);
+        toast({
+          title: ok ? 'Attendance Marked' : 'Attendance Not Marked',
+          description: attendData.message || (ok ? 'Attendance marked successfully.' : 'Could not mark attendance.'),
+          variant: ok ? 'default' : 'destructive',
+        });
+      } else {
+        // If no subjectId, just report successful identity match
+        onCapture(dataUrl, true);
+        toast({
+          title: 'Identity Verified',
+          description: 'Face matches your registered profile.',
+        });
+      }
+    } catch (e) {
+      console.error('Face capture error:', e);
+      setIsRecognized(false);
+      onCapture(dataUrl || '', false);
+      toast({
+        title: 'Verification Error',
+        description: 'Error verifying identity. Please try again.',
+        variant: 'destructive',
+      });
+    }
+    setIsCapturing(false);
+    setIsActive(false); // Immediately close instead of waiting 2 seconds
+  };
+
+  const handleCancel = () => {
+    console.log('Cancel button clicked');
+    
+    // Stop camera if running
+    if (mpCameraRef.current) {
+      try {
+        mpCameraRef.current.stop();
+        console.log('Camera stopped successfully');
+      } catch (error) {
+        console.error('Error stopping camera:', error);
+      }
+      mpCameraRef.current = null;
+    }
+    
+    // Clean up face detection
+    if (faceDetectionRef.current) {
+      try {
+        faceDetectionRef.current.close();
+        console.log('Face detection closed successfully');
+      } catch (error) {
+        console.error('Error closing face detection:', error);
+      }
+      faceDetectionRef.current = null;
+    }
+    
+    // Reset all states
+    setIsActive(false);
+    setIsCapturing(false);
+    setIsRecognized(false);
+    setFeedback('');
+    setFaceBox(null);
+    
+    // Call the parent's onCancel callback
+    if (onCancel) {
+      console.log('Calling parent onCancel callback');
+      onCancel();
+    } else {
+      console.log('No onCancel callback provided');
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 shadow-2xl">
+      <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700/50">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-3 text-white">
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Camera className="h-5 w-5 text-blue-400" />
+            </div>
+            Face Recognition
+            {currentPeriod && (
+              <span className="text-sm font-normal text-slate-400 bg-slate-700/50 px-2 py-1 rounded-md">
+                {currentPeriod.name}
+              </span>
+            )}
+          </CardTitle>
+        </div>
+        <CardDescription className="text-slate-300">
+          Position your face in the frame and capture to verify your identity for attendance.
+        </CardDescription>
+        
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mt-4">
+          <div className="flex items-center gap-3">
+            <div className="p-1.5 bg-green-500/20 rounded-lg">
+              <Shield className="h-4 w-4 text-green-400" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-green-300">
+                Face Verification Active
+              </span>
+              <p className="text-xs text-green-400/80 mt-1">
+                Advanced AI facial recognition ready for secure attendance marking
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardHeader>
+      
+      <CardContent className="flex flex-col items-center justify-center p-6 bg-slate-900/50">
+        {isActive ? (
+          <div className="relative w-full max-w-lg">
+            <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline
+                className="w-full aspect-video object-cover bg-slate-800"
+                style={{ transform: 'scaleX(-1)' }} // Mirror effect
+                width={640}
+                height={480}
+              />
+              <canvas
+                ref={canvasRef}
+                width={640}
+                height={480}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  width: '100%',
+                  height: '100%',
+                  zIndex: 20,
+                  pointerEvents: 'none',
+                  background: 'none',
+                }}
+              />
+              
+              {/* Hidden canvas for live recognition processing */}
+              <canvas
+                ref={liveRecognitionCanvasRef}
+                className="hidden"
+              />
+              
+              {/* Modern scanning overlay */}
+              <div className="absolute inset-0 pointer-events-none">
+                <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-blue-400 rounded-tl-lg"></div>
+                <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-blue-400 rounded-tr-lg"></div>
+                <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-blue-400 rounded-bl-lg"></div>
+                <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-blue-400 rounded-br-lg"></div>
+              </div>
+              
+              {isCapturing && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl">
+                  <div className="flex items-center gap-3 text-white">
+                    <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-lg font-medium">Processing...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            {/* Live Recognition Display */}
+            {(liveRecognition.recognizedName || true) && (
+                    
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Confidence:</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-20 bg-slate-700 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full transition-all duration-500 ${
+                              (liveRecognition.confidence || 0) >= 80 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
+                              (liveRecognition.confidence || 0) >= 60 ? 'bg-gradient-to-r from-amber-500 to-orange-500' : 
+                              'bg-gradient-to-r from-red-500 to-rose-500'
+                            }`}
+                            style={{ width: `${Math.min(100, liveRecognition.confidence || 0)}%` }}
+                          ></div>
+                        </div>
+                        <span className={`text-sm font-bold ${
+                          (liveRecognition.confidence || 0) >= 80 ? 'text-green-400' :
+                          (liveRecognition.confidence || 0) >= 60 ? 'text-amber-400' : 'text-red-400'
+                        }`}>
+                          {Math.round(liveRecognition.confidence || 0)}%
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-600/50">
+                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                      <span className="text-sm text-green-400">Ready to capture attendance</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Live feedback with modern design */}
+            <div className="mt-4 text-center">
+              <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                liveRecognition.recognizedName 
+                  ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                  : feedback.includes('Ready') 
+                  ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  liveRecognition.recognizedName ? 'bg-green-400' :
+                  feedback.includes('Ready') ? 'bg-green-400' : 'bg-amber-400'
+                } animate-pulse`}></div>
+                {feedback || 'Initializing camera...'}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="border-2 border-dashed border-slate-600 rounded-xl w-full max-w-lg aspect-video flex items-center justify-center bg-slate-800/50 backdrop-blur-sm">
+            {isRecognized ? (
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-green-500/20 rounded-full">
+                  <CheckCircle className="w-full h-full text-green-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-green-300 mb-2">Face Successfully Recognized!</h3>
+                <p className="text-slate-400">Identity verified and attendance marked</p>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-slate-700/50 rounded-full">
+                  <Camera className="w-full h-full text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-300 mb-2">Ready for Face Recognition</h3>
+                <p className="text-slate-400">Click "Start Camera" to begin secure identity verification</p>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+      
+      <CardFooter className="flex justify-center space-x-4 p-6 bg-slate-800/50 border-t border-slate-700/50">
+        {!isActive ? (
+          <div className="flex space-x-3">
+            <Button 
+              onClick={() => setIsActive(true)} 
+              disabled={disabled || isCapturing}
+              className="relative group overflow-hidden bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0"
+            >
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <Camera className="mr-2 h-5 w-5 relative z-10" /> 
+              <span className="relative z-10">Start Camera</span>
+            </Button>
+            {onCancel && (
+              <Button 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleCancel();
+                }}
+                variant="outline"
+                className="px-8 py-3 text-base font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
+              >
+                <X className="mr-2 h-5 w-5" /> Cancel
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="flex space-x-3">
+            <Button 
+              onClick={captureImage} 
+              disabled={isCapturing}
+              className={`relative group overflow-hidden px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0 ${
+                isCapturing 
+                  ? 'bg-slate-600 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
+              }`}
+            >
+              {isCapturing ? (
+                <>
+                  <div className="w-5 h-5 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <Camera className="mr-2 h-5 w-5 relative z-10" />
+                  <span className="relative z-10">Capture & Verify</span>
+                </>
+              )}
+            </Button>
+            <Button 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleCancel();
+              }}
+              disabled={isCapturing}
+              variant="outline"
+              className="px-8 py-3 text-base font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
+            >
+              <X className="mr-2 h-5 w-5" /> Cancel
+            </Button>
+          </div>
+        )}
+      </CardFooter>
+    </Card>
+  );
+};
+
+export default FaceRecognition;
