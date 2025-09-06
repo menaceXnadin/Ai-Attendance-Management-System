@@ -38,17 +38,17 @@ app = FastAPI(
 )
 
 # Add CORS middleware with more permissive settings
+cors_origins = settings.allowed_origins.copy()
+# Add Heroku URL to CORS if in production
+if os.getenv("DATABASE_URL"):  # Heroku sets DATABASE_URL
+    cors_origins.extend([
+        "https://attendai-d8cc2c66840f.herokuapp.com",
+        "*"  # Allow all origins in production for now
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    # When allow_credentials=True, '*' is not allowed. List explicit origins used by frontend.
-    allow_origins=[
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
