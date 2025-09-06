@@ -3,9 +3,9 @@ from typing import List, Optional
 import os
 
 class Settings(BaseSettings):
-    # Database - Handle both local SQLite and Heroku PostgreSQL
-    database_url: str = "sqlite:///./attendance_system.db"
-    database_url_sync: str = "sqlite:///./attendance_system.db"
+    # Database - PostgreSQL only
+    database_url: str = "postgresql+asyncpg://user:password@localhost/attendance_db"
+    database_url_sync: str = "postgresql+psycopg2://user:password@localhost/attendance_db"
     
     # Security
     secret_key: str = "your-secret-key-change-in-production-please-make-this-secure"
@@ -46,9 +46,10 @@ class Settings(BaseSettings):
         if heroku_db_url:
             # Heroku provides postgres:// but SQLAlchemy needs postgresql://
             if heroku_db_url.startswith("postgres://"):
-                heroku_db_url = heroku_db_url.replace("postgres://", "postgresql://", 1)
+                heroku_db_url = heroku_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            
             self.database_url = heroku_db_url
-            self.database_url_sync = heroku_db_url.replace("postgresql://", "postgresql+psycopg2://")
+            self.database_url_sync = heroku_db_url.replace("+asyncpg://", "+psycopg2://")
 
 # Create settings instance
 settings = Settings()

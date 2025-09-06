@@ -7,7 +7,7 @@ import os
 
 # Fix database URL for Heroku PostgreSQL
 def get_database_urls():
-    """Get properly formatted database URLs"""
+    """Get properly formatted PostgreSQL database URLs"""
     db_url = settings.database_url
     db_url_sync = settings.database_url_sync
     
@@ -30,40 +30,22 @@ def get_database_urls():
 async_db_url, sync_db_url = get_database_urls()
 
 # Async engine for FastAPI
-try:
-    async_engine = create_async_engine(
-        async_db_url,
-        echo=settings.debug,
-        future=True,
-        pool_size=10,
-        max_overflow=20,
-        pool_timeout=30,
-        pool_recycle=3600,
-        pool_pre_ping=True
-    )
-except Exception as e:
-    print(f"Error creating async engine with URL: {async_db_url}")
-    print(f"Error: {e}")
-    # Fallback to SQLite for development
-    async_engine = create_async_engine(
-        "sqlite+aiosqlite:///./attendance_system.db",
-        echo=settings.debug
-    )
+async_engine = create_async_engine(
+    async_db_url,
+    echo=settings.debug,
+    future=True,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=3600,
+    pool_pre_ping=True
+)
 
 # Sync engine for Alembic migrations
-try:
-    sync_engine = create_engine(
-        sync_db_url,
-        echo=settings.debug
-    )
-except Exception as e:
-    print(f"Error creating sync engine with URL: {sync_db_url}")
-    print(f"Error: {e}")
-    # Fallback to SQLite for development
-    sync_engine = create_engine(
-        "sqlite:///./attendance_system.db",
-        echo=settings.debug
-    )
+sync_engine = create_engine(
+    sync_db_url,
+    echo=settings.debug
+)
 
 # Session makers
 AsyncSessionLocal = async_sessionmaker(
