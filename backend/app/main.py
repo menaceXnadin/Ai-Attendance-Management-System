@@ -1,7 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from app.core.config import settings
+import os
 from app.api.routes import auth, face_recognition, students, classes, attendance, analytics, comprehensive
 from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
@@ -91,9 +94,32 @@ app.include_router(notifications_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(event_sessions_router, prefix="/api")
 
+# Mount static files for frontend
+static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    
+    # Serve React app for all non-API routes
+    @app.get("/{path:path}")
+    async def serve_frontend(path: str):
+        """Serve the React frontend for all non-API routes."""
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="API route not found")
+        
+        # Serve index.html for React Router
+        index_file = os.path.join(static_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+        else:
+            raise HTTPException(status_code=404, detail="Frontend not found")
+
 @app.get("/")
 async def root():
-    """Root endpoint."""
+    """Root endpoint - serve React app."""
+    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
+    index_file = os.path.join(static_dir, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
     return {
         "message": "AI Attendance Management System API",
         "version": settings.version,
