@@ -43,7 +43,7 @@ const NotificationCenter: React.FC = () => {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
       if (!token) {
         setError("Authentication token not found.");
         return;
@@ -95,7 +95,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
       await fetch(`${API_URL}/notifications/${id}/read`, { 
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -110,7 +110,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleMarkAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
       await fetch(`${API_URL}/notifications/mark-all-read`, { 
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -125,7 +125,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleRemoveNotification = async (id: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken');
       await fetch(`${API_URL}/notifications/${id}`, { 
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }

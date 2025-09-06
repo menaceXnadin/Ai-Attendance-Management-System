@@ -1,4 +1,4 @@
-led to #!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Quick Sample Data Creator for Testing Admin Workflow
 Creates minimal but complete data needed for admin attendance workflow testing

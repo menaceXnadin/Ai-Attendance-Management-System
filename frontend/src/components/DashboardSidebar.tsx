@@ -115,6 +115,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     const path = location.pathname;
     if (path === '/app') return { title: 'Dashboard', description: 'Comprehensive overview and analytics' };
     if (path.includes('/app/students')) return { title: 'Students', description: 'Manage student records and profiles' };
+    if (path.includes('/app/calendar')) return { title: 'Academic Calendar', description: 'Manage events, schedules, and academic calendar' };
     if (path.includes('/app/attendance')) return { title: 'Attendance', description: 'Track and analyze attendance data' };
     if (path.includes('/app/faculties')) return { title: 'Faculties', description: 'Manage faculties, semesters, and classes' };
     if (path.includes('/app/settings')) return { title: 'Settings', description: 'System configuration and preferences' };
@@ -161,6 +162,12 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                   />
                   <SidebarNavItem 
                     icon={<CalendarIcon className="w-5 h-5" />} 
+                    label="Academic Calendar" 
+                    to="/app/calendar"
+                    isNew={true}
+                  />
+                  <SidebarNavItem 
+                    icon={<BookOpen className="w-5 h-5" />} 
                     label="Attendance" 
                     to="/app/attendance" 
                   />

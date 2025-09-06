@@ -75,7 +75,7 @@ async def mark_attendance_with_face(
                 select(AttendanceRecord).where(
                     AttendanceRecord.student_id == recognition_result.student_id,
                     AttendanceRecord.subject_id == recognition_data.subject_id,
-                    AttendanceRecord.date.cast(Date) == today
+                    AttendanceRecord.date == today
                 )
             )
             
@@ -86,15 +86,20 @@ async def mark_attendance_with_face(
                     attendance_marked=False
                 )
             
-            # Create attendance record
+            # Create attendance record with proper fields
+            current_time = datetime.now()
             attendance = AttendanceRecord(
                 student_id=recognition_result.student_id,
-                subject_id=recognition_data.subject_id,
-                date=datetime.now(),
+                subject_id=recognition_data.subject_id,  # Critical: Link to specific subject
+                date=today,  # Date only
+                time_in=current_time,  # Time when attendance was marked
+                time_out=None,  # Will be filled when student leaves (optional)
                 status="present",
                 method="face",  # Use face method for facial recognition
                 confidence_score=recognition_result.confidence_score,
-                marked_by=None  # NULL for automated face recognition
+                location="Face Recognition System",  # Indicate it was marked via face recognition
+                notes=f"Face recognition confidence: {recognition_result.confidence_score:.2f}%, Marked via self-service attendance system",
+                marked_by=current_student.user_id  # Reference to the student's user ID who marked their own attendance
             )
             
             db.add(attendance)

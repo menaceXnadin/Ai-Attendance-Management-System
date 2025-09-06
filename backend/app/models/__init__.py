@@ -7,6 +7,9 @@ import enum
 # Import notification models
 from .notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope, NotificationPriority, NotificationType
 
+# Import calendar models
+from .calendar import AcademicEvent, EventAttendance, CalendarSetting, AcademicYear, ClassScheduleTemplate, EventType, HolidayType
+
 # Enums matching PostgreSQL ENUM types
 class UserRole(enum.Enum):
     student = "student"
@@ -57,6 +60,7 @@ class Faculty(Base):
     created_at = Column(DateTime, server_default=func.now())
     # Relationships
     students = relationship("Student", back_populates="faculty_rel", cascade="all, delete-orphan")
+    academic_events = relationship("AcademicEvent", back_populates="faculty")
 
 
 # Updated Student model
@@ -83,6 +87,7 @@ class Student(Base):
     attendance_records = relationship("AttendanceRecord", back_populates="student", cascade="all, delete-orphan")
     marks = relationship("Mark", back_populates="student", cascade="all, delete-orphan")
     ai_insights = relationship("AIInsight", back_populates="student", cascade="all, delete-orphan")
+    event_attendance = relationship("EventAttendance", back_populates="student")
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -116,19 +121,24 @@ class Subject(Base):
     # Relationships
     marks = relationship("Mark", back_populates="subject", cascade="all, delete-orphan")
     faculty = relationship("Faculty", backref="subjects")
+    academic_events = relationship("AcademicEvent", back_populates="subject")
 
 class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=True)  # Optional subject link
-    date = Column(DateTime, nullable=False)
+    date = Column(DateTime, nullable=False)  # Date only (no time component)
+    time_in = Column(DateTime, nullable=True)  # Time when attendance was marked
+    time_out = Column(DateTime, nullable=True)  # Time when student left (optional)
     status = Column(Enum(AttendanceStatus, name="attendance_status", native_enum=False), nullable=False, default=AttendanceStatus.present)
     method = Column(Enum(AttendanceMethod, name="attendance_method", native_enum=False), nullable=False, default=AttendanceMethod.manual)
     confidence_score = Column(Numeric(5, 2))  # Face recognition confidence (up to 999.99)
-    marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who marked the attendance
+    location = Column(String, nullable=True)  # Location where attendance was marked
     notes = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # Who marked the attendance
 
     # Relationships
     student = relationship("Student", back_populates="attendance_records")

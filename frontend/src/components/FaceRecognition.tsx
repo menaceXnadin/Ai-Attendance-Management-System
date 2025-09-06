@@ -3,10 +3,11 @@ import * as React from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Camera, CheckCircle, X } from 'lucide-react';
+import { Camera, CheckCircle, X, Lock, Shield } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { FaceDetection } from '@mediapipe/face_detection';
 import { Camera as MPCamera } from '@mediapipe/camera_utils';
+import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
 
 type BackendFace = {
   bbox: [number, number, number, number];
@@ -35,6 +36,18 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   const mpCameraRef = useRef<MPCamera | null>(null);
   const faceDetectionRef = useRef<FaceDetection | null>(null);
   const { toast } = useToast();
+
+  // Time restriction management
+  const {
+    isAllowed: canVerify,
+    reason: restrictionReason,
+    currentPeriod,
+    timeUntilNext
+  } = useTimeRestrictions();
+
+  // Time restrictions disabled - always allow verification
+  const finalCanVerify = true;
+  const finalRestrictionReason = "Face verification available";
 
   // Start/stop the webcam stream with improved error handling and live detection
   useEffect(() => {
@@ -264,10 +277,32 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   return (
     <Card className="overflow-hidden">
       <CardHeader>
-        <CardTitle>Facial Recognition</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Camera className="h-5 w-5" />
+            Facial Recognition
+            {currentPeriod && (
+              <span className="text-sm font-normal text-muted-foreground">
+                - {currentPeriod.name}
+              </span>
+            )}
+          </CardTitle>
+        </div>
         <CardDescription>
           Position your face in the frame and click "Capture" to mark attendance.
         </CardDescription>
+        
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
+          <div className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-medium text-green-800">
+              Face Verification Available
+            </span>
+          </div>
+          <p className="text-xs text-green-600 mt-1">
+            Time restrictions disabled - always available for testing
+          </p>
+        </div>
       </CardHeader>
       
       <CardContent className="flex flex-col items-center justify-center">
@@ -361,11 +396,19 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
         ) : (
           <div className="flex space-x-3" style={{ pointerEvents: 'auto' }}>
             <div className="relative group">
-              <div className={`absolute -inset-0.5 ${isCapturing ? 'bg-gray-300' : 'bg-gradient-to-r from-green-400 to-green-600'} rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200`}></div>
+              <div className={`absolute -inset-0.5 ${
+                isCapturing || !finalCanVerify 
+                  ? 'bg-gray-300' 
+                  : 'bg-gradient-to-r from-green-400 to-green-600'
+              } rounded-lg blur opacity-75 group-hover:opacity-100 transition duration-200`}></div>
               <Button 
                 onClick={captureImage} 
                 disabled={isCapturing}
-                className={`relative px-6 py-3 text-base shadow-lg rounded-lg ${isCapturing ? 'bg-gray-400' : 'bg-green-500 hover:bg-green-600'}`}
+                className={`relative px-6 py-3 text-base shadow-lg rounded-lg ${
+                  isCapturing 
+                    ? 'bg-gray-400 cursor-not-allowed' 
+                    : 'bg-green-500 hover:bg-green-600'
+                }`}
                 style={{ pointerEvents: 'auto' }}
               >
                 {isCapturing ? "Processing..." : "Capture"}

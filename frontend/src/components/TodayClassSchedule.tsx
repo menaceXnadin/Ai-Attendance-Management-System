@@ -12,13 +12,21 @@ import {
   Timer,
   PlayCircle,
   Pause,
-  CheckSquare
+  CheckSquare,
+  Lock,
+  Shield
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts/useAuth';
 import FaceRecognition from '@/components/FaceRecognition';
+import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
+import { 
+  formatTimeForDisplay, 
+  getTimeRemainingInPeriod,
+  type ClassPeriod 
+} from '@/utils/timeRestrictions';
 
 interface SubjectSchedule {
   subjectId: number;
@@ -26,8 +34,11 @@ interface SubjectSchedule {
   subjectCode: string;
   startTime: string;
   endTime: string;
-  status: 'Upcoming' | 'Ongoing' | 'Completed';
+  status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent';
   attendanceMarked: boolean;
+  isCurrentPeriod: boolean;
+  isBeforeStart: boolean;
+  isAfterEnd: boolean;
 }
 
 interface StudentData {
@@ -57,6 +68,18 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   const [activeSubjectId, setActiveSubjectId] = useState<number | null>(null);
   const [showFaceRecognition, setShowFaceRecognition] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Time restriction management
+  const {
+    isAllowed: isFaceVerificationAllowed,
+    reason: restrictionReason,
+    currentPeriod,
+    nextPeriod,
+    timeUntilNext,
+    markVerificationComplete,
+    clearTodayHistory,
+    verificationHistory
+  } = useTimeRestrictions();
 
   // Update current time every minute
   useEffect(() => {
@@ -90,8 +113,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'DEF101',
           startTime: '09:00',
           endTime: '10:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 21,
@@ -99,8 +125,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE101',
           startTime: '11:00',
           endTime: '12:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 22,
@@ -108,8 +137,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE102',
           startTime: '14:00',
           endTime: '15:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         }
       ],
       2: [ // Tuesday
@@ -119,8 +151,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE103',
           startTime: '10:00',
           endTime: '11:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 1,
@@ -128,28 +163,73 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'DEF101',
           startTime: '13:00',
           endTime: '14:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         }
       ],
       3: [ // Wednesday
         {
+          subjectId: 24,
+          subjectName: 'Computer Architecture',
+          subjectCode: 'CSE104',
+          startTime: '08:00',
+          endTime: '09:30',
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
+        },
+        {
           subjectId: 21,
           subjectName: 'Programming Fundamentals',
           subjectCode: 'CSE101',
-          startTime: '09:30',
-          endTime: '11:00',
-          status: 'Upcoming',
-          attendanceMarked: false
+          startTime: '09:45',
+          endTime: '11:15',
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
+        },
+        {
+          subjectId: 25,
+          subjectName: 'Data Structures',
+          subjectCode: 'CSE105',
+          startTime: '11:30',
+          endTime: '13:00',
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 22,
           subjectName: 'Mathematics for Computing',
           subjectCode: 'CSE102',
-          startTime: '15:00',
-          endTime: '16:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          startTime: '14:00',
+          endTime: '15:30',
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
+        },
+        {
+          subjectId: 26,
+          subjectName: 'Database Systems',
+          subjectCode: 'CSE106',
+          startTime: '15:45',
+          endTime: '17:00',
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         }
       ],
       4: [ // Thursday
@@ -159,8 +239,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'DEF101',
           startTime: '08:30',
           endTime: '10:00',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 23,
@@ -168,8 +251,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE103',
           startTime: '11:30',
           endTime: '13:00',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         }
       ],
       5: [ // Friday
@@ -179,8 +265,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE102',
           startTime: '10:00',
           endTime: '11:30',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         },
         {
           subjectId: 21,
@@ -188,8 +277,11 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           subjectCode: 'CSE101',
           startTime: '14:30',
           endTime: '16:00',
-          status: 'Upcoming',
-          attendanceMarked: false
+          status: 'Starts Soon' as const,
+          attendanceMarked: false,
+          isCurrentPeriod: false,
+          isBeforeStart: true,
+          isAfterEnd: false
         }
       ]
     };
@@ -197,24 +289,40 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     return mockSchedules[dayOfWeek] || [];
   }, [studentData?.faculty_id, studentData?.semester]);
 
-  // Calculate status based on current time
+  // Calculate status based on current time and attendance rules
   const calculateSubjectStatus = React.useCallback((schedule: SubjectSchedule[]): SubjectSchedule[] => {
     const now = currentTime;
-    const currentTimeStr = now.toTimeString().slice(0, 5); // HH:MM format
-
+    const currentHour = now.getHours();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
     return schedule.map(subject => {
-      const startTime = subject.startTime;
-      const endTime = subject.endTime;
+      const [startHour, startMin] = subject.startTime.split(':').map(Number);
+      const [endHour, endMin] = subject.endTime.split(':').map(Number);
+      const startTimeMinutes = startHour * 60 + startMin;
+      const endTimeMinutes = endHour * 60 + endMin;
 
-      let status: 'Upcoming' | 'Ongoing' | 'Completed' = 'Upcoming';
+      const isBeforeStart = currentMinutes < startTimeMinutes;
+      const isCurrentPeriod = currentMinutes >= startTimeMinutes && currentMinutes <= endTimeMinutes;
+      const isAfterEnd = currentMinutes > endTimeMinutes;
 
-      if (currentTimeStr >= startTime && currentTimeStr <= endTime) {
-        status = 'Ongoing';
-      } else if (currentTimeStr > endTime) {
-        status = 'Completed';
+      let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
+      if (subject.attendanceMarked) {
+        status = 'Present';
+      } else if (isCurrentPeriod) {
+        status = 'Pending';
+      } else if (isAfterEnd) {
+        status = 'Absent';
+      } else if (isBeforeStart) {
+        status = 'Starts Soon';
       }
 
-      return { ...subject, status };
+      return {
+        ...subject,
+        status,
+        isCurrentPeriod,
+        isBeforeStart,
+        isAfterEnd
+      };
     });
   }, [currentTime]);
 
@@ -255,11 +363,12 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   }, [generateTodaySchedule, calculateSubjectStatus, todayAttendance]);
 
   const handleMarkAttendance = (subjectId: number) => {
+    // Time restrictions disabled - direct access to face recognition
     setActiveSubjectId(subjectId);
     setShowFaceRecognition(true);
     toast({
       title: "Face Recognition Started",
-      description: "Please position your face within the camera frame.",
+      description: "Please position your face within the camera frame",
     });
   };
 
@@ -268,9 +377,12 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
     // FaceRecognition component already attempted attendance when subjectId is provided
     if (recognized) {
+      // Mark verification as complete for this period
+      markVerificationComplete();
+      
       toast({
         title: "Attendance Marked Successfully",
-        description: `Your face was verified and attendance recorded.`,
+        description: `Face verified and attendance recorded for ${currentPeriod?.name || 'current period'}`,
       });
       // Refresh attendance data and notify parent
       refetchAttendance();
@@ -289,12 +401,14 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'Ongoing':
+      case 'Pending':
         return <PlayCircle className="h-4 w-4" />;
-      case 'Upcoming':
+      case 'Starts Soon':
         return <Timer className="h-4 w-4" />;
-      case 'Completed':
+      case 'Present':
         return <CheckSquare className="h-4 w-4" />;
+      case 'Absent':
+        return <AlertTriangle className="h-4 w-4" />;
       default:
         return <Clock className="h-4 w-4" />;
     }
@@ -302,12 +416,14 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'Ongoing':
-        return 'bg-green-500/20 text-green-300 border-green-400/30';
-      case 'Upcoming':
+      case 'Pending':
+        return 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30';
+      case 'Starts Soon':
         return 'bg-blue-500/20 text-blue-300 border-blue-400/30';
-      case 'Completed':
-        return 'bg-slate-500/20 text-slate-300 border-slate-400/30';
+      case 'Present':
+        return 'bg-green-500/20 text-green-300 border-green-400/30';
+      case 'Absent':
+        return 'bg-red-500/20 text-red-300 border-red-400/30';
       default:
         return 'bg-slate-500/20 text-slate-300 border-slate-400/30';
     }
@@ -385,21 +501,76 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-purple-500"></div>
       <CardHeader className="pb-4">
-        <CardTitle className="text-xl text-white flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-            <Calendar className="h-4 w-4 text-white" />
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xl text-white flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
+              <Calendar className="h-4 w-4 text-white" />
+            </div>
+            Today's Class Schedule
+          </CardTitle>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30">
+              {new Date().toLocaleDateString('en-US', { 
+                weekday: 'long', 
+                month: 'short', 
+                day: 'numeric' 
+              })}
+            </Badge>
           </div>
-          Today's Class Schedule
-          <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30 ml-auto">
-            {new Date().toLocaleDateString('en-US', { 
-              weekday: 'long', 
-              month: 'short', 
-              day: 'numeric' 
-            })}
-          </Badge>
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Time restrictions disabled - face verification always available */}
+
+        {/* Time Restriction Status */}
+        <div className={`border rounded-xl p-4 ${
+          isFaceVerificationAllowed 
+            ? 'bg-green-500/10 border-green-400/30' 
+            : 'bg-red-500/10 border-red-400/30'
+        }`}>
+          <div className="flex items-center gap-3">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+              isFaceVerificationAllowed 
+                ? 'bg-green-500/20' 
+                : 'bg-red-500/20'
+            }`}>
+              {isFaceVerificationAllowed ? (
+                <Shield className="h-4 w-4 text-green-400" />
+              ) : (
+                <Lock className="h-4 w-4 text-red-400" />
+              )}
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <p className={`font-medium ${
+                  isFaceVerificationAllowed ? 'text-green-300' : 'text-red-300'
+                }`}>
+                  {isFaceVerificationAllowed ? 'Face Verification Available' : 'Face Verification Restricted'}
+                </p>
+                {currentPeriod && (
+                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30 text-xs">
+                    {currentPeriod.name}
+                  </Badge>
+                )}
+              </div>
+              <p className={`text-sm ${
+                isFaceVerificationAllowed ? 'text-green-200/80' : 'text-red-200/80'
+              }`}>
+                {restrictionReason}
+              </p>
+              {currentPeriod && isFaceVerificationAllowed && (
+                <p className="text-xs text-slate-400 mt-1">
+                  {getTimeRemainingInPeriod(currentPeriod)}
+                </p>
+              )}
+              {timeUntilNext && !isFaceVerificationAllowed && (
+                <p className="text-xs text-slate-400 mt-1">
+                  Next opportunity in {timeUntilNext}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
         {todaySchedule.map((subject, index) => (
           <div
             key={subject.subjectId}
@@ -432,37 +603,60 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                {subject.attendanceMarked ? (
+                {subject.attendanceMarked || subject.status === 'Present' ? (
                   <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    Already Marked
+                    Present
                   </Badge>
-                ) : subject.status === 'Ongoing' ? (
-                  <Button
-                    onClick={() => handleMarkAttendance(subject.subjectId)}
-                    className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg"
-                    disabled={!studentData?.face_encoding}
-                  >
-                    <Scan className="h-4 w-4 mr-2" />
-                    Mark Attendance
-                  </Button>
-                ) : subject.status === 'Completed' ? (
-                  <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30">
+                ) : subject.status === 'Pending' ? (
+                  <>
+                    {!isFaceVerificationAllowed ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
+                          <Lock className="h-3 w-3 mr-1" />
+                          Restricted
+                        </Badge>
+                        <p className="text-xs text-red-400 text-right max-w-32">
+                          {restrictionReason}
+                        </p>
+                        {timeUntilNext && (
+                          <p className="text-xs text-slate-400 text-right">
+                            Next: {timeUntilNext}
+                          </p>
+                        )}
+                      </div>
+                    ) : !studentData?.face_encoding ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Setup Required
+                        </Badge>
+                        <p className="text-xs text-amber-400 text-right">
+                          Face registration required
+                        </p>
+                      </div>
+                    ) : (
+                      <Button
+                        onClick={() => handleMarkAttendance(subject.subjectId)}
+                        className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg"
+                        disabled={!subject.isCurrentPeriod}
+                      >
+                        <Scan className="h-4 w-4 mr-2" />
+                        Mark Attendance
+                      </Button>
+                    )}
+                  </>
+                ) : subject.status === 'Absent' ? (
+                  <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
                     <AlertTriangle className="h-3 w-3 mr-1" />
-                    Time Expired
+                    Absent
                   </Badge>
-                ) : (
+                ) : subject.status === 'Starts Soon' ? (
                   <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30">
                     <Timer className="h-3 w-3 mr-1" />
                     Starts Soon
                   </Badge>
-                )}
-
-                {!studentData?.face_encoding && subject.status === 'Ongoing' && (
-                  <p className="text-xs text-amber-400 text-right">
-                    Face registration required
-                  </p>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -470,7 +664,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
         {/* Next class info */}
         {(() => {
-          const nextClass = todaySchedule.find(s => s.status === 'Upcoming');
+          const nextClass = todaySchedule.find(s => s.status === 'Starts Soon');
           if (nextClass) {
             const timeUntilNext = () => {
               const now = new Date();

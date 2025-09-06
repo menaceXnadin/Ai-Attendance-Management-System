@@ -61,10 +61,6 @@ const Navbar = () => {
               <Info size={18} />
               <span>About</span>
             </Link>
-            <Link to="/face-registration" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
-              <Camera size={18} />
-              <span>Face Registration</span>
-            </Link>
             {user ? (
               <>
                 <Link to="/app">
@@ -132,14 +128,6 @@ const Navbar = () => {
             >
               <Info size={18} />
               <span>About</span>
-            </Link>
-            <Link
-              to="/face-registration"
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
-              onClick={toggleMenu}
-            >
-              <Camera size={18} />
-              <span>Face Registration</span>
             </Link>
             {user ? (
               <>

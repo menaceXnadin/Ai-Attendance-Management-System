@@ -14,7 +14,6 @@ import {
   Target, 
   AlertTriangle, 
   Loader2,
-  Scan,
   Clock,
   Trophy,
   BookOpen,
@@ -25,8 +24,7 @@ import {
   Settings,
   BarChart3,
   Camera,
-  Shield,
-  Zap
+  Shield
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
@@ -39,7 +37,6 @@ import StudentProfile from '@/components/student/StudentProfile';
 import StudentPersonalAnalytics from '@/components/StudentPersonalAnalytics';
 import EnhancedNotificationSystem from '@/components/EnhancedNotificationSystem';
 import ProfileDropdown from '@/components/ProfileDropdown';
-import FaceRecognition from '@/components/FaceRecognition';
 import FaceRegistration from '@/components/FaceRegistration';
 import StudentSidebar from '@/components/StudentSidebar';
 import SmartNotificationSystem from '@/components/SmartNotificationSystem';
@@ -50,7 +47,6 @@ const StudentDashboard = () => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [showFaceRecognition, setShowFaceRecognition] = useState(false);
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const [hasMarkedAttendanceToday, setHasMarkedAttendanceToday] = useState(false);
   const [lastAttendance, setLastAttendance] = useState<{
@@ -103,25 +99,28 @@ const StudentDashboard = () => {
     enabled: !!user?.id
   });
 
-  // Check if attendance has been marked today
-  const { data: todayAttendance, refetch: refetchTodayAttendance } = useQuery({
-    queryKey: ['today-attendance', user?.id],
+  // Check if attendance has been marked today and get records
+  const { data: todayAttendanceData, refetch: refetchTodayAttendance } = useQuery({
+    queryKey: ['today-attendance-data', user?.id],
     queryFn: async () => {
-      if (!user?.id) return null;
+      if (!user?.id) return { hasAttendance: false, records: [] };
       try {
         const today = new Date().toISOString().split('T')[0];
         const records = await api.attendance.getAll({
           studentId: user.id,
           date: today
         });
-        return records.length > 0;
+        return { hasAttendance: records.length > 0, records };
       } catch (error) {
         console.error('Error checking today attendance:', error);
-        return false;
+        return { hasAttendance: false, records: [] };
       }
     },
     enabled: !!user?.id
   });
+
+  const todayAttendance = todayAttendanceData?.hasAttendance || false;
+  const todayAttendanceRecords = todayAttendanceData?.records || [];
 
   React.useEffect(() => {
     if (todayAttendance) {
@@ -129,28 +128,7 @@ const StudentDashboard = () => {
     }
   }, [todayAttendance]);
   
-  const handleFaceCapture = async (_dataUrl: string, recognized: boolean) => {
-    setLastAttendance({
-      timestamp: new Date().toLocaleString(),
-      recognized
-    });
-    
-    // In dashboard quick scan, just show result coming from FaceRecognition onCapture
-    if (recognized) setHasMarkedAttendanceToday(true);
-    
-    // Hide the face recognition component after processing
-    setTimeout(() => {
-      setShowFaceRecognition(false);
-    }, 3000);
-  };
-
-  const handleMarkAttendanceFromReminder = () => {
-    setShowFaceRecognition(true);
-    toast({
-      title: "Face Recognition Started",
-      description: "Please position your face within the camera frame.",
-    });
-  };
+  // Function removed - no longer needed with class-specific attendance
 
   const handleDismissReminder = () => {
     // Handle reminder dismissal logic if needed
@@ -185,33 +163,6 @@ const StudentDashboard = () => {
   return (
     <StudentSidebar>
   <div className="space-y-10 px-8 md:px-24 py-6 md:py-10 w-full">
-        {/* Attendance Reminder */}
-        {!hasMarkedAttendanceToday && (
-          <div className="bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-400/30 backdrop-blur-md rounded-xl p-4 md:p-6 shadow-lg mb-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center">
-                  <AlertTriangle className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="text-amber-100 font-medium">
-                    Don't forget to mark your attendance today!
-                  </p>
-                  <p className="text-amber-200/80 text-sm">
-                    Quick face scan takes less than 5 seconds
-                  </p>
-                </div>
-              </div>
-              <Button 
-                onClick={handleMarkAttendanceFromReminder}
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg"
-              >
-                <Scan className="h-4 w-4 mr-2" />
-                Mark Now
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Header Section */}
   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-0">
@@ -240,7 +191,7 @@ const StudentDashboard = () => {
                     <p className="text-sm font-medium text-slate-400 mb-1">Attendance Rate</p>
                     <div className={`text-3xl font-bold ${
                       (attendanceSummary?.percentagePresent || 0) >= 90 ? 'text-green-400' :
-                      (attendanceSummary?.percentagePresent || 0) >= 75 ? 'text-amber-400' : 'text-red-400'
+                      (attendanceSummary?.percentagePresent || 0) >= 75 ? 'text-blue-400' : 'text-red-400'
                     }`}>
                       {attendanceSummary?.percentagePresent || 0}%
                     </div>
@@ -302,7 +253,7 @@ const StudentDashboard = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-slate-400 mb-1">Face ID Status</p>
-                    <div className={`text-2xl font-bold ${studentData?.face_encoding ? 'text-green-400' : 'text-amber-400'}`}>
+                    <div className={`text-2xl font-bold ${studentData?.face_encoding ? 'text-green-400' : 'text-blue-400'}`}>
                       {studentData?.face_encoding ? 'Registered' : 'Pending'}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
@@ -330,46 +281,130 @@ const StudentDashboard = () => {
               });
             }}
           />
-          
-          {/* Enhanced Attendance Card */}
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden mt-8">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-purple-500"></div>
+
+        {/* Enhanced Student Portal Tabs */}
+        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden mt-8">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-blue-500 to-teal-500"></div>
             <CardHeader className="pb-4 px-4 md:px-6 pt-6">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-2xl text-white flex items-center gap-3">
                     <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                      <Camera className="h-4 w-4 text-white" />
+                      <BookOpen className="h-4 w-4 text-white" />
                     </div>
-                    Smart Attendance System
+                    Today's Attendance Overview
                   </CardTitle>
                   <CardDescription className="text-blue-200/80 mt-2">
-                    Mark your attendance using AI-powered face recognition technology
+                    Track your attendance status across all classes today
                   </CardDescription>
                 </div>
                 {hasMarkedAttendanceToday && (
                   <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
                     <CheckCircle className="h-3 w-3 mr-1" />
-                    Today's attendance marked
+                    {todayAttendanceRecords.filter(record => record.status === 'present').length || 0} classes attended
                   </Badge>
                 )}
               </div>
             </CardHeader>
             <CardContent className="px-4 md:px-6 pb-6">
-              {showFaceRecognition ? (
-                <div className="space-y-4">
-                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
-                      <span className="text-white font-medium">Face Recognition Active</span>
+              <div className="space-y-6">
+                {/* Attendance Statistics */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                          <CheckCircle className="h-5 w-5 text-green-400" />
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-white">
+                            {todayAttendanceRecords.filter(record => record.status === 'present').length}
+                          </p>
+                          <p className="text-sm text-slate-400">Present Today</p>
+                        </div>
+                      </div>
                     </div>
-                    <FaceRecognition 
-                      onCapture={handleFaceCapture} 
-                      onCancel={() => setShowFaceRecognition(false)}
-                    />
+                    
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                          <BookOpen className="h-5 w-5 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold text-white">5</p>
+                          <p className="text-sm text-slate-400">Total Classes</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Today's Schedule Overview */}
+                  <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                    <h4 className="text-white font-medium mb-4 flex items-center gap-2">
+                      <Calendar className="h-4 w-4" />
+                      Today's Classes Status
+                    </h4>
+                    
+                    <div className="space-y-3">
+                      {['Computer Architecture', 'Programming Fundamentals', 'Data Structures', 'Mathematics for Computing', 'Database Systems'].map((subject, index) => {
+                        const times = ['08:00-09:30', '09:45-11:15', '11:30-13:00', '14:00-15:30', '15:45-17:00'];
+                        const isPresent = todayAttendanceRecords.some(record => 
+                          record.subject?.name?.includes(subject.split(' ')[0]) || 
+                          record.subject?.name?.includes(subject.split(' ')[1])
+                        );
+                        
+                        return (
+                          <div key={index} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                            <div className="flex items-center gap-3">
+                              <div className={`h-2 w-2 rounded-full ${isPresent ? 'bg-green-400' : 'bg-slate-500'}`}></div>
+                              <div>
+                                <p className="text-white text-sm font-medium">{subject}</p>
+                                <p className="text-slate-400 text-xs">{times[index]}</p>
+                              </div>
+                            </div>
+                            <Badge 
+                              variant={isPresent ? "default" : "secondary"}
+                              className={isPresent 
+                                ? "bg-green-500/20 text-green-300 border-green-400/30" 
+                                : "bg-slate-600/20 text-slate-400 border-slate-500/30"
+                              }
+                            >
+                              {isPresent ? 'Present' : 'Pending'}
+                            </Badge>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Face Registration Status */}
+                  {!studentData?.face_encoding && (
+                    <div className="bg-blue-500/20 border border-blue-400/30 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <Camera className="h-5 w-5 text-blue-400" />
+                        <span className="text-blue-300 font-medium">Face Registration Available</span>
+                      </div>
+                      <p className="text-blue-200/80 text-sm mb-3">
+                        Register your face to enable quick attendance marking via face recognition.
+                      </p>
+                      <Button 
+                        size="sm"
+                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                        onClick={() => setShowFaceRegistration(true)}
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Register Face
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Quick Action Guide */}
+                  <div className="text-center">
+                    <p className="text-slate-400 text-sm mb-4">
+                      Mark attendance for specific classes using the schedule below
+                    </p>
                   </div>
                 </div>
-              ) : (
+                
                 <div className="space-y-6">
                   {lastAttendance && (
                     <div className={`p-4 rounded-xl border ${
@@ -397,76 +432,20 @@ const StudentDashboard = () => {
                     </div>
                   )}
                   
-                  {studentData?.face_encoding ? (
+                  {!studentData?.face_encoding && (
                     <div className="text-center space-y-6">
-                      <div className="flex items-center justify-center gap-4 mb-6">
-                        <div className="flex items-center gap-2 text-green-400">
-                          <Shield className="h-4 w-4" />
-                          <span className="text-sm">Face ID Ready</span>
+                      <div className="bg-blue-500/20 border border-blue-400/30 rounded-xl p-6">
+                        <div className="flex items-center justify-center gap-3 text-blue-300 mb-3">
+                          <Camera className="h-6 w-6" />
+                          <span className="font-semibold text-lg">Face Registration Available</span>
                         </div>
-                        <div className="flex items-center gap-2 text-blue-400">
-                          <Zap className="h-4 w-4" />
-                          <span className="text-sm">Quick Scan</span>
-                        </div>
-                        <div className="flex items-center gap-2 text-purple-400">
-                          <Clock className="h-4 w-4" />
-                          <span className="text-sm">&lt; 5 seconds</span>
-                        </div>
-                      </div>
-                      
-                      <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-teal-400 to-purple-500 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-300"></div>
-                        <Button 
-                          className="relative bg-slate-900 hover:bg-slate-800 text-white px-12 py-8 text-lg shadow-xl rounded-2xl border border-slate-700 group-hover:border-slate-600 transition-all"
-                          onClick={() => {
-                            setShowFaceRecognition(true);
-                            toast({
-                              title: "Face Recognition Started",
-                              description: "Please position your face within the camera frame.",
-                            });
-                          }}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                              <Scan className="h-6 w-6 text-white" />
-                            </div>
-                            <div className="text-left">
-                              <div className="font-semibold">Start Face Scan</div>
-                              <div className="text-sm text-slate-400">Mark attendance instantly</div>
-                            </div>
-                          </div>
-                        </Button>
-                      </div>
-                      
-                      <div className="flex items-center justify-center gap-4 text-sm text-slate-400">
-                        <span>• Position face in frame</span>
-                        <span>• Ensure good lighting</span>
-                        <span>• Remove obstructions</span>
-                      </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => setShowFaceRegistration(true)}
-                        className="border-slate-600 text-slate-300 hover:bg-slate-800"
-                      >
-                        Update Face Registration
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center space-y-6">
-                      <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-6">
-                        <div className="flex items-center justify-center gap-3 text-amber-300 mb-3">
-                          <AlertTriangle className="h-6 w-6" />
-                          <span className="font-semibold text-lg">Face Registration Required</span>
-                        </div>
-                        <p className="text-amber-200/80">
+                        <p className="text-blue-200/80">
                           Set up face recognition to enable quick attendance marking with just a glance.
                         </p>
                       </div>
                       
                       <div className="relative group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-300"></div>
+                        <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-300"></div>
                         <Button 
                           className="relative bg-slate-900 hover:bg-slate-800 text-white px-12 py-8 text-lg shadow-xl rounded-2xl border border-slate-700 group-hover:border-slate-600 transition-all"
                           onClick={() => {
@@ -478,7 +457,7 @@ const StudentDashboard = () => {
                           }}
                         >
                           <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center">
                               <User className="h-6 w-6 text-white" />
                             </div>
                             <div className="text-left">
@@ -512,7 +491,6 @@ const StudentDashboard = () => {
                     </div>
                   )}
                 </div>
-              )}
             </CardContent>
           </Card>
         
@@ -552,7 +530,7 @@ const StudentDashboard = () => {
                   </TabsTrigger>
                   <TabsTrigger 
                     value="notifications" 
-                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-orange-500 data-[state=active]:text-white data-[state=inactive]:text-slate-300"
+                    className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=inactive]:text-slate-300"
                   >
                     <Bell className="h-4 w-4 mr-2" />
                     Notifications

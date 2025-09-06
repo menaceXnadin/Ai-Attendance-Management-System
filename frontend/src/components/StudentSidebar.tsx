@@ -1,5 +1,8 @@
 import * as React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/useAuth';
+import { api } from '@/integrations/api/client';
 import { 
   CalendarIcon, 
   HomeIcon, 
@@ -10,10 +13,10 @@ import {
   CameraIcon,
   ClockIcon,
   MenuIcon,
-  XIcon
+  XIcon,
+  CheckCircle
 } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
-import { useAuth } from '@/contexts/useAuth';
 
 interface StudentSidebarProps {
   children: React.ReactNode;
@@ -24,11 +27,34 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
   const { signOut, user } = useAuth();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   
+  // Check face registration status
+  const { data: studentData } = useQuery({
+    queryKey: ['current-student-sidebar', user?.email],
+    queryFn: async () => {
+      if (!user?.email) return null;
+      try {
+        const students = await api.students.getAll();
+        const found = students.find(s => s.email === user.email);
+        if (!found) {
+          const foundInsensitive = students.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+          return foundInsensitive || null;
+        }
+        return found;
+      } catch (error) {
+        return null;
+      }
+    },
+    enabled: !!user?.email,
+  });
+
+  const isFaceRegistered = !!studentData?.face_encoding;
+  
   // Map route to title for student pages
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/student' || path === '/student/dashboard') return 'Dashboard';
     if (path.includes('/student/attendance')) return 'My Attendance';
+    if (path.includes('/student/calendar')) return 'Academic Calendar';
     if (path.includes('/student/marks')) return 'My Marks';
     if (path.includes('/student/profile')) return 'My Profile';
     if (path.includes('/student/face-registration') || path === '/face-registration') return 'Face Registration';
@@ -118,8 +144,23 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 }
                 title={isCollapsed ? "My Attendance" : ""}
               >
-                <CalendarIcon className="w-6 h-6" />
+                <ClockIcon className="w-6 h-6" />
                 {!isCollapsed && "My Attendance"}
+              </NavLink>
+
+              <NavLink
+                to="/student/calendar"
+                className={({ isActive }) =>
+                  `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    isActive
+                      ? 'bg-gradient-to-r from-blue-500/20 to-teal-400/20 text-white border border-blue-400/30'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+                  }`
+                }
+                title={isCollapsed ? "Academic Calendar" : ""}
+              >
+                <CalendarIcon className="w-6 h-6" />
+                {!isCollapsed && "Academic Calendar"}
               </NavLink>
 
               <NavLink
@@ -163,8 +204,22 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 }
                 title={isCollapsed ? "Face Registration" : ""}
               >
-                <CameraIcon className="w-6 h-6" />
-                {!isCollapsed && "Face Registration"}
+                <div className="relative">
+                  <CameraIcon className="w-6 h-6" />
+                  {isFaceRegistered && (
+                    <CheckCircle className="w-3 h-3 text-green-400 absolute -top-1 -right-1 bg-slate-900 rounded-full" />
+                  )}
+                </div>
+                {!isCollapsed && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <span>Face Registration</span>
+                    {isFaceRegistered && (
+                      <span className="text-xs bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full border border-green-400/30">
+                        Ready
+                      </span>
+                    )}
+                  </div>
+                )}
               </NavLink>
             </nav>
           </div>

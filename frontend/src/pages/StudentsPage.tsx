@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import StudentForm, { StudentFormData } from '@/components/StudentForm';
+import StudentFormEnhanced, { StudentFormData } from '@/components/StudentFormEnhanced';
 import StudentList from '@/components/StudentList';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -389,7 +389,7 @@ const StudentsPage = () => {
         </TabsContent>
         
         <TabsContent value="form" className="mt-6">
-          <StudentForm 
+          <StudentFormEnhanced 
             onSubmit={onSubmit}
             initialData={selectedStudent}
             isLoading={addStudentMutation.isPending || updateStudentMutation.isPending}

@@ -7,6 +7,7 @@ from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
 from app.api.routes.admins import router as admins_router
 from app.api.endpoints.notifications import router as notifications_router
+from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
 import logging
 import warnings
@@ -30,10 +31,18 @@ app = FastAPI(
 # Add CORS middleware with more permissive settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*", "http://localhost:8080", "http://localhost:3000", "http://localhost:5173"],  # Allow specific origins including frontend
-    allow_credentials=True,  # Allow credentials
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    # When allow_credentials=True, '*' is not allowed. List explicit origins used by frontend.
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
 # Add response time tracking middleware
@@ -57,6 +66,7 @@ app.include_router(faculties_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
 app.include_router(admins_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
+app.include_router(calendar_router, prefix="/api")
 
 @app.get("/")
 async def root():
@@ -66,6 +76,12 @@ async def root():
         "version": settings.version,
         "docs": "/docs"
     }
+    
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Registered routes:")
+    for route in app.routes:
+        logger.info(f"Route: {route.path} - Methods: {route.methods}")
 
 @app.get("/health")
 async def health_check():
@@ -74,6 +90,19 @@ async def health_check():
         "status": "healthy",
         "version": settings.version
     }
+
+@app.get("/api/__routes")
+async def list_routes():
+    """Diagnostic endpoint: list all registered routes and methods."""
+    routes_info = []
+    for route in app.routes:
+        try:
+            methods = sorted(list(route.methods)) if hasattr(route, 'methods') else []
+            path = getattr(route, 'path', str(route))
+            routes_info.append({"path": path, "methods": methods})
+        except Exception:
+            continue
+    return {"routes": routes_info}
 
 # Exception handlers
 @app.exception_handler(404)

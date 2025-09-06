@@ -30,13 +30,13 @@ async def get_attendance_records(
         conditions.append(AttendanceRecord.student_id == student_id)
     if date:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
-        conditions.append(func.date(AttendanceRecord.date) == target_date)
+        conditions.append(AttendanceRecord.date == target_date)
     if start_date and end_date:
         start = datetime.strptime(start_date, "%Y-%m-%d").date()
         end = datetime.strptime(end_date, "%Y-%m-%d").date()
         conditions.append(and_(
-            func.date(AttendanceRecord.date) >= start,
-            func.date(AttendanceRecord.date) <= end
+            AttendanceRecord.date >= start,
+            AttendanceRecord.date <= end
         ))
     
     if conditions:
@@ -80,8 +80,8 @@ async def get_attendance_summary(
         start = datetime.strptime(start_date, "%Y-%m-%d").date()
         end = datetime.strptime(end_date, "%Y-%m-%d").date()
         conditions.append(and_(
-            func.date(AttendanceRecord.date) >= start,
-            func.date(AttendanceRecord.date) <= end
+            AttendanceRecord.date >= start,
+            AttendanceRecord.date <= end
         ))
     
     if conditions:
@@ -129,14 +129,17 @@ async def create_attendance_record(
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new attendance record."""
-    # Create new attendance record
+    # Create new attendance record with proper field structure
+    current_time = datetime.now()
     attendance = AttendanceRecord(
         student_id=attendance_data["student_id"],
-        date=datetime.now(),
-    status=attendance_data["status"].upper(),
+        date=current_time.date(),  # Date only
+        time_in=current_time,  # Time when attendance was marked
+        status=attendance_data["status"].upper(),
         marked_by=current_user.id,
         confidence_score=attendance_data.get("confidence_score", 1.0),
-        notes=attendance_data.get("notes")
+        notes=attendance_data.get("notes"),
+        subject_id=attendance_data.get("subject_id")  # Include subject_id if provided
     )
     
     db.add(attendance)
@@ -186,7 +189,7 @@ async def get_students_by_subject(
     attendance_query = select(AttendanceRecord).where(
         and_(
             AttendanceRecord.subject_id == subject_id,
-            func.date(AttendanceRecord.date) == target_date,
+            AttendanceRecord.date == target_date,
             AttendanceRecord.student_id.in_([s.id for s in students])
         )
     )
@@ -269,7 +272,7 @@ async def mark_bulk_attendance(
             and_(
                 AttendanceRecord.student_id == student_id,
                 AttendanceRecord.subject_id == subject_id,
-                func.date(AttendanceRecord.date) == target_date.date()
+                AttendanceRecord.date == target_date.date()
             )
         )
         
@@ -282,11 +285,12 @@ async def mark_bulk_attendance(
             existing_record.marked_by = current_user.id
             updated_records.append(existing_record.id)
         else:
-            # Create new record
+            # Create new record with proper field structure
             new_record = AttendanceRecord(
                 student_id=student_id,
                 subject_id=subject_id,
-                date=target_date,
+                date=target_date.date(),  # Date only
+                time_in=target_date,  # Time when attendance was marked
                 status=AttendanceStatus(status.lower()),
                 marked_by=current_user.id,
                 method=AttendanceMethod.manual

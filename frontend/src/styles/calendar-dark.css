@@ -1,0 +1,208 @@
+/* Dark theme for react-big-calendar */
+.calendar-dark .rbc-calendar {
+  background-color: transparent;
+  color: #f1f5f9;
+}
+
+.calendar-dark .rbc-header {
+  background-color: rgba(30, 41, 59, 0.8);
+  border-color: rgba(71, 85, 105, 0.5);
+  color: #cbd5e1;
+  font-weight: 600;
+  padding: 12px 8px;
+}
+
+.calendar-dark .rbc-month-view {
+  background-color: transparent;
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+.calendar-dark .rbc-day-bg {
+  background-color: rgba(30, 41, 59, 0.3);
+  border-color: rgba(71, 85, 105, 0.3);
+  position: relative;
+}
+
+.calendar-dark .rbc-day-bg:hover {
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+.calendar-dark .rbc-off-range-bg {
+  background-color: rgba(15, 23, 42, 0.3);
+}
+
+.calendar-dark .rbc-today {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+/* Style for calendar cells that contain events - fill entire cell background */
+
+.calendar-dark .rbc-date-cell {
+  padding: 0 !important;
+  min-height: 32px;
+  position: relative !important;
+  overflow: visible !important;
+}
+
+/* When a cell has an event, fill the entire cell background with event color */
+.calendar-dark .rbc-date-cell.rbc-has-event {
+  padding: 0 !important;
+}
+
+.calendar-dark .rbc-row-content {
+  position: relative;
+  z-index: 1;
+}
+
+.calendar-dark .rbc-row-segment {
+  padding: 0 !important;
+  margin: 0 !important;
+  position: relative !important;
+}
+
+
+.calendar-dark .rbc-event {
+  border: none !important;
+  border-radius: 0 !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  cursor: pointer !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 2 !important;
+  box-shadow: none !important;
+  background-clip: border-box !important;
+}
+
+.calendar-dark .rbc-event:hover {
+  filter: brightness(1.1) !important;
+}
+
+/* Remove any default event container styling */
+.calendar-dark .rbc-event-content {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Ensure date numbers are visible over event backgrounds */
+.calendar-dark .rbc-date-cell > a {
+  position: relative !important;
+  z-index: 5 !important;
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8) !important;
+  font-weight: 600 !important;
+  padding: 2px 4px !important;
+  border-radius: 2px !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  display: inline-block !important;
+  margin: 2px !important;
+}
+
+/* Remove or modify the selected event styling to preserve original color */
+.calendar-dark .rbc-selected {
+  /* Remove the blue override - let events keep their original colors when selected */
+  border: 2px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4) !important;
+  z-index: 10 !important;
+}
+
+/* Special styling for cell-filling events */
+.calendar-dark .cell-filling-event {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 8px 6px !important;
+  z-index: 2 !important;
+}
+
+.calendar-dark .cell-filling-event:hover {
+  filter: brightness(1.1) !important;
+  z-index: 3 !important;
+}
+
+.calendar-dark .rbc-slot-selection {
+  background-color: rgba(59, 130, 246, 0.2);
+  border: 2px solid #3b82f6;
+}
+
+.calendar-dark .rbc-time-view {
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+.calendar-dark .rbc-time-header {
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+.calendar-dark .rbc-time-content {
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+.calendar-dark .rbc-timeslot-group {
+  border-color: rgba(71, 85, 105, 0.2);
+}
+
+.calendar-dark .rbc-time-slot {
+  border-color: rgba(71, 85, 105, 0.2);
+}
+
+.calendar-dark .rbc-current-time-indicator {
+  background-color: #ef4444;
+}
+
+.calendar-dark .rbc-agenda-view {
+  background-color: transparent;
+  color: #f1f5f9;
+}
+
+.calendar-dark .rbc-agenda-view table.rbc-agenda-table {
+  border-color: rgba(71, 85, 105, 0.3);
+}
+
+.calendar-dark .rbc-agenda-view .rbc-agenda-table tbody > tr > td {
+  border-color: rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+.calendar-dark .rbc-agenda-view .rbc-agenda-table thead > tr > th {
+  border-color: rgba(71, 85, 105, 0.3);
+  background-color: rgba(30, 41, 59, 0.8);
+  color: #cbd5e1;
+}
+
+.calendar-dark .rbc-show-more {
+  background-color: rgba(59, 130, 246, 0.8);
+  color: white;
+  border-radius: 4px;
+}
+
+.calendar-dark .rbc-overlay {
+  background-color: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(71, 85, 105, 0.5);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.calendar-dark .rbc-overlay-header {
+  background-color: rgba(30, 41, 59, 0.8);
+  border-bottom: 1px solid rgba(71, 85, 105, 0.5);
+  color: #f1f5f9;
+  font-weight: 600;
+}

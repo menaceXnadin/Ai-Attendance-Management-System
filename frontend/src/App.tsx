@@ -46,6 +46,7 @@ import StudentFaceRegistrationPage from "./pages/StudentFaceRegistrationPage";
 import MarksPage from "./pages/MarksPage";
 import ProfilePage from "./pages/ProfilePage";
 import FaceRegistrationDemoPage from "./pages/FaceRegistrationDemoPage";
+import AcademicCalendar from "./pages/AcademicCalendar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -133,6 +134,13 @@ const App = () => {
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />
+              <Route path="/student/calendar" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <AcademicCalendar />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
               <Route path="/face-registration" element={
                 <ProtectedRoute>
                   <ApiErrorBoundary>
@@ -153,6 +161,7 @@ const App = () => {
               }>
                 <Route index element={<Dashboard />} />
                 <Route path="students" element={<StudentsPage />} />
+                <Route path="calendar" element={<AcademicCalendar />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="faculties" element={<FacultiesPage />} />
                 <Route path="settings" element={<SettingsPage />} />
