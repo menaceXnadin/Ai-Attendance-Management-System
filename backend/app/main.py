@@ -37,19 +37,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware with more permissive settings
-cors_origins = settings.allowed_origins.copy()
-# Add Heroku URL to CORS if in production
-if os.getenv("DATABASE_URL"):  # Heroku sets DATABASE_URL
-    cors_origins.extend([
-        "https://attendai-d8cc2c66840f.herokuapp.com",
-        "*"  # Allow all origins in production for now
-    ])
-
+# Add CORS middleware - simplified for Heroku deployment
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # Allow all origins for now
+    allow_credentials=False,  # Set to False when using "*" origins
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -94,36 +86,41 @@ app.include_router(notifications_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(event_sessions_router, prefix="/api")
 
-# Mount static files for frontend
+# Mount static files for frontend (if available)
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
 if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    
-    # Serve React app for all non-API routes
-    @app.get("/{path:path}")
-    async def serve_frontend(path: str):
-        """Serve the React frontend for all non-API routes."""
-        if path.startswith("api/"):
-            raise HTTPException(status_code=404, detail="API route not found")
+    try:
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
         
-        # Serve index.html for React Router
-        index_file = os.path.join(static_dir, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-        else:
-            raise HTTPException(status_code=404, detail="Frontend not found")
+        # Serve React app for non-API routes
+        @app.get("/{path:path}")
+        async def serve_frontend(path: str):
+            if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc"):
+                raise HTTPException(status_code=404, detail="API route not found")
+            
+            index_file = os.path.join(static_dir, "index.html")
+            if os.path.exists(index_file):
+                return FileResponse(index_file)
+            else:
+                raise HTTPException(status_code=404, detail="Frontend not found")
+    except Exception as e:
+        # If static file mounting fails, just skip it
+        logger.warning(f"Could not mount static files: {e}")
 
 @app.get("/")
 async def root():
-    """Root endpoint - serve React app."""
+    """Root endpoint - serve React app or API info."""
     static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
     index_file = os.path.join(static_dir, "index.html")
+    
     if os.path.exists(index_file):
         return FileResponse(index_file)
+    
     return {
         "message": "AI Attendance Management System API",
         "version": settings.version,
-        "docs": "/docs"
+        "docs": "/docs",
+        "status": "running"
     }
     
 @app.on_event("startup")
