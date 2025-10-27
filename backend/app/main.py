@@ -1,10 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from app.core.config import settings
-import os
 from app.api.routes import auth, face_recognition, students, classes, attendance, analytics, comprehensive
 from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
@@ -14,7 +11,10 @@ from app.api.routes.face_testing import router as face_testing_router
 from app.api.routes.event_sessions import router as event_sessions_router
 from app.api.routes.academic_metrics import router as academic_metrics_router
 from app.api.routes.student_attendance import router as student_attendance_router
+from app.api.routes.session_metrics import router as session_metrics_router
 from app.api.routes.admin_semester_config import router as admin_semester_config_router
+from app.api.routes.student_calendar import router as student_calendar_router
+from app.api.routes.calendar_generator import router as calendar_generator_router
 from app.api.endpoints.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
@@ -37,11 +37,19 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware - simplified for Heroku deployment
+# Add CORS middleware with more permissive settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now
-    allow_credentials=False,  # Set to False when using "*" origins
+    # When allow_credentials=True, '*' is not allowed. List explicit origins used by frontend.
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -80,47 +88,22 @@ app.include_router(subjects_router, prefix="/api")
 app.include_router(admins_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(academic_metrics_router, prefix="/api")
+app.include_router(session_metrics_router, prefix="/api")
 app.include_router(student_attendance_router, prefix="/api")
+app.include_router(student_calendar_router, prefix="/api")
+app.include_router(calendar_generator_router, prefix="/api")
 app.include_router(admin_semester_config_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(event_sessions_router, prefix="/api")
 
-# Mount static files for frontend (if available)
-static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
-if os.path.exists(static_dir):
-    try:
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
-        
-        # Serve React app for non-API routes
-        @app.get("/{path:path}")
-        async def serve_frontend(path: str):
-            if path.startswith("api/") or path.startswith("docs") or path.startswith("redoc"):
-                raise HTTPException(status_code=404, detail="API route not found")
-            
-            index_file = os.path.join(static_dir, "index.html")
-            if os.path.exists(index_file):
-                return FileResponse(index_file)
-            else:
-                raise HTTPException(status_code=404, detail="Frontend not found")
-    except Exception as e:
-        # If static file mounting fails, just skip it
-        logger.warning(f"Could not mount static files: {e}")
-
 @app.get("/")
 async def root():
-    """Root endpoint - serve React app or API info."""
-    static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "..", "frontend", "dist")
-    index_file = os.path.join(static_dir, "index.html")
-    
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    
+    """Root endpoint."""
     return {
         "message": "AI Attendance Management System API",
         "version": settings.version,
-        "docs": "/docs",
-        "status": "running"
+        "docs": "/docs"
     }
     
 @app.on_event("startup")

@@ -206,6 +206,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   }, [currentTime]);
 
   // Use attendance data from props or fetch if not provided
+  // FIXED: Reduced staleTime to 5 seconds and added polling to detect external changes
   const { data: fetchedAttendance, refetch: refetchAttendance } = useQuery({
     queryKey: ['today-attendance-by-subject', user?.id, studentData?.id],
     queryFn: async () => {
@@ -227,6 +228,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           studentId: studentData.id, // Use student record ID, not user ID
           date: today
         });
+        console.log('[DEBUG] Fetched attendance records:', records.length, 'records');
         return records;
       } catch (error) {
         console.error('Error fetching today attendance:', error);
@@ -234,7 +236,9 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       }
     },
     enabled: !!user?.id && !!studentData?.id && !todayAttendanceProp, // Only fetch if not provided via prop
-    staleTime: 30 * 1000,
+    staleTime: 5 * 1000, // FIXED: Reduced from 30s to 5s for faster updates
+    refetchInterval: 10 * 1000, // FIXED: Auto-refetch every 10 seconds to detect external changes
+    refetchOnWindowFocus: true, // FIXED: Refetch when user switches back to tab
   });
 
   // Use prop data if available, otherwise use fetched data
@@ -267,11 +271,16 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         const recordSubjectIdInt = recordSubjectId ? parseInt(recordSubjectId.toString()) : null;
         const scheduleSubjectIdInt = scheduleSubjectId ? parseInt(scheduleSubjectId.toString()) : null;
         
-        // Debug: Check ID matching
-        const idsMatch = recordSubjectIdInt === scheduleSubjectIdInt;
+        // Debug: Enhanced logging
+        console.log(`[DEBUG] Checking match for ${subject.subjectName} (${subject.subjectCode}):`, {
+          scheduleSubjectId: scheduleSubjectIdInt,
+          recordSubjectId: recordSubjectIdInt,
+          recordStatus: record.status
+        });
         
         // Primary strategy: Integer comparison (most reliable)
         if (recordSubjectIdInt && scheduleSubjectIdInt && recordSubjectIdInt === scheduleSubjectIdInt) {
+          console.log(`[DEBUG] ✅ MATCH by ID for ${subject.subjectName}`);
           return true;
         }
         
@@ -283,41 +292,53 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         
         // Strategy 2: Subject code matching
         if (extendedRecord.subjectCode && extendedRecord.subjectCode === subject.subjectCode) {
-          console.log(`[DEBUG] ✅ MATCH FOUND for ${subject.subjectName} - Subject Code: ${subject.subjectCode}`);
+          console.log(`[DEBUG] ✅ MATCH by Code for ${subject.subjectName} - ${subject.subjectCode}`);
           return true;
         }
         
         // Strategy 3: Subject name matching (case-insensitive)
         if (extendedRecord.subjectName?.toLowerCase() === subject.subjectName?.toLowerCase()) {
-          console.log(`[DEBUG] ✅ MATCH FOUND for ${subject.subjectName} - Subject Name match`);
+          console.log(`[DEBUG] ✅ MATCH by Name for ${subject.subjectName}`);
           return true;
         }
         
         return false;
       });
 
-      // Determine status - prioritize database record over time-based calculation
+      // FIXED: Always prioritize database record if it exists
       let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
       let attendanceMarked = false;
 
       if (attendanceRecord) {
-        // Use database status as authoritative source
+        // Database record exists - use it as authoritative source
         attendanceMarked = true;
-        if (attendanceRecord.status === 'present' || attendanceRecord.status === 'late') {
+        const dbStatus = attendanceRecord.status.toLowerCase();
+        
+        console.log(`[DEBUG] ${subject.subjectName} has DB record with status: ${dbStatus}`);
+        
+        if (dbStatus === 'present' || dbStatus === 'late') {
           status = 'Present';
-        } else if (attendanceRecord.status === 'absent') {
+        } else if (dbStatus === 'absent') {
           status = 'Absent';
         } else {
-          status = 'Present'; // Default for any other status
+          // Unknown status, default to Present if marked
+          status = 'Present';
         }
+        
+        console.log(`[DEBUG] ${subject.subjectName} final status from DB: ${status}`);
       } else {
         // No database record - calculate based on time
+        console.log(`[DEBUG] ${subject.subjectName} has NO DB record. Time-based: isAfterEnd=${isAfterEnd}, isCurrentPeriod=${isCurrentPeriod}, isBeforeStart=${isBeforeStart}`);
+        
         if (isAfterEnd) {
-          status = 'Absent';
+          status = 'Absent'; // Class ended, no attendance = Absent
+          console.log(`[DEBUG] ${subject.subjectName} marked Absent (class ended, no record)`);
         } else if (isCurrentPeriod) {
-          status = 'Pending';
+          status = 'Pending'; // Class ongoing, waiting for attendance
+          console.log(`[DEBUG] ${subject.subjectName} marked Pending (class ongoing)`);
         } else {
-          status = 'Starts Soon';
+          status = 'Starts Soon'; // Class hasn't started yet
+          console.log(`[DEBUG] ${subject.subjectName} marked Starts Soon (not started yet)`);
         }
       }
 
@@ -398,30 +419,39 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       });
       
       console.log('[DEBUG] Calling refetchAttendance and onAttendanceMarked...');
-      // Refresh attendance data and notify parent - use multiple strategies with correct query keys
+      // FIXED: Comprehensive invalidation of all attendance-related queries
       await Promise.all([
         refetchAttendance(),
-        queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
-        queryClient.refetchQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
-        // Also invalidate other attendance-related queries
-        queryClient.invalidateQueries({ queryKey: ['attendance-summary', user?.id] }),
-        queryClient.invalidateQueries({ queryKey: ['student-attendance-summary', user?.id] }),
-        queryClient.invalidateQueries({ queryKey: ['today-attendance-data', user?.id, studentData?.id] })
+        // Invalidate all possible attendance query keys
+        queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject'] }),
+        queryClient.invalidateQueries({ queryKey: ['attendance-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-attendance-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['today-attendance-data'] }),
+        queryClient.invalidateQueries({ queryKey: ['attendance'] }),
+        queryClient.invalidateQueries({ queryKey: ['student-today-schedule'] }),
       ]);
+      
+      // FIXED: Immediately refetch with exact query keys
+      await queryClient.refetchQueries({ 
+        queryKey: ['today-attendance-by-subject', user?.id, studentData?.id],
+        exact: true 
+      });
+      
       onAttendanceMarked?.();
       
-      // Force a small delay to ensure backend has processed the data
+      // FIXED: Extended delay to ensure backend commit + second invalidation wave
       setTimeout(async () => {
+        console.log('[DEBUG] Second wave refresh after backend processing');
         await Promise.all([
-          refetchAttendance(),
-          queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
-          queryClient.refetchQueries({ queryKey: ['today-attendance-by-subject', user?.id, studentData?.id] }),
-          // Also refresh other related queries
-          queryClient.invalidateQueries({ queryKey: ['attendance-summary', user?.id] }),
-          queryClient.invalidateQueries({ queryKey: ['student-attendance-summary', user?.id] }),
-          queryClient.invalidateQueries({ queryKey: ['today-attendance-data', user?.id, studentData?.id] })
+          queryClient.invalidateQueries({ queryKey: ['today-attendance-by-subject'] }),
+          queryClient.invalidateQueries({ queryKey: ['attendance-summary'] }),
+          queryClient.invalidateQueries({ queryKey: ['student-attendance-summary'] }),
+          queryClient.refetchQueries({ 
+            queryKey: ['today-attendance-by-subject', user?.id, studentData?.id],
+            exact: true 
+          }),
         ]);
-      }, 1000);
+      }, 1500);
     } else {
       toast({
         title: "Face Verification Failed",
@@ -683,10 +713,16 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
                     )}
                   </>
                 ) : subject.status === 'Absent' ? (
-                  <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    Absent
-                  </Badge>
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Absent
+                    </Badge>
+                    {/* Show if DB-marked or time-based */}
+                    <p className="text-xs text-slate-400">
+                      {subject.attendanceMarked ? '📋 Admin marked' : '⏰ Auto (ended)'}
+                    </p>
+                  </div>
                 ) : subject.status === 'Starts Soon' ? (
                   <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30">
                     <Timer className="h-3 w-3 mr-1" />

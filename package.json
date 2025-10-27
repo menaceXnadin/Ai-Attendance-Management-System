@@ -1,12 +1,20 @@
 {
-  "name": "ai-attendance-fullstack",
+  "name": "ai-attendance-management-system",
   "version": "1.0.0",
+  "description": "AI-powered attendance management system with facial recognition",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "build": "cd frontend && npm install && npm run build",
-    "heroku-postbuild": "cd frontend && npm install && npm run build"
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "install:frontend": "cd frontend && npm install"
   },
-  "engines": {
-    "node": "18.x",
-    "npm": "9.x"
-  }
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/menaceXnadin/Ai-Attendance-Management-System.git"
+  },
+  "author": "MenaceXnadin",
+  "license": "MIT"
 }

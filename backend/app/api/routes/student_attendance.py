@@ -17,6 +17,7 @@ from app.models import Student, AttendanceRecord, Subject
 from app.models.schedule import ClassSchedule
 from app.models.calendar import AcademicEvent
 from app.services.academic_calculator import get_current_semester_metrics, get_student_specific_semester_metrics
+from app.services.session_metrics_service import SessionMetricsService
 from app.models import SemesterConfiguration
 
 router = APIRouter(prefix="/student-attendance", tags=["student-attendance"])
@@ -79,23 +80,55 @@ async def get_student_attendance_summary(
     # Calculate percentages using DAYS (not periods)
     total_academic_days = academic_metrics.get('total_academic_days', 0)
     
+    # Get session metrics for enhanced accuracy
+    session_service = SessionMetricsService(db)
+    semester_start = datetime.strptime(academic_metrics.get('semester_start_date'), "%Y-%m-%d").date()
+    semester_end = datetime.strptime(academic_metrics.get('semester_end_date'), "%Y-%m-%d").date()
+    
+    session_metrics = await session_service.get_comprehensive_metrics(
+        start_date=semester_start,
+        end_date=semester_end,
+        student_id=student.id,
+        semester=student.semester
+    )
+    
+    # Use recommended calculation method from session metrics
+    recommended_method = session_metrics["recommended"]["method"]
+    
+    # Choose denominator based on recommendation
+    if recommended_method == "actual":
+        total_for_calculation = session_metrics["actual"]["total_conducted_days"]
+    else:
+        total_for_calculation = total_academic_days
+    
     # Use day-based calculation for main percentage
-    percentage_present = (present_days / total_academic_days * 100) if total_academic_days > 0 else 0
-    percentage_absent = (absent_days / total_academic_days * 100) if total_academic_days > 0 else 0  
-    percentage_late = (late_days / total_academic_days * 100) if total_academic_days > 0 else 0
+    percentage_present = (present_days / total_for_calculation * 100) if total_for_calculation > 0 else 0
+    percentage_absent = (absent_days / total_for_calculation * 100) if total_for_calculation > 0 else 0  
+    percentage_late = (late_days / total_for_calculation * 100) if total_for_calculation > 0 else 0
     
     return {
         "total_academic_days": total_academic_days,
         "total_periods": academic_metrics.get('total_periods', 0),
         
+        # SESSION METRICS (Planned vs Actual)
+        "session_metrics": {
+            "planned_classes": session_metrics["planned"]["total_academic_days"],
+            "actual_conducted_classes": session_metrics["actual"]["total_conducted_days"],
+            "calculation_method_used": recommended_method,
+            "deviation": session_metrics["deviation"]["count"],
+            "deviation_severity": session_metrics["deviation"]["severity"],
+            "has_deviation": session_metrics["deviation"]["severity"] != "minimal"
+        },
+        
         # DYNAMIC SEMESTER INFO (from database configuration)
         "semester_start_date": academic_metrics.get('semester_start_date'),
         "semester_end_date": academic_metrics.get('semester_end_date'),
         
-        # DAY-BASED METRICS (primary)
+        # DAY-BASED METRICS (primary) - Using recommended calculation method
         "present": present_days,
         "absent": absent_days,
         "late": late_days,
+        "total_used_for_calculation": total_for_calculation,
         "total_days_with_attendance": present_days + absent_days + late_days,
         "days_with_any_attendance": present_days + absent_days + late_days,  # Frontend compatibility
         "percentage_present": round(percentage_present, 2),

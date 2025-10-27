@@ -77,3 +77,7 @@ cleanup_*.py
 debug-*.html
 debug*.html
 debug*.js
+
+
+#Ignore insiders AI rules
+.github\instructions\codacy.instructions.md

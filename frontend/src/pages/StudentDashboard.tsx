@@ -144,7 +144,10 @@ const StudentDashboard = () => {
         return { hasAttendance: false, records: [] };
       }
     },
-    enabled: !!user?.id && !!studentData?.id
+    enabled: !!user?.id && !!studentData?.id,
+    staleTime: 5 * 1000, // 5 seconds - fetch fresh data quickly
+    refetchInterval: 10 * 1000, // Auto-refetch every 10 seconds to detect admin changes
+    refetchOnWindowFocus: true, // Refetch when user switches back to tab
   });
 
   // Fetch today's real schedule data for dashboard overview - using student-specific endpoint

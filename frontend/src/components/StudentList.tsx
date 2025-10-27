@@ -3,7 +3,8 @@ import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, Tabl
 import { Button } from '@/components/ui/button';
 import { StudentFormData } from './StudentForm';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Edit, Trash2, User, Loader2 } from 'lucide-react';
+import { Edit, Trash2, User, Loader2, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface StudentListProps {
   students: StudentFormData[];
@@ -13,6 +14,8 @@ interface StudentListProps {
 }
 
 const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentListProps) => {
+  const navigate = useNavigate();
+  
   // Debug: Log students data
   React.useEffect(() => {
     console.log('[StudentList] Received students data:', students);
@@ -76,16 +79,27 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
                   <TableCell>{student.semester}</TableCell>
                   <TableCell>{student.year}</TableCell>
                   <TableCell>{student.batch}</TableCell>
-                  <TableCell className="text-right space-x-2">
-                    <Button variant="outline" size="sm" onClick={() => onEdit(student)}>
-                      <Edit className="h-4 w-4 mr-1" />
-                      Edit
-                    </Button>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(`/app/students/${student.id}/calendar`)}
+                        title="View attendance calendar"
+                      >
+                        <Calendar className="h-4 w-4 mr-1" />
+                        Calendar
+                      </Button>
+                      
+                      <Button variant="outline" size="sm" onClick={() => onEdit(student)}>
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
 
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="text-red-500 hover:text-red-600" 
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="text-red-500 hover:text-red-600" 
                       onClick={() => {
                         console.log("Delete button clicked for student:", student);
                         console.log("Student ID being passed:", student.id);
@@ -106,6 +120,7 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
                       <Trash2 className="h-4 w-4 mr-1" />
                       Delete
                     </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

@@ -67,6 +67,7 @@ import FaceRegistrationDebugPage from "./pages/FaceRegistrationDebugPage";
 import FaceTestingPage from "./components/FaceTestingPage";
 import AcademicCalendar from "./pages/AcademicCalendar";
 import StudentCalendar from "./pages/StudentCalendar";
+import StudentAttendanceCalendar from "./pages/StudentAttendanceCalendar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -184,6 +185,7 @@ const App = () => {
               }>
                 <Route index element={<Dashboard />} />
                 <Route path="students" element={<StudentsPage />} />
+                <Route path="students/:studentId/calendar" element={<StudentAttendanceCalendar />} />
                 <Route path="calendar" element={<AcademicCalendar />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="faculties" element={<FacultiesPage />} />

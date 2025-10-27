@@ -3,35 +3,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from app.core.config import settings
-import os
-
-# Fix database URL for Heroku PostgreSQL
-def get_database_urls():
-    """Get properly formatted PostgreSQL database URLs"""
-    db_url = settings.database_url
-    db_url_sync = settings.database_url_sync
-    
-    # Handle Heroku DATABASE_URL conversion
-    heroku_db_url = os.getenv("DATABASE_URL")
-    if heroku_db_url:
-        # Convert postgres:// to postgresql:// for SQLAlchemy 2.0+
-        if heroku_db_url.startswith("postgres://"):
-            heroku_db_url = heroku_db_url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif not heroku_db_url.startswith("postgresql"):
-            heroku_db_url = heroku_db_url.replace("://", "+asyncpg://", 1)
-        
-        db_url = heroku_db_url
-        # Sync version for migrations
-        db_url_sync = heroku_db_url.replace("+asyncpg://", "+psycopg2://")
-    
-    return db_url, db_url_sync
-
-# Get the corrected URLs
-async_db_url, sync_db_url = get_database_urls()
 
 # Async engine for FastAPI
 async_engine = create_async_engine(
-    async_db_url,
+    settings.database_url,
     echo=settings.debug,
     future=True,
     pool_size=10,
@@ -43,7 +18,7 @@ async_engine = create_async_engine(
 
 # Sync engine for Alembic migrations
 sync_engine = create_engine(
-    sync_db_url,
+    settings.database_url_sync,
     echo=settings.debug
 )
 

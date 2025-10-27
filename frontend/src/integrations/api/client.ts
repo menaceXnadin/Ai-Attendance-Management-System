@@ -223,6 +223,8 @@ export const api = {
       try {
         const response = await apiRequest('/auth/refresh-token', {
           method: 'POST',
+          skipAuth: false, // Include auth header but prevent retry
+          _retry: true, // Prevent infinite loop by marking as retry
         });
 
         localStorage.setItem('authToken', response.access_token);
@@ -375,6 +377,8 @@ export const api = {
         id: record?.id?.toString?.() || '',
         studentId: record?.student_id?.toString?.() || record?.studentId?.toString?.() || '',
         subjectId: record?.subjectId?.toString?.() || record?.subject_id?.toString?.() || record?.class_id?.toString?.() || '',
+        subjectName: (record as any)?.subjectName?.toString?.() || (record as any)?.subject_name?.toString?.(),
+        subjectCode: (record as any)?.subjectCode?.toString?.() || (record as any)?.subject_code?.toString?.(),
         date: (record?.date ?? '').toString(),
         status: (record?.status ?? 'absent') as Attendance['status'],
         timeIn: (record as any)?.timeIn?.toString?.() || (record as any)?.time_in?.toString?.(),
@@ -1014,6 +1018,32 @@ export const api = {
       const endpoint = params.toString() ? `/analytics/class-averages?${params}` : '/analytics/class-averages';
       return apiRequest(endpoint);
     },
+  },
+};
+
+// Helper client for services that need axios-like interface
+export const apiClient = {
+  get: async <T = any>(path: string): Promise<{ data: T }> => {
+    const data = await apiRequest<T>(path);
+    return { data };
+  },
+  post: async <T = any>(path: string, body?: any): Promise<{ data: T }> => {
+    const data = await apiRequest<T>(path, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { data };
+  },
+  put: async <T = any>(path: string, body?: any): Promise<{ data: T }> => {
+    const data = await apiRequest<T>(path, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { data };
+  },
+  delete: async <T = any>(path: string): Promise<{ data: T }> => {
+    const data = await apiRequest<T>(path, { method: 'DELETE' });
+    return { data };
   },
 };
 

@@ -70,6 +70,8 @@ export interface Attendance {
   id: string;
   studentId: string;
   subjectId: string;  // Fixed: should be subjectId, not classId
+  subjectName?: string; // Subject name from backend join
+  subjectCode?: string; // Subject code from backend join
   date: string;
   status: 'present' | 'absent' | 'late' | 'excused';
   // Optional timestamps for accurate time displays
