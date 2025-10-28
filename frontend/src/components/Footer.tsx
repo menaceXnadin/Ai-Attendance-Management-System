@@ -43,10 +43,8 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
           <div className="col-span-1 md:col-span-4">
             <Link to="/" className="flex items-center group">
-              {/* Footer: keep gradient badge and put logo inside to match navbar style */}
-              <span className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center p-1 shadow-[0_0_15px_rgba(56,189,248,0.3)]">
-                <img src="/main.png" alt="AttendAI" className="h-8 w-8 rounded-full object-contain bg-white/0" />
-              </span>
+              {/* Plain logo image — no rounded mask or gradient wrapper */}
+              <img src="/main.png" alt="AttendAI" className="h-10 w-10 object-contain" />
               <span className="ml-3 text-xl font-bold bg-gradient-to-r from-white to-blue-300 bg-clip-text text-transparent">AttendAI</span>
             </Link>
             <p className="mt-5 text-blue-200/80 max-w-md">
