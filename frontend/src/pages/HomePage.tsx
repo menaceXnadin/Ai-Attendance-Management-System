@@ -74,8 +74,11 @@ const HomePage = () => {
                     <div className="p-3 text-xs">
                       {/* Header */}
                       <div className="flex items-center justify-between mb-3">
-                        <div className="h-4 w-24 bg-gradient-to-r from-blue-500 to-teal-400 rounded text-white flex items-center justify-center text-[8px] font-bold">
-                          <img src="/main.png" alt="AttendAI" className="h-3" />
+                        <div className="h-6 w-24 bg-gradient-to-r from-blue-500 to-teal-400 rounded flex items-center justify-center text-[8px] font-bold">
+                          {/* inner badge keeps padding so logo isn't flush to edges */}
+                          <div className="p-0.5 rounded-full bg-white/5 flex items-center justify-center">
+                            <img src="/main.png" alt="AttendAI" className="h-4 w-4 rounded-full object-contain" />
+                          </div>
                         </div>
                         <div className="h-6 w-16 bg-slate-700 rounded-full"></div>
                       </div>
