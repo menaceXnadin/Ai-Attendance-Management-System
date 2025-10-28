@@ -40,9 +40,12 @@ const Navbar = () => {
         <div className="flex justify-between h-20 items-center">
           <div className="flex-shrink-0 flex items-center">
             <Link to="/" className="flex items-center group">
-              <span className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center shadow-[0_0_15px_rgba(56,189,248,0.5)] transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(56,189,248,0.7)]">
-                <span className="text-white font-bold text-lg">A</span>
-              </span>
+              {/* Use uploaded main.png as the logo — served from frontend/public/main.png */}
+              <img
+                src="/main.png"
+                alt="AttendAI"
+                className="h-10 w-10 rounded-xl object-cover shadow-[0_0_15px_rgba(56,189,248,0.5)] transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(56,189,248,0.7)]"
+              />
               <span className={`ml-3 text-xl font-bold bg-gradient-to-r ${styles.logoGradient} bg-clip-text text-transparent ${styles.logoHoverGradient} transition-all duration-300`}>AttendAI</span>
             </Link>
           </div>

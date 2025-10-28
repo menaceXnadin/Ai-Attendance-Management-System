@@ -75,7 +75,7 @@ const HomePage = () => {
                       {/* Header */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="h-4 w-24 bg-gradient-to-r from-blue-500 to-teal-400 rounded text-white flex items-center justify-center text-[8px] font-bold">
-                          AttendAI
+                          <img src="/main.png" alt="AttendAI" className="h-3" />
                         </div>
                         <div className="h-6 w-16 bg-slate-700 rounded-full"></div>
                       </div>
