@@ -12,7 +12,7 @@ export default function FaceRegistrationDebugPage() {
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
+        video: { width: 480, height: 640, facingMode: 'user' }
       });
 
       if (videoRef.current) {

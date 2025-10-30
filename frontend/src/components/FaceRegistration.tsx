@@ -477,13 +477,13 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({
           <>
             {isActive ? (
               <div className="relative">
-                <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl">
+                <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl max-w-md mx-auto" style={{ aspectRatio: '3/4' }}>
                   <video 
                     ref={videoRef} 
                     autoPlay 
                     playsInline
                     muted
-                    className={`w-full bg-slate-800 ${mirrorPreview ? 'transform -scale-x-100' : ''}`}
+                    className={`w-full h-full object-cover bg-slate-800 ${mirrorPreview ? 'transform -scale-x-100' : ''}`}
                   />
                   
                   {/* Face detection overlay canvas */}

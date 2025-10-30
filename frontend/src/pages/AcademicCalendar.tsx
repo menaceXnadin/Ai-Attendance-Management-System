@@ -1462,7 +1462,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                               ? 'bg-slate-800/40' 
                               : 'bg-slate-900/20 opacity-50'
                           } ${
-                            dayDate.format('YYYY-MM-DD') === moment().format('YYYY-MM-DD')
+                            dayDate.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
                               ? 'ring-2 ring-blue-500/50 bg-blue-950/30'
                               : ''
                           } ${
@@ -1550,7 +1550,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                         const day = moment(startOfWeek).add(i, 'days');
                         weekDays.push(
                           <div key={day.format('YYYY-MM-DD')} className={`p-3 text-center rounded-lg ${
-                            day.format('YYYY-MM-DD') === moment().format('YYYY-MM-DD')
+                            day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
                               ? 'bg-blue-500/20 text-blue-300 font-bold'
                               : 'bg-slate-800/60 text-slate-300'
                           }`}>
@@ -1608,7 +1608,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                     className={`border border-slate-700/30 rounded p-1 transition-all duration-200 group ${
                                       isAdmin ? 'cursor-pointer hover:bg-slate-700/50 hover:border-blue-500/30' : ''
                                     } ${
-                                      day.format('YYYY-MM-DD') === moment().format('YYYY-MM-DD')
+                                      day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
                                         ? 'bg-blue-950/20'
                                         : 'bg-slate-800/20'
                                     }`}

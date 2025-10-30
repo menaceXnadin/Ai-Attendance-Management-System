@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
+import {
   CalendarIcon, 
   HomeIcon, 
   LogOutIcon, 
@@ -32,6 +32,7 @@ import {
   Target,
   Globe
 } from 'lucide-react';
+import logo from '@/assets/main.png';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
 import { useAuth } from '@/contexts/useAuth';
@@ -133,9 +134,8 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
         <Sidebar className="border-r border-slate-700/50 bg-slate-900/60 backdrop-blur-md">
           <SidebarHeaderComponent className="flex h-20 items-center px-6 border-b border-slate-700/50">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                <Camera className="h-5 w-5 text-white" />
-              </div>
+                {/* Plain logo image — imported so bundler fingerprints it */}
+                <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
               <div>
                 <span className="text-xl font-bold bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
                   AttendAI

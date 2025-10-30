@@ -10,136 +10,153 @@ const AboutPage = () => {
     <>
       <Navbar />
 
-      <div className="bg-white">
-        {/* Hero section */}
-        <div className="relative isolate px-6 lg:px-8">
-          <div className="mx-auto max-w-3xl py-16 sm:py-24 lg:py-28">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-6xl">
-                About AttendAI
-              </h1>
-              <p className="mt-6 text-lg leading-8 text-gray-600">
-                We're on a mission to modernize classroom attendance tracking with AI-powered facial recognition technology. Our platform saves educators time while providing accurate attendance data.
-              </p>
-              <div className="mt-10 flex items-center justify-center gap-x-6">
-                <Link to="/login">
-                  <Button className="bg-brand-500 hover:bg-brand-600">Get started</Button>
-                </Link>
-                <a href="#learn-more" className="text-sm font-semibold leading-6 text-gray-900">
-                  Learn more <span aria-hidden="true">↓</span>
-                </a>
-              </div>
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 to-blue-950">
+        {/* Hero Section */}
+        <section className="relative px-6 lg:px-8 pt-20 pb-16">
+          <div className="mx-auto max-w-4xl text-center">
+            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white mb-6">
+              About AttendAI
+            </h1>
+            <p className="text-lg sm:text-xl leading-relaxed text-blue-200/80 max-w-2xl mx-auto">
+              We're on a mission to modernize classroom attendance tracking with AI-powered facial recognition technology. Our platform saves educators time while providing accurate attendance data.
+            </p>
+            <div className="mt-10 flex items-center justify-center gap-6">
+              <Link to="/login">
+                <Button className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 rounded-xl px-8 py-6 text-base font-semibold transition-all duration-300">
+                  Get Started
+                </Button>
+              </Link>
+              <a 
+                href="#learn-more" 
+                className="text-base font-semibold text-blue-200/80 hover:text-white transition-colors flex items-center gap-2"
+              >
+                Learn more <span aria-hidden="true" className="text-lg">↓</span>
+              </a>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Our story section */}
-        <div id="learn-more" className="py-12 bg-gray-50 sm:py-16">
-          <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Our Story</h2>
-              <p className="mt-4 text-lg text-gray-600">
+        {/* Our Story Section */}
+        <section id="learn-more" className="py-16 px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-4xl text-center mb-12">
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                Our Story
+              </h2>
+              <p className="text-lg text-blue-200/70">
                 From a classroom challenge to an innovative solution.
               </p>
             </div>
-            <div className="mx-auto mt-12 max-w-3xl">
-              <p className="text-gray-600 mb-6">
+            <div className="mx-auto max-w-4xl bg-slate-900/60 backdrop-blur-lg p-10 sm:p-12 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
+              <p className="text-blue-200/70 leading-relaxed mb-6 text-base">
                 AttendAI began with a simple observation: educators were spending too much valuable teaching time on manual attendance. Founded in 2023 by a team of educators and technologists, we set out to solve this universal problem.
               </p>
-              <p className="text-gray-600 mb-6">
-                Our founder, Dr. Sarah Chen, experienced this challenge firsthand as a professor at a large university. The traditional roll call took up to 10 minutes of each class—time that could be better spent teaching. This led to the idea of using facial recognition technology to automate the process.
+              <p className="text-blue-200/70 leading-relaxed mb-6 text-base">
+                Our founder, Nadin Tamang, experienced this challenge firsthand as a professor at a large university. The traditional roll call took up to 10 minutes of each class—time that could be better spent teaching. This led to the idea of using facial recognition technology to automate the process.
               </p>
-              <p className="text-gray-600">
+              <p className="text-blue-200/70 leading-relaxed text-base">
                 Today, AttendAI is used in hundreds of educational institutions worldwide, saving educators thousands of hours and providing valuable attendance insights that help identify at-risk students earlier.
               </p>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Team section */}
-        <div className="py-12 sm:py-16">
-          <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Our Team</h2>
-              <p className="mt-4 text-lg text-gray-600">
+        {/* Team Section */}
+        <section className="py-16 px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-4xl text-center mb-12">
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                Our Team
+              </h2>
+              <p className="text-lg text-blue-200/70">
                 Meet the people behind AttendAI.
               </p>
             </div>
-            <div className="mx-auto mt-12 grid max-w-lg gap-x-8 gap-y-12 sm:max-w-xl lg:mx-0 lg:max-w-none lg:grid-cols-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {[
-                { name: 'Dr. Sarah Chen', role: 'Founder & CEO', image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&h=300&auto=format&fit=crop' },
-                { name: 'Michael Rodriguez', role: 'CTO', image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=300&h=300&auto=format&fit=crop' },
-                { name: 'Aisha Patel', role: 'Head of AI Research', image: 'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=300&h=300&auto=format&fit=crop' },
+                { name: 'Nadin Tamang', role: 'Founder & CEO', image: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=300&h=300&auto=format&fit=crop' },
+                { name: 'Diwash Ghimire', role: 'CTO', image: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=300&h=300&auto=format&fit=crop' },
+                { name: 'Abhishek Subedi', role: 'Head of AI Research', image: 'https://images.unsplash.com/photo-1534751516642-a1af1ef26a56?w=300&h=300&auto=format&fit=crop' },
               ].map((person) => (
-                <div key={person.name} className="text-center">
-                  <img
-                    className="mx-auto h-48 w-48 rounded-full object-cover"
-                    src={person.image}
-                    alt={person.name}
-                  />
-                  <h3 className="mt-6 text-xl font-semibold leading-7 tracking-tight text-gray-900">{person.name}</h3>
-                  <p className="text-base leading-6 text-gray-600">{person.role}</p>
+                <div 
+                  key={person.name} 
+                  className="group text-center bg-slate-900/60 backdrop-blur-lg p-8 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2"
+                >
+                  <div className="relative inline-block">
+                    <img
+                      className="mx-auto h-40 w-40 object-cover rounded-full border-4 border-slate-700/50 group-hover:border-blue-500/30 transition-all duration-300"
+                      src={person.image}
+                      alt={person.name}
+                    />
+                  </div>
+                  <h3 className="mt-6 text-xl font-semibold text-white">{person.name}</h3>
+                  <p className="mt-2 text-base text-blue-200/70">{person.role}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Values section */}
-        <div className="py-12 bg-gray-50 sm:py-16">
-          <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl">Our Values</h2>
-              <p className="mt-4 text-lg text-gray-600">
+        {/* Values Section */}
+        <section className="py-16 px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-4xl text-center mb-12">
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
+                Our Values
+              </h2>
+              <p className="text-lg text-blue-200/70">
                 The principles that guide our work.
               </p>
             </div>
-            <div className="mx-auto mt-12 grid max-w-lg grid-cols-1 gap-8 sm:max-w-xl lg:mx-0 lg:max-w-none lg:grid-cols-3">
-              <div className="bg-white p-8 rounded-lg shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4">Privacy First</h3>
-                <p className="text-gray-600">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
+                <h3 className="text-xl font-semibold text-white mb-4">Privacy First</h3>
+                <p className="text-blue-200/70 leading-relaxed">
                   We design our technology with privacy and security as the top priority, ensuring student data is protected at all times.
                 </p>
               </div>
-              <div className="bg-white p-8 rounded-lg shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4">Education Impact</h3>
-                <p className="text-gray-600">
+              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
+                <h3 className="text-xl font-semibold text-white mb-4">Education Impact</h3>
+                <p className="text-blue-200/70 leading-relaxed">
                   Every feature we build must have a positive impact on the educational experience for both students and educators.
                 </p>
               </div>
-              <div className="bg-white p-8 rounded-lg shadow-sm">
-                <h3 className="text-xl font-semibold text-gray-900 mb-4">Continuous Improvement</h3>
-                <p className="text-gray-600">
+              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
+                <h3 className="text-xl font-semibold text-white mb-4">Continuous Improvement</h3>
+                <p className="text-blue-200/70 leading-relaxed">
                   We're committed to constantly improving our technology through research and user feedback.
                 </p>
               </div>
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* CTA section */}
-        <div className="bg-brand-500 py-16">
-          <div className="mx-auto max-w-7xl px-6 lg:px-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <h2 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+        {/* CTA Section */}
+        <section className="bg-gradient-to-r from-blue-600 to-teal-400 py-20 px-6 lg:px-8">
+          <div className="mx-auto max-w-7xl">
+            <div className="mx-auto max-w-3xl text-center">
+              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
                 Ready to transform your classroom?
               </h2>
-              <p className="mt-6 text-lg leading-8 text-brand-50">
+              <p className="text-lg sm:text-xl leading-relaxed text-white/90">
                 Join thousands of educators who are saving time and improving attendance tracking with AttendAI.
               </p>
-              <div className="mt-10 flex items-center justify-center gap-x-6">
+              <div className="mt-10 flex items-center justify-center gap-6">
                 <Link to="/login">
-                  <Button className="bg-white text-brand-600 hover:bg-gray-100">
-                    Get started
+                  <Button className="bg-white text-blue-600 hover:bg-gray-100 rounded-xl px-8 py-6 text-base font-semibold transition-all duration-300">
+                    Get Started
                   </Button>
                 </Link>
-                <Link to="/contact" className="text-sm font-semibold leading-6 text-white">
-                  Contact us <span aria-hidden="true">→</span>
+                <Link 
+                  to="/contact" 
+                  className="text-base font-semibold text-white hover:text-white/80 transition-colors flex items-center gap-2"
+                >
+                  Contact us <span aria-hidden="true" className="text-lg">→</span>
                 </Link>
               </div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       <Footer />

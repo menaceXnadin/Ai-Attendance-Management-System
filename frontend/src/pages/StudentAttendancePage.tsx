@@ -1,83 +1,23 @@
-import React, { useState } from 'react';
+import React from 'react';
 import StudentSidebar from '@/components/StudentSidebar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Download, Calendar, BarChart3, Trophy } from 'lucide-react';
 import StudentAttendanceReport from '@/components/student/StudentAttendanceReport';
-import AttendanceCalendar from '@/components/student/AttendanceCalendar';
+import StudentAttendanceCalendar from '@/pages/StudentAttendanceCalendar';
 import AttendanceStreak from '@/components/student/AttendanceStreak';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts/useAuth';
 
 const StudentAttendancePage = () => {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const { user } = useAuth();
   const studentId = user?.id;
 
-  // Fetch attendance data for calendar (optimized)
-  const { data: calendarData = [] } = useQuery({
-    queryKey: ['student-attendance-calendar', currentMonth.getFullYear(), currentMonth.getMonth() + 1],
-    queryFn: async () => {
-      try {
-        if (!studentId) return [];
-        
-        const year = currentMonth.getFullYear();
-        const month = currentMonth.getMonth() + 1; // JavaScript months are 0-based
-        
-        console.log('Fetching calendar data for:', { year, month, studentId });
-        const response = await api.attendance.getCalendar(year, month);
-        console.log('Calendar API response:', response);
-        
-        // Check if response has the expected structure
-        if (!response || !response.calendar_data) {
-          console.error('Invalid response structure:', response);
-          return [];
-        }
-        
-        // Check if calendar_data is an array
-        if (!Array.isArray(response.calendar_data)) {
-          console.error('calendar_data is not an array:', response.calendar_data);
-          return [];
-        }
-        
-        console.log('Processing calendar data:', response.calendar_data);
-        
-        // Transform calendar response to match AttendanceCalendar component expectations
-        return response.calendar_data.map((day: {
-          date: string;
-          status: string;
-          present_count: number;
-          total_classes: number;
-          absent_count: number;
-          late_count: number;
-          excused_count: number;
-        }) => ({
-          date: day.date,
-          subject: `${day.present_count}/${day.total_classes} classes`,
-          status: (day.status as "present" | "absent" | "late" | "excused") || "absent",
-          time: new Date(day.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          details: {
-            present_count: day.present_count,
-            total_classes: day.total_classes,
-            absent_count: day.absent_count,
-            late_count: day.late_count,
-            excused_count: day.excused_count,
-            attendance_percentage: day.total_classes > 0 ? Math.round((day.present_count / day.total_classes) * 100) : 0
-          }
-        }));
-      } catch (error) {
-        console.error('Error fetching calendar attendance:', error);
-        return [];
-      }
-    },
-    enabled: !!studentId
-  });
-
   // Fetch full attendance data for other components (reports, streaks)
   const { data: attendanceData = [] } = useQuery({
-    queryKey: ['student-attendance-full', studentId, currentMonth.getFullYear(), currentMonth.getMonth()],
+    queryKey: ['student-attendance-full', studentId],
     queryFn: async () => {
       try {
         if (!studentId) return [];
@@ -173,10 +113,9 @@ const StudentAttendancePage = () => {
               </TabsContent>
 
               <TabsContent value="calendar" className="space-y-6">
-                <AttendanceCalendar 
-                  attendanceData={calendarData}
-                  currentMonth={currentMonth}
-                  onMonthChange={setCurrentMonth}
+                <StudentAttendanceCalendar 
+                  studentId={studentId?.toString()}
+                  hideBackButton={true}
                 />
               </TabsContent>
 

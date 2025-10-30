@@ -42,6 +42,7 @@ import FaceRegistration from '@/components/FaceRegistration';
 import StudentSidebar from '@/components/StudentSidebar';
 import SmartNotificationSystem from '@/components/SmartNotificationSystem';
 import TodayClassSchedule from '@/components/TodayClassSchedule';
+import { getTodayLocalDate } from '@/utils/dateUtils';
 
 
 const StudentDashboard = () => {
@@ -131,8 +132,12 @@ const StudentDashboard = () => {
     queryFn: async () => {
       if (!user?.id || !studentData?.id) return { hasAttendance: false, records: [] };
       try {
-        const today = new Date().toISOString().split('T')[0];
+        // FIXED: Use local date instead of UTC to avoid timezone issues
+        const today = getTodayLocalDate();
+        const now = new Date();
+        
         console.log('[DEBUG] Dashboard fetching attendance for student ID:', studentData.id, 'user ID:', user.id);
+        console.log('[DEBUG] Local date (not UTC):', today, '- Client time:', now.toString());
         const records = await api.attendance.getAll({
           studentId: studentData.id, // Use student record ID, not user ID
           date: today
@@ -173,6 +178,13 @@ const StudentDashboard = () => {
   const todayAttendance = todayAttendanceData?.hasAttendance || false;
   const todayAttendanceRecords = todayAttendanceData?.records || [];
   
+  // Debug logging for attendance records
+  console.log('[ATTENDANCE-DEBUG] Today attendance data:', {
+    hasAttendance: todayAttendance,
+    recordsCount: todayAttendanceRecords.length,
+    records: todayAttendanceRecords
+  });
+  
   // Filter attendance records to only include subjects that are in today's schedule
   const relevantAttendanceRecords = todayAttendanceRecords.filter(record => {
     const extendedRecord = record as Attendance & { classId?: string };
@@ -180,6 +192,12 @@ const StudentDashboard = () => {
       schedule.subject_id === parseInt(record.subjectId) || 
       schedule.subject_id === parseInt(extendedRecord.classId || '0')
     );
+  });
+
+  console.log('[ATTENDANCE-DEBUG] Relevant attendance records:', {
+    count: relevantAttendanceRecords.length,
+    presentCount: relevantAttendanceRecords.filter(r => r.status === 'present').length,
+    records: relevantAttendanceRecords
   });
 
   React.useEffect(() => {
@@ -518,18 +536,37 @@ const StudentDashboard = () => {
                           
                           if (attendanceRecord) {
                             // Use database record as authoritative source
-                            if (attendanceRecord.status === 'present') {
+                            const recordStatus = attendanceRecord.status?.toLowerCase() || '';
+                            if (recordStatus === 'present') {
                               status = 'Present';
                               statusColor = 'bg-green-500/20 text-green-300 border-green-400/30';
-                            } else if (attendanceRecord.status === 'absent') {
+                            } else if (recordStatus === 'absent') {
                               status = 'Absent';
                               statusColor = 'bg-red-500/20 text-red-300 border-red-400/30';
-                            } else if (attendanceRecord.status === 'late') {
+                            } else if (recordStatus === 'late') {
                               status = 'Late';
                               statusColor = 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30';
                             } else {
-                              status = 'Present'; // Default for other statuses
-                              statusColor = 'bg-green-500/20 text-green-300 border-green-400/30';
+                              // Unknown status - log warning and use time-based logic
+                              console.warn('[WARN] Unknown attendance status:', attendanceRecord.status, 'for subject:', schedule.subject_name);
+                              
+                              // Fallback to time-based calculation for unknown statuses
+                              const now = new Date();
+                              const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                              let endTimeMinutes = 0;
+                              
+                              if (schedule.end_time) {
+                                const [endHour, endMin] = schedule.end_time.split(':').map(Number);
+                                endTimeMinutes = endHour * 60 + endMin;
+                              }
+                              
+                              if (endTimeMinutes > 0 && currentMinutes > (endTimeMinutes + 30)) {
+                                status = 'Absent';
+                                statusColor = 'bg-red-500/20 text-red-300 border-red-400/30';
+                              } else {
+                                status = 'Pending';
+                                statusColor = 'bg-slate-600/20 text-slate-400 border-slate-500/30';
+                              }
                             }
                           } else {
                             // No database record - check if class time has passed

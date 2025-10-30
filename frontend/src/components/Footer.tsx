@@ -44,7 +44,7 @@ const Footer = () => {
           <div className="col-span-1 md:col-span-4">
             <Link to="/" className="flex items-center group">
               {/* Plain logo image — no rounded mask or gradient wrapper */}
-              <img src="/main.png" alt="AttendAI" className="h-10 w-10 object-contain" />
+              <img src="/main.png" alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
               <span className="ml-3 text-xl font-bold bg-gradient-to-r from-white to-blue-300 bg-clip-text text-transparent">AttendAI</span>
             </Link>
             <p className="mt-5 text-blue-200/80 max-w-md">

@@ -42,10 +42,10 @@ export const useRealFaceDetection = ({
   const ensureCanvasSize = useCallback(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas || !video) return { displayW: 640, displayH: 480 };
+    if (!canvas || !video) return { displayW: 480, displayH: 640 };
 
-    const displayW = video.clientWidth || video.videoWidth || 640;
-    const displayH = video.clientHeight || video.videoHeight || 480;
+    const displayW = video.clientWidth || video.videoWidth || 480;
+    const displayH = video.clientHeight || video.videoHeight || 640;
     const prev = canvasSizeRef.current;
     const dpr = window.devicePixelRatio || 1;
 
@@ -294,8 +294,8 @@ export const useRealFaceDetection = ({
             }
           }
         },
-        width: 640,
-        height: 480,
+        width: 480,
+        height: 640,
       });
 
       await camera.start();

@@ -7,8 +7,16 @@ import { Button } from '@/components/ui/button';
 interface AttendanceRecord {
   date: string;
   subject: string;
-  status: 'present' | 'absent' | 'late' | 'excused';
+  status: 'present' | 'absent' | 'late' | 'excused' | 'system_inactive';
   time: string;
+  details?: {
+    present_count: number;
+    total_classes: number;
+    absent_count: number;
+    late_count: number;
+    excused_count: number;
+    attendance_percentage: number;
+  };
 }
 
 interface AttendanceCalendarProps {
@@ -22,6 +30,11 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   currentMonth = new Date(),
   onMonthChange
 }) => {
+  // Debug: Log the attendance data
+  React.useEffect(() => {
+    console.log('AttendanceCalendar received data:', attendanceData);
+  }, [attendanceData]);
+
   // Generate calendar data for the current month
   const calendarData = useMemo(() => {
     const year = currentMonth.getFullYear();
@@ -48,30 +61,49 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         record.date.startsWith(dateStr)
       );
       
+      // Check if the date is in the future
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const currentDate = new Date(dateStr);
+      const isFuture = currentDate > today;
+      
       // Calculate day status based on attendance records
-      let dayStatus: 'present' | 'absent' | 'partial' | 'excused' | 'none' = 'none';
+      let dayStatus: 'present' | 'absent' | 'partial' | 'excused' | 'late' | 'system_inactive' | 'none' = 'none';
       if (dayAttendance.length > 0) {
         const presentCount = dayAttendance.filter(r => r.status === 'present').length;
+        const absentCount = dayAttendance.filter(r => r.status === 'absent').length;
+        const lateCount = dayAttendance.filter(r => r.status === 'late').length;
         const excusedCount = dayAttendance.filter(r => r.status === 'excused').length;
+        const systemInactiveCount = dayAttendance.filter(r => r.status === 'system_inactive').length;
         const totalCount = dayAttendance.length;
         
-        if (presentCount === totalCount) {
+        // Priority: system_inactive > present > late > excused > partial > absent
+        if (systemInactiveCount === totalCount) {
+          dayStatus = 'system_inactive';
+        } else if (presentCount === totalCount) {
           dayStatus = 'present';
+        } else if (lateCount > 0 && (presentCount + lateCount) === totalCount) {
+          dayStatus = 'late';
         } else if (excusedCount === totalCount) {
           dayStatus = 'excused';
         } else if (presentCount > 0 || excusedCount > 0) {
           dayStatus = 'partial';
-        } else {
+        } else if (absentCount > 0 && !isFuture) {
+          // Only mark as absent if it's a past date
           dayStatus = 'absent';
         }
       }
+      
+      // Get today's date in local timezone
+      const todayLocal = new Date();
+      const todayStr = `${todayLocal.getFullYear()}-${String(todayLocal.getMonth() + 1).padStart(2, '0')}-${String(todayLocal.getDate()).padStart(2, '0')}`;
       
       days.push({
         day,
         date: dateStr,
         status: dayStatus,
         records: dayAttendance,
-        isToday: dateStr === new Date().toISOString().split('T')[0]
+        isToday: dateStr === todayStr
       });
     }
     
@@ -101,6 +133,10 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         return `${base} bg-red-500/20 text-red-400 border border-red-500/30 ${
           isToday ? 'ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900' : ''
         }`;
+      case 'late':
+        return `${base} bg-orange-500/20 text-orange-400 border border-orange-500/30 ${
+          isToday ? 'ring-2 ring-orange-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
       case 'excused':
         return `${base} bg-blue-500/20 text-blue-400 border border-blue-500/30 ${
           isToday ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900' : ''
@@ -109,6 +145,16 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         return `${base} bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ${
           isToday ? 'ring-2 ring-yellow-400 ring-offset-1 ring-offset-slate-900' : ''
         }`;
+      case 'system_inactive':
+        return `${base} bg-purple-900/30 text-purple-300 border-2 border-dashed border-purple-600/50 hover:bg-purple-900/40 ${
+          isToday ? 'ring-2 ring-purple-400 ring-offset-1 ring-offset-slate-900' : ''
+        }`;
+      case 'no_data':
+        // No attendance data - show neutral styling
+        if (isToday) {
+          return `${base} ring-2 ring-blue-500 ring-offset-2 ring-offset-slate-900 text-slate-400`;
+        }
+        return `${base} text-slate-400 hover:bg-slate-800/50`;
       default:
         // Only show "today" styling if there's no attendance data
         if (isToday) {
@@ -124,10 +170,16 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         return <CheckCircle className="w-3 h-3 absolute -top-1 -right-1 text-green-500" />;
       case 'absent':
         return <XCircle className="w-3 h-3 absolute -top-1 -right-1 text-red-500" />;
+      case 'late':
+        return <Clock className="w-3 h-3 absolute -top-1 -right-1 text-orange-500" />;
       case 'excused':
         return <CheckCircle className="w-3 h-3 absolute -top-1 -right-1 text-blue-500" />;
       case 'partial':
         return <Clock className="w-3 h-3 absolute -top-1 -right-1 text-yellow-500" />;
+      case 'system_inactive':
+        return <Clock className="w-3 h-3 absolute -top-1 -right-1 text-purple-400" />;
+      case 'no_data':
+        return null;
       default:
         return null;
     }
@@ -190,7 +242,9 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                   <div 
                     className={getDayClassName(dayData.status, dayData.isToday)}
                     title={dayData.records.length > 0 ? 
-                      `${dayData.records.length} classes - ${dayData.records.map(r => `${r.subject}: ${r.status}`).join(', ')}` 
+                      dayData.records[0]?.details 
+                        ? `${dayData.records[0].details.present_count} present / ${dayData.records[0].details.total_classes} total classes\nAbsent: ${dayData.records[0].details.absent_count}, Late: ${dayData.records[0].details.late_count}${dayData.records[0].details.excused_count > 0 ? `, Excused: ${dayData.records[0].details.excused_count}` : ''}`
+                        : `${dayData.records.length} classes - ${dayData.records.map(r => `${r.subject}: ${r.status}`).join(', ')}`
                       : 'No classes'
                     }
                   >
@@ -211,8 +265,8 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
               <span className="text-sm text-slate-300">Present</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded bg-blue-500/20 border border-blue-500/30"></div>
-              <span className="text-sm text-slate-300">Excused</span>
+              <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/30"></div>
+              <span className="text-sm text-slate-300">Late</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-yellow-500/20 border border-yellow-500/30"></div>
@@ -221,6 +275,14 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500/30"></div>
               <span className="text-sm text-slate-300">Absent</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-blue-500/20 border border-blue-500/30"></div>
+              <span className="text-sm text-slate-300">Excused</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-purple-900/30 border-2 border-dashed border-purple-600/50"></div>
+              <span className="text-sm text-slate-300">System Inactive</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded border-2 border-blue-500"></div>

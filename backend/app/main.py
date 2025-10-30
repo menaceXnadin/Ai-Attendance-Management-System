@@ -18,6 +18,7 @@ from app.api.routes.calendar_generator import router as calendar_generator_route
 from app.api.endpoints.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
+from app.services.scheduler_service import scheduler_service
 import logging
 import warnings
 
@@ -111,6 +112,16 @@ async def startup_event():
     logger.info("Registered routes:")
     for route in app.routes:
         logger.info(f"Route: {route.path} - Methods: {route.methods}")
+    
+    # Start the background scheduler for auto-absent processing
+    logger.info("Starting background scheduler...")
+    await scheduler_service.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop background tasks on shutdown"""
+    logger.info("Stopping background scheduler...")
+    await scheduler_service.stop()
 
 @app.get("/health")
 async def health_check():

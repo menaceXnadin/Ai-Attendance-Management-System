@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey, JSON, Enum, ARRAY, Numeric
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, Float, ForeignKey, JSON, Enum, ARRAY, Numeric, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -134,6 +134,8 @@ class AttendanceRecord(Base):
     date = Column(DateTime, nullable=False)  # Date only (no time component)
     time_in = Column(DateTime, nullable=True)  # Time when attendance was marked
     time_out = Column(DateTime, nullable=True)  # Time when student left (optional)
+    period = Column(Integer, nullable=True)  # Period number (1, 2, 3, etc.) for tracking multiple classes per day
+    time_slot = Column(String, nullable=True)  # Time slot (e.g., "09:00-10:00") for better clarity
     status = Column(Enum(AttendanceStatus, name="attendance_status", native_enum=False), nullable=False, default=AttendanceStatus.present)
     method = Column(Enum(AttendanceMethod, name="attendance_method", native_enum=False), nullable=False, default=AttendanceMethod.manual)
     confidence_score = Column(Numeric(5, 2))  # Face recognition confidence (up to 999.99)
@@ -147,6 +149,14 @@ class AttendanceRecord(Base):
     student = relationship("Student", back_populates="attendance_records")
     subject = relationship("Subject", backref="attendance_records")
     marked_by_user = relationship("User", foreign_keys=[marked_by], back_populates="attendance_marked")
+    
+    # Add index for better query performance on common lookups
+    __table_args__ = (
+        # Composite index for finding attendance on a specific date+subject+period
+        Index('idx_attendance_date_subject_period', 'date', 'subject_id', 'period'),
+        # Index for student lookups
+        Index('idx_attendance_student_date', 'student_id', 'date'),
+    )
 
 class Mark(Base):
     __tablename__ = "marks"

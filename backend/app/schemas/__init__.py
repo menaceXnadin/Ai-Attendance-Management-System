@@ -142,6 +142,8 @@ class AttendanceRecordBase(BaseModel):
     confidence_score: Optional[float] = None
     marked_by: str = "face_recognition"
     notes: Optional[str] = None
+    period: Optional[int] = None  # Period number for tracking multiple classes per day
+    time_slot: Optional[str] = None  # Time slot string like "09:00-10:00"
 
 class AttendanceRecordCreate(AttendanceRecordBase):
     student_id: int

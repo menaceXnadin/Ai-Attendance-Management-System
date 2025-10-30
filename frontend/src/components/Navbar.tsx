@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Menu, X, User, LogOut, Home, Book, Info, LayoutDashboard, Camera } from 'lucide-react';
+import logo from '@/assets/main.png';
 import { useAuth } from '@/contexts/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -41,7 +42,7 @@ const Navbar = () => {
           <div className="flex-shrink-0 flex items-center">
             <Link to="/" className="flex items-center group">
               {/* Plain logo image — no rounded mask or gradient wrapper */}
-              <img src="/main.png" alt="AttendAI" className="h-10 w-10 object-contain" />
+              <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
               <span className={`ml-3 text-xl font-bold bg-gradient-to-r ${styles.logoGradient} bg-clip-text text-transparent ${styles.logoHoverGradient} transition-all duration-300`}>AttendAI</span>
             </Link>
           </div>

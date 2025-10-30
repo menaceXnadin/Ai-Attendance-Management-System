@@ -140,8 +140,8 @@ const LiveFaceDetection: React.FC<LiveFaceDetectionProps> = ({
       setError('');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 480 },
+          height: { ideal: 640 },
           facingMode: 'user'
         }
       });

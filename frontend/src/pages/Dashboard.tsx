@@ -266,10 +266,10 @@ const Dashboard = () => {
             if (r.timeIn && /^\d{2}:\d{2}:\d{2}$/.test(r.timeIn)) {
               const d = (r.date || new Date().toISOString().split('T')[0]).toString();
               const datePart = d.includes('T') ? d.split('T')[0] : d;
-              return new Date(`${datePart}T${r.timeIn}`).getTime();
+              return new Date(`${datePart}T${r.timeIn}Z`).getTime();
             }
             const src = r.createdAt || r.date || '';
-            const iso = typeof src === 'string' && src.includes('T') ? src : `${src}T00:00:00`;
+            const iso = typeof src === 'string' && src.includes('T') ? src : `${src}T00:00:00Z`;
             return new Date(iso).getTime();
           };
           return getTs(b) - getTs(a);
@@ -291,9 +291,9 @@ const Dashboard = () => {
                 if (record.timeIn && /^\d{2}:\d{2}:\d{2}$/.test(record.timeIn)) {
                   const recDate = (record.date || new Date().toISOString().split('T')[0]).toString();
                   const datePart = recDate.includes('T') ? recDate.split('T')[0] : recDate;
-                  displayTime = new Date(`${datePart}T${record.timeIn}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  displayTime = new Date(`${datePart}T${record.timeIn}Z`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 } else {
-                  const iso = timeSource.includes('T') ? timeSource : `${timeSource}T00:00:00`;
+                  const iso = timeSource.includes('T') ? timeSource : `${timeSource}T00:00:00Z`;
                   displayTime = new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                 }
               }

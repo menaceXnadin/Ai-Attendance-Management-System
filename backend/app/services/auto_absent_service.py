@@ -159,9 +159,12 @@ class AutoAbsentService:
     ) -> Dict[str, Any]:
         """Process a single schedule and mark absent students"""
         
-        # Get all students for this semester
+        # Get all students for this semester AND faculty
         students_query = select(Student).where(
-            Student.semester == schedule.semester
+            and_(
+                Student.semester == schedule.semester,
+                Student.faculty_id == schedule.faculty_id
+            )
         )
         result = await db.execute(students_query)
         semester_students = result.scalars().all()

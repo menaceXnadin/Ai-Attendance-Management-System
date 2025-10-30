@@ -490,6 +490,14 @@ export const api = {
     getStudentSubjectBreakdown: async (studentId: number) => {
       return apiRequest(`/attendance/student-subject-breakdown/${studentId}`);
     },
+
+    getStudentCalendar: async (studentId: number, year: number, month: number) => {
+      return apiRequest(`/student-calendar/${studentId}?year=${year}&month=${month}`);
+    },
+
+    getMyCalendar: async (year: number, month: number) => {
+      return apiRequest(`/student-calendar/me?year=${year}&month=${month}`);
+    },
   },
 
 

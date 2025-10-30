@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     version: str = "1.0.0"
     debug: bool = True
     
+    # Scheduler
+    enable_auto_absent_scheduler: bool = True  # Enable automatic absent marking
+    
     class Config:
         env_file = ".env"
         case_sensitive = False

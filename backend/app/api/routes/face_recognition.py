@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, Date
+from sqlalchemy import select, Date, and_, func, text
 from sqlalchemy.orm import selectinload
-from datetime import datetime, date
+from datetime import datetime, date, time as time_type
 from typing import List, Optional, Dict, Any
 from app.core.database import get_db
-from app.models import Student, AttendanceRecord, Subject
+from app.models import Student, AttendanceRecord, Subject, ClassSchedule, DayOfWeek
 from app.schemas import (
     FaceRecognitionRequest, FaceRecognitionResponse, FaceRegistrationRequest,
     MultiImageFaceRegistrationRequest,
@@ -14,6 +14,86 @@ from app.schemas import (
 from app.services.insightface_service import insightface_service
 from app.api.dependencies import get_current_student
 from pydantic import BaseModel
+
+# Helper function to auto-mark absent for expired classes
+async def mark_absent_for_expired_classes(db: AsyncSession, student_id: int, student: Student, today: date):
+    """
+    Automatically mark student absent for any expired classes today that have no attendance record.
+    This is called whenever a student marks attendance, ensuring missed classes are recorded as absent.
+    """
+    try:
+        current_time = datetime.now().time()
+        
+        # Map today's weekday to DayOfWeek enum
+        weekday = today.weekday()
+        day_map = {
+            0: DayOfWeek.MONDAY, 1: DayOfWeek.TUESDAY, 2: DayOfWeek.WEDNESDAY,
+            3: DayOfWeek.THURSDAY, 4: DayOfWeek.FRIDAY, 5: DayOfWeek.SATURDAY, 6: DayOfWeek.SUNDAY
+        }
+        today_enum = day_map[weekday]
+        
+        # Get all today's class schedules for this student's faculty/semester
+        schedules_query = select(ClassSchedule).where(
+            and_(
+                ClassSchedule.day_of_week == today_enum,
+                ClassSchedule.faculty_id == student.faculty_id,
+                ClassSchedule.semester == student.semester,
+                ClassSchedule.is_active == True
+            )
+        )
+        result = await db.execute(schedules_query)
+        schedules = result.scalars().all()
+        
+        # Check each schedule to see if class time has passed (with 15 min buffer after end time)
+        for schedule in schedules:
+            # Calculate if class has ended + 15 min buffer
+            end_hour = schedule.end_time.hour
+            end_minute = schedule.end_time.minute + 15
+            if end_minute >= 60:
+                end_hour += 1
+                end_minute -= 60
+            
+            class_expired = current_time.hour > end_hour or (
+                current_time.hour == end_hour and current_time.minute >= end_minute
+            )
+            
+            if class_expired:
+                # Check if attendance record already exists for this subject today
+                existing_query = select(AttendanceRecord).where(
+                    and_(
+                        AttendanceRecord.student_id == student_id,
+                        AttendanceRecord.subject_id == schedule.subject_id,
+                        AttendanceRecord.date == today
+                    )
+                )
+                existing_result = await db.execute(existing_query)
+                existing = existing_result.scalar_one_or_none()
+                
+                if not existing:
+                    # Create absent record using raw SQL to handle enums properly
+                    await db.execute(
+                        text("""
+                            INSERT INTO attendance_records 
+                            (student_id, subject_id, date, time_in, time_out, status, method, confidence_score, location, notes, marked_by)
+                            VALUES 
+                            (:student_id, :subject_id, :date, NULL, NULL, 'absent'::attendance_status, 'other'::attendance_method, NULL, :location, :notes, NULL)
+                        """),
+                        {
+                            "student_id": student_id,
+                            "subject_id": schedule.subject_id,
+                            "date": today,
+                            "location": "AUTO_ABSENT_SYSTEM",
+                            "notes": f"Automatically marked absent - class expired at {schedule.end_time}, no attendance recorded"
+                        }
+                    )
+        
+        await db.commit()
+        
+    except Exception as e:
+        # Don't fail the main attendance marking if auto-absent fails
+        print(f"Error in auto-absent: {str(e)}")
+        await db.rollback()
+
 
 # New schema for glasses detection
 class GlassesDetectionRequest(BaseModel):
@@ -119,6 +199,9 @@ async def mark_attendance_with_face(
             
             db.add(attendance)
             await db.commit()
+            
+            # Auto-mark absent for any expired classes TODAY that have no attendance record
+            await mark_absent_for_expired_classes(db, recognition_result.student_id, current_student, today)
             
             recognition_result.attendance_marked = True
             recognition_result.message = "Attendance marked successfully!"

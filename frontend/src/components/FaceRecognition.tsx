@@ -18,6 +18,14 @@ type BackendFace = {
   area_percentage: number;
 };
 
+type LiveRecognitionState = {
+  status: 'idle' | 'initializing' | 'searching' | 'recognized' | 'error';
+  message: string;
+  name: string | null;
+  confidence: number | null;
+  quality: string | null;
+};
+
 interface FaceRecognitionProps {
   onCapture: (dataUrl: string, recognized: boolean) => void;
   onCancel?: () => void;
@@ -30,14 +38,172 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   const [isCapturing, setIsCapturing] = useState(false);
   const [isRecognized, setIsRecognized] = useState(false);
   const [faceBox, setFaceBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
-  const [boxColor, setBoxColor] = useState<string>('lime');
+  const [boxColor, setBoxColor] = useState<'idle' | 'detected' | 'recognized' | 'warning'>('idle');
   const [feedback, setFeedback] = useState<string>('');
+  const [liveRecognition, setLiveRecognition] = useState<LiveRecognitionState>({
+    status: 'idle',
+    message: '',
+    name: null,
+    confidence: null,
+    quality: null
+  });
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mpCameraRef = useRef<MPCamera | null>(null);
   const faceDetectionRef = useRef<FaceDetection | null>(null);
+  const recognitionIntervalRef = useRef<number | null>(null);
+  const recognitionPendingRef = useRef(false);
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const faceBoxRef = useRef<typeof faceBox>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    faceBoxRef.current = faceBox;
+  }, [faceBox, boxColor]);
+
+  useEffect(() => {
+    if (isActive) {
+      setLiveRecognition({
+        status: 'initializing',
+        message: 'Starting live recognition...',
+        name: null,
+        confidence: null,
+        quality: null
+      });
+      setBoxColor('idle');
+    } else {
+      setLiveRecognition({
+        status: 'idle',
+        message: '',
+        name: null,
+        confidence: null,
+        quality: null
+      });
+      setBoxColor('idle');
+    }
+  }, [isActive]);
+
+  const stopLiveRecognitionLoop = useCallback(() => {
+    if (recognitionIntervalRef.current) {
+      window.clearInterval(recognitionIntervalRef.current);
+      recognitionIntervalRef.current = null;
+    }
+    recognitionPendingRef.current = false;
+    captureCanvasRef.current = null;
+  }, []);
+
+  const performLiveRecognition = useCallback(async () => {
+    if (!isActive) {
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video || recognitionPendingRef.current || video.videoWidth === 0 || video.videoHeight === 0) {
+      return;
+    }
+
+    if (!faceBoxRef.current) {
+      setLiveRecognition(prev => {
+        if (prev.status === 'searching' && prev.name === null) {
+          return prev;
+        }
+        return {
+          status: 'searching',
+          message: 'Center your face to start recognition...',
+          name: null,
+          confidence: null,
+          quality: null
+        };
+      });
+      return;
+    }
+
+    recognitionPendingRef.current = true;
+    try {
+      if (!captureCanvasRef.current) {
+        captureCanvasRef.current = document.createElement('canvas');
+      }
+      const captureCanvas = captureCanvasRef.current;
+      captureCanvas.width = video.videoWidth;
+      captureCanvas.height = video.videoHeight;
+      const ctx = captureCanvas.getContext('2d');
+      if (!ctx) {
+        recognitionPendingRef.current = false;
+        return;
+      }
+      ctx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+      const dataUrl = captureCanvas.toDataURL('image/jpeg', 0.65);
+      const base64 = dataUrl.split(',')[1];
+
+      if (!base64) {
+        recognitionPendingRef.current = false;
+        return;
+      }
+
+      const token = localStorage.getItem('authToken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      };
+
+      const response = await fetch('/api/face-recognition/live-recognition', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ image_data: base64 })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Live recognition failed');
+      }
+
+      if (data.student_recognized) {
+        setLiveRecognition({
+          status: 'recognized',
+          message: data.message || 'Identity confirmed',
+          name: data.student_name ?? null,
+          confidence: typeof data.confidence_score === 'number' ? data.confidence_score : null,
+          quality: data.recognition_quality ?? null
+        });
+        setBoxColor('recognized');
+      } else {
+        setLiveRecognition({
+          status: 'searching',
+          message: data.message || 'Searching for a match...',
+          name: null,
+          confidence: typeof data.confidence_score === 'number' ? data.confidence_score : null,
+          quality: data.recognition_quality ?? null
+        });
+        if (faceBoxRef.current) {
+          setBoxColor('warning');
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Live recognition error';
+      setLiveRecognition({
+        status: 'error',
+        message,
+        name: null,
+        confidence: null,
+        quality: null
+      });
+      setBoxColor('warning');
+    } finally {
+      recognitionPendingRef.current = false;
+    }
+  }, [isActive, setBoxColor]);
+
+  const startLiveRecognitionLoop = useCallback(() => {
+    if (recognitionIntervalRef.current) {
+      return;
+    }
+    performLiveRecognition();
+    recognitionIntervalRef.current = window.setInterval(() => {
+      performLiveRecognition();
+    }, 1200);
+  }, [performLiveRecognition]);
 
   // Time restriction management
   const {
@@ -55,6 +221,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   useEffect(() => {
     if (!isActive) {
       // Cleanup
+      stopLiveRecognitionLoop();
       if (mpCameraRef.current) {
         mpCameraRef.current.stop();
         mpCameraRef.current = null;
@@ -83,10 +250,16 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
             width: box.width,
             height: box.height
           });
-          setBoxColor('lime');
+          setBoxColor(prev => {
+            if (prev === 'recognized' || prev === 'warning') {
+              return prev;
+            }
+            return 'detected';
+          });
           setFeedback('Face detected. Ready to capture!');
         } else {
           setFaceBox(null);
+          setBoxColor('idle');
           setFeedback('No face detected.');
         }
       } catch (error) {
@@ -128,6 +301,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
         videoRef.current.onloadedmetadata = () => {
           setFeedback('Camera ready. Position your face in the frame.');
           requestAnimationFrame(captureLoop);
+          startLiveRecognitionLoop();
         };
 
         // Store the stream for cleanup
@@ -146,6 +320,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
     initializeCamera();
     
     return () => {
+      stopLiveRecognitionLoop();
       if (mpCameraRef.current) {
         mpCameraRef.current.stop();
         mpCameraRef.current = null;
@@ -154,7 +329,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       setFaceBox(null);
       setFeedback('');
     };
-  }, [isActive]);
+  }, [isActive, startLiveRecognitionLoop, stopLiveRecognitionLoop]);
 
   // Draw bounding box overlay on canvas
   useEffect(() => {
@@ -167,9 +342,18 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
     // Draw bounding box if detected
     if (faceBox) {
       ctx.save();
+      let startColor = '#38bdf8';
+      let endColor = '#06b6d4';
+      if (boxColor === 'recognized') {
+        startColor = '#34d399';
+        endColor = '#22c55e';
+      } else if (boxColor === 'warning') {
+        startColor = '#facc15';
+        endColor = '#f97316';
+      }
       const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      grad.addColorStop(0, '#38bdf8');
-      grad.addColorStop(1, '#06b6d4');
+      grad.addColorStop(0, startColor);
+      grad.addColorStop(1, endColor);
       ctx.strokeStyle = grad;
       ctx.lineWidth = 3;
       ctx.shadowColor = '#06b6d4AA';
@@ -213,6 +397,8 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       return;
     }
     
+    stopLiveRecognitionLoop();
+
     setIsCapturing(true);
     const canvas = canvasRef.current;
     const video = videoRef.current;
@@ -308,6 +494,10 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
   const handleCancel = () => {
     console.log('Cancel button clicked');
     
+    stopLiveRecognitionLoop();
+    recognitionPendingRef.current = false;
+    captureCanvasRef.current = null;
+
     // Stop camera if running
     if (mpCameraRef.current) {
       try {
@@ -385,21 +575,21 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       
       <CardContent className="flex flex-col items-center justify-center p-6 bg-slate-900/50">
         {isActive ? (
-          <div className="relative w-full max-w-lg">
-            <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl">
+          <div className="relative w-full max-w-md mx-auto">
+            <div className="relative overflow-hidden rounded-xl border-2 border-slate-600/50 shadow-2xl" style={{ aspectRatio: '3/4' }}>
               <video 
                 ref={videoRef} 
                 autoPlay 
                 playsInline
-                className="w-full aspect-video object-cover bg-slate-800"
+                className="w-full h-full object-cover bg-slate-800"
                 style={{ transform: 'scaleX(-1)' }} // Mirror effect
-                width={640}
-                height={480}
+                width={480}
+                height={640}
               />
               <canvas
                 ref={canvasRef}
-                width={640}
-                height={480}
+                width={480}
+                height={640}
                 style={{
                   position: 'absolute',
                   left: 0,
@@ -411,6 +601,33 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
                   background: 'none',
                 }}
               />
+
+              {liveRecognition.status !== 'idle' && (
+                <div
+                  className={`absolute left-1/2 bottom-6 -translate-x-1/2 px-4 py-2 rounded-full text-sm font-semibold shadow-lg transition-colors duration-300 z-30 ${
+                    liveRecognition.status === 'recognized'
+                      ? 'bg-emerald-500/90 text-white'
+                      : liveRecognition.status === 'error'
+                        ? 'bg-rose-500/90 text-white'
+                        : 'bg-slate-900/80 text-slate-100'
+                  }`}
+                >
+                  <div>
+                    {liveRecognition.name ?? liveRecognition.message}
+                  </div>
+                  {liveRecognition.name && (
+                    <div className="text-xs font-normal opacity-90">
+                      {liveRecognition.message}
+                    </div>
+                  )}
+                  {liveRecognition.confidence !== null && (
+                    <div className="text-[10px] font-normal opacity-80 mt-0.5">
+                      Confidence {liveRecognition.confidence.toFixed(1)}%
+                      {liveRecognition.quality ? ` • ${liveRecognition.quality}` : ''}
+                    </div>
+                  )}
+                </div>
+              )}
               
               {/* Modern scanning overlay */}
               <div className="absolute inset-0 pointer-events-none">
@@ -433,19 +650,27 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
             {/* Live feedback with modern design */}
             <div className="mt-4 text-center">
               <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-                feedback.includes('Ready') 
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30' 
-                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                liveRecognition.status === 'recognized'
+                  ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                  : feedback.includes('Ready')
+                    ? 'bg-sky-500/20 text-sky-200 border border-sky-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               }`}>
                 <div className={`w-2 h-2 rounded-full ${
-                  feedback.includes('Ready') ? 'bg-green-400' : 'bg-amber-400'
+                  liveRecognition.status === 'recognized'
+                    ? 'bg-green-400'
+                    : feedback.includes('Ready')
+                      ? 'bg-sky-400'
+                      : 'bg-amber-400'
                 } animate-pulse`}></div>
-                {feedback || 'Initializing camera...'}
+                {liveRecognition.status === 'recognized'
+                  ? (liveRecognition.message || 'Live match found')
+                  : feedback || liveRecognition.message || 'Initializing camera...'}
               </div>
             </div>
           </div>
         ) : (
-          <div className="border-2 border-dashed border-slate-600 rounded-xl w-full max-w-lg aspect-video flex items-center justify-center bg-slate-800/50 backdrop-blur-sm">
+          <div className="border-2 border-dashed border-slate-600 rounded-xl w-full max-w-md mx-auto bg-slate-800/50 backdrop-blur-sm" style={{ aspectRatio: '3/4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {isRecognized ? (
               <div className="text-center">
                 <div className="w-16 h-16 mx-auto mb-4 p-3 bg-green-500/20 rounded-full">

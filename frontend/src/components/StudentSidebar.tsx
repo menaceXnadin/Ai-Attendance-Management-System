@@ -17,6 +17,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
+import logo from '@/assets/main.png';
 
 interface StudentSidebarProps {
   children: React.ReactNode;
@@ -62,28 +63,20 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
   };
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
+    <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 overflow-hidden">
       {/* Fixed Sidebar */}
       <div
-        className="fixed top-0 left-0 h-screen z-40 bg-slate-900/70 backdrop-blur-md border-r border-slate-700/50 flex flex-col"
-        style={{
-          width: isCollapsed ? 80 : 256,
-          transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-        }}
+        className={`fixed top-0 left-0 h-screen z-40 bg-slate-900/70 backdrop-blur-md border-r border-slate-700/50 flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-20' : 'w-64'}`}
       >
         {/* Sidebar Header */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-slate-700/50">
-          {!isCollapsed && (
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                <GraduationCapIcon className="h-4 w-4 text-white" />
-              </div>
-              <span className="text-xl font-semibold text-white">AttendAI</span>
-            </div>
-          )}
+        <div className="flex h-16 items-center justify-center px-4 border-b border-slate-700/50 relative flex-shrink-0">
+          <div className={`flex items-center gap-3 transition-opacity duration-200 ${isCollapsed ? 'opacity-0' : 'opacity-100'}`}>
+            <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
+            <span className="text-xl font-semibold text-white">AttendAI</span>
+          </div>
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
+            className="absolute right-4 p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {isCollapsed ? <MenuIcon className="h-5 w-5" /> : <XIcon className="h-5 w-5" />}
@@ -91,14 +84,14 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
         </div>
         
         {/* Navigation */}
-  <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto min-h-0">
+        <div className="flex-1 px-4 py-6 space-y-6 overflow-y-auto min-h-0">
           {/* Main Navigation */}
           <div>
-            {!isCollapsed && (
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            <div className="h-6 mb-3 flex items-center overflow-hidden">
+              <h3 className={`text-xs font-semibold text-slate-400 uppercase tracking-wider transition-all duration-300 whitespace-nowrap ${isCollapsed ? 'opacity-0 -translate-x-4' : 'opacity-100 translate-x-0'}`}>
                 Student Portal
               </h3>
-            )}
+            </div>
             <nav className="space-y-1">
               <NavLink
                 to="/student"
@@ -228,12 +221,12 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
         </div>
         
         {/* Sidebar Footer */}
-  <div className="p-4 border-t border-slate-700/50 bg-slate-900/80 mt-auto">
+        <div className="p-4 border-t border-slate-700/50 bg-slate-900/80 mt-auto flex-shrink-0">
           <div className="space-y-3">
             {/* User Info */}
-            {!isCollapsed && (
+            <div className={`transition-opacity duration-200 ${isCollapsed ? 'opacity-0 h-0' : 'opacity-100'}`}>
               <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center flex-shrink-0">
                   <UserIcon className="h-4 w-4 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -245,7 +238,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                   </p>
                 </div>
               </div>
-            )}
+            </div>
             
             {/* Logout Button */}
             <button
@@ -260,13 +253,12 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
         </div>
       </div>
       
-  {/* Main Content Area */}
-  <div
-    className="flex flex-col min-h-screen transition-all duration-300"
-    style={{ marginLeft: isCollapsed ? 80 : 256, transition: 'margin-left 0.3s' }}
-  >
+      {/* Main Content Area */}
+      <div
+        className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${isCollapsed ? 'pl-20' : 'pl-64'}`}
+      >
         {/* Top Header Bar */}
-        <div className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between px-6">
+        <div className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between px-6 flex-shrink-0">
           <div className="flex items-center gap-4">
             <h1 className="text-xl font-semibold text-white">{getPageTitle()}</h1>
           </div>
@@ -285,7 +277,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
         </div>
         
         {/* Page Content */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto p-6">
           {children}
         </div>
       </div>

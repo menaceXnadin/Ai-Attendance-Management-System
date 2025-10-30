@@ -29,6 +29,7 @@ import {
   getTimeRemainingInPeriod,
   type ClassPeriod 
 } from '@/utils/timeRestrictions';
+import { getTodayLocalDate } from '@/utils/dateUtils';
 
 interface SubjectSchedule {
   subjectId: number;
@@ -88,6 +89,12 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   // Update current time every minute
   useEffect(() => {
+    // Log initial time for debugging
+    const now = new Date();
+    console.log('[TIME-CHECK] TodayClassSchedule - Client time:', now.toISOString());
+    console.log('[TIME-CHECK] TodayClassSchedule - Hours:', now.getHours(), 'Minutes:', now.getMinutes());
+    console.log('[TIME-CHECK] TodayClassSchedule - Date:', now.toDateString());
+    
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
@@ -216,8 +223,12 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         return [];
       }
       try {
-        const today = new Date().toISOString().split('T')[0];
+        // FIXED: Use local date instead of UTC to avoid timezone issues
+        const today = getTodayLocalDate();
+        const now = new Date();
+        
         console.log('[DEBUG] Fetching attendance for student ID:', studentData.id, 'user ID:', user.id, 'date:', today);
+        console.log('[DEBUG] Local date (not UTC):', today, '- Client time:', now.toString());
         console.log('[DEBUG] StudentData fields:', {
           id: studentData.id,
           student_id: (studentData as Student & { student_id?: string }).student_id,
@@ -321,8 +332,17 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         } else if (dbStatus === 'absent') {
           status = 'Absent';
         } else {
-          // Unknown status, default to Present if marked
-          status = 'Present';
+          // Unknown status - log warning and use time-based logic
+          console.warn('[WARN] Unknown attendance status:', attendanceRecord.status, 'for subject:', subject.subjectName);
+          
+          // Fallback to time-based logic for unknown statuses
+          if (isAfterEnd) {
+            status = 'Absent';
+          } else if (isCurrentPeriod) {
+            status = 'Pending';
+          } else {
+            status = 'Starts Soon';
+          }
         }
         
         console.log(`[DEBUG] ${subject.subjectName} final status from DB: ${status}`);

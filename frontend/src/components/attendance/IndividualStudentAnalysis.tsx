@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Loader2, 
   User, 
@@ -52,6 +53,10 @@ interface SubjectAttendance {
   subject_code: string;
   total_classes: number;
   attended: number;
+  present?: number;
+  absent?: number;
+  late?: number;
+  excused?: number;
   attendance_percentage: number;
 }
 
@@ -61,6 +66,8 @@ interface StudentInsights {
     totalClasses: number;
     attendedClasses: number;
     absentClasses: number;
+    lateClasses: number;
+    excusedClasses?: number;
     percentage: number;
   };
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
@@ -68,6 +75,9 @@ interface StudentInsights {
     improving: boolean;
     declining: boolean;
     stable: boolean;
+    recentAverage?: number | null;
+    previousAverage?: number | null;
+    change?: number | null;
   };
   recommendations: string[];
   subjects: SubjectAttendance[];
@@ -154,14 +164,62 @@ const IndividualStudentAnalysis: React.FC = () => {
       setLoading(true);
       const studentIdNum = parseInt(studentId);
       const insights = await api.analytics.getStudentInsights(studentIdNum);
-      const subjectBreakdown = await api.attendance.getStudentSubjectBreakdown(studentIdNum);
+      const subjectBreakdownResponse = await api.attendance.getStudentSubjectBreakdown(studentIdNum);
       
-      // Combine insights with subject breakdown
+      // Handle new response format with metadata (subjects array wrapped in object)
+      const subjectBreakdown = Array.isArray(subjectBreakdownResponse) 
+        ? subjectBreakdownResponse 
+        : subjectBreakdownResponse?.subjects || [];
+
+      const attendanceSource = (insights?.attendance as Partial<StudentInsights['attendance']>) || {};
+      const normalizedAttendance: StudentInsights['attendance'] = {
+        totalClasses: attendanceSource.totalClasses ?? 0,
+        attendedClasses: attendanceSource.attendedClasses ?? 0,
+        absentClasses: attendanceSource.absentClasses ?? 0,
+        lateClasses: attendanceSource.lateClasses ?? 0,
+        excusedClasses: attendanceSource.excusedClasses ?? 0,
+        percentage: attendanceSource.percentage ?? 0,
+      };
+
+      const trendSource = (insights?.trends as Partial<StudentInsights['trends']>) || {};
+      const normalizedTrends: StudentInsights['trends'] = {
+        improving: trendSource.improving ?? false,
+        declining: trendSource.declining ?? false,
+        stable: trendSource.stable ?? true,
+        recentAverage: trendSource.recentAverage ?? null,
+        previousAverage: trendSource.previousAverage ?? null,
+        change: trendSource.change ?? null,
+      };
+
+      const normalizedSubjects: SubjectAttendance[] = (subjectBreakdown || []).map((subject: SubjectAttendance) => {
+        const late = subject.late ?? 0;
+        const attended = subject.attended ?? 0;
+        const excused = subject.excused ?? 0;
+        const present = subject.present ?? Math.max(attended - late, 0);
+        const absent = subject.absent ?? Math.max(subject.total_classes - attended - excused, 0);
+
+        const effectiveTotal = Math.max(subject.total_classes - excused, 0);
+        const percent = effectiveTotal ? (attended / effectiveTotal) * 100 : 0;
+        const roundedPercent = Number.isFinite(percent) ? Number(percent.toFixed(2)) : 0;
+
+        return {
+          ...subject,
+          attended,
+          present,
+          late,
+          absent,
+          excused,
+          attendance_percentage: roundedPercent,
+        };
+      });
+
       const enhancedInsights: StudentInsights = {
         ...insights,
-        subjects: subjectBreakdown || []
+        attendance: normalizedAttendance,
+        trends: normalizedTrends,
+        subjects: normalizedSubjects,
       };
-      
+
       setStudentInsights(enhancedInsights);
     } catch (error) {
       console.error('Error fetching student analysis:', error);
@@ -312,6 +370,28 @@ const IndividualStudentAnalysis: React.FC = () => {
         due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 week
       });
     }
+
+    if (insights.attendance.lateClasses > 3) {
+      automaticActions.push({
+        type: 'monitoring',
+        title: 'Address Repeated Late Arrivals',
+        description: `Student has ${insights.attendance.lateClasses} late arrivals recorded. Reinforce punctuality expectations and offer support if needed.`,
+        priority: insights.attendance.lateClasses > 6 ? 'high' : 'medium',
+        status: 'pending',
+        due_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      });
+    }
+
+    if (insights.trends.declining) {
+      automaticActions.push({
+        type: 'intervention',
+        title: 'Plan Attendance Intervention',
+        description: 'Attendance trend is declining compared to the previous week. Schedule a meeting to understand the cause and agree on corrective steps.',
+        priority: 'high',
+        status: 'pending',
+        due_date: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      });
+    }
     
     return automaticActions.map(action => ({
       ...action,
@@ -459,10 +539,12 @@ const IndividualStudentAnalysis: React.FC = () => {
           <div class="card">
             <h3>Classes Attended</h3>
             <p style="font-size: 20px;">${studentInsights.attendance.attendedClasses}/${studentInsights.attendance.totalClasses}</p>
+            <p style="font-size: 13px; color: #64748b; margin-top: 4px;">Late arrivals: ${studentInsights.attendance.lateClasses}</p>
           </div>
           <div class="card">
             <h3>Absent Classes</h3>
             <p style="font-size: 20px; color: #dc2626;">${studentInsights.attendance.absentClasses}</p>
+            <p style="font-size: 13px; color: #6b7280; margin-top: 4px;">Excused: ${studentInsights.attendance.excusedClasses ?? 0}</p>
           </div>
           <div class="card">
             <h3>Risk Level</h3>
@@ -481,6 +563,7 @@ const IndividualStudentAnalysis: React.FC = () => {
                 <th>Subject Code</th>
                 <th>Total Classes</th>
                 <th>Attended</th>
+                <th>Late</th>
                 <th>Absent</th>
                 <th>Attendance %</th>
                 <th>Status</th>
@@ -492,8 +575,9 @@ const IndividualStudentAnalysis: React.FC = () => {
                   <td>${subject.subject_name}</td>
                   <td>${subject.subject_code}</td>
                   <td>${subject.total_classes}</td>
-                  <td>${subject.attended}</td>
-                  <td>${subject.total_classes - subject.attended}</td>
+                  <td>${subject.attended}${subject.excused ? `<div style="font-size: 12px; color: #6b7280;">Excused: ${subject.excused}</div>` : ''}</td>
+                  <td>${subject.late ?? 0}</td>
+                  <td>${subject.absent ?? subject.total_classes - subject.attended}</td>
                   <td>${subject.attendance_percentage.toFixed(1)}%</td>
                   <td><span class="badge badge-${subject.attendance_percentage >= 85 ? 'good' : subject.attendance_percentage >= 75 ? 'warning' : 'critical'}">${subject.attendance_percentage >= 85 ? 'Good' : subject.attendance_percentage >= 75 ? 'Warning' : 'Critical'}</span></td>
                 </tr>
@@ -548,6 +632,15 @@ const IndividualStudentAnalysis: React.FC = () => {
       case 'low': return 'bg-green-500/20 text-green-300 border-green-400/30';
       default: return 'bg-gray-500/20 text-gray-300 border-gray-400/30';
     }
+  };
+
+  const formatPercentage = (value?: number | null) =>
+    typeof value === 'number' ? value.toFixed(1) : '--';
+
+  const formatDelta = (value?: number | null) => {
+    if (typeof value !== 'number') return '--';
+    const sign = value > 0 ? '+' : '';
+    return `${sign}${value.toFixed(1)}`;
   };
 
   return (
@@ -637,6 +730,9 @@ const IndividualStudentAnalysis: React.FC = () => {
                         <p className="text-2xl font-bold text-slate-200">
                           {studentInsights.attendance.attendedClasses}/{studentInsights.attendance.totalClasses}
                         </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Late arrivals: {studentInsights.attendance.lateClasses}
+                        </p>
                       </div>
                       <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center">
                         <CheckCircle className="h-6 w-6 text-green-400" />
@@ -652,6 +748,9 @@ const IndividualStudentAnalysis: React.FC = () => {
                         <p className="text-sm text-slate-400">Absent Classes</p>
                         <p className="text-2xl font-bold text-slate-200">
                           {studentInsights.attendance.absentClasses}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Excused: {studentInsights.attendance.excusedClasses ?? 0}
                         </p>
                       </div>
                       <div className="h-12 w-12 rounded-full bg-red-500/20 flex items-center justify-center">
@@ -696,6 +795,7 @@ const IndividualStudentAnalysis: React.FC = () => {
                             <TableHead className="text-slate-300">Subject Code</TableHead>
                             <TableHead className="text-slate-300 text-center">Total Classes Held</TableHead>
                             <TableHead className="text-slate-300 text-center">Attended</TableHead>
+                            <TableHead className="text-slate-300 text-center">Late</TableHead>
                             <TableHead className="text-slate-300 text-center">Absent</TableHead>
                             <TableHead className="text-slate-300 text-center">Attendance %</TableHead>
                             <TableHead className="text-slate-300 text-center">Status</TableHead>
@@ -715,9 +815,18 @@ const IndividualStudentAnalysis: React.FC = () => {
                               </TableCell>
                               <TableCell className="text-center text-green-400">
                                 {subject.attended}
+                                {typeof subject.present === 'number' ? (
+                                  <div className="text-xs text-slate-400">On time: {subject.present}</div>
+                                ) : null}
+                                {subject.excused ? (
+                                  <div className="text-xs text-slate-400">Excused: {subject.excused}</div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="text-center text-yellow-300">
+                                {subject.late ?? 0}
                               </TableCell>
                               <TableCell className="text-center text-red-400">
-                                {subject.total_classes - subject.attended}
+                                {subject.absent ?? subject.total_classes - subject.attended}
                               </TableCell>
                               <TableCell className="text-center">
                                 <div className="flex items-center justify-center gap-2">
@@ -1037,6 +1146,36 @@ const IndividualStudentAnalysis: React.FC = () => {
                       </p>
                     </div>
                   </div>
+
+                  {(studentInsights.trends.recentAverage !== undefined && studentInsights.trends.recentAverage !== null) && (
+                    <div className="mt-4 text-sm text-slate-300">
+                      Recent 7-day attendance average: {formatPercentage(studentInsights.trends.recentAverage)}%
+                      {studentInsights.trends.previousAverage !== undefined && studentInsights.trends.previousAverage !== null
+                        ? ` (previous: ${formatPercentage(studentInsights.trends.previousAverage)}%)`
+                        : ''}
+                      {studentInsights.trends.change !== undefined && studentInsights.trends.change !== null
+                        ? ` • Change: ${formatDelta(studentInsights.trends.change)}%`
+                        : ''}
+                    </div>
+                  )}
+
+                  {studentInsights.trends.improving && (
+                    <Alert className="mt-4 bg-green-500/10 border-green-400/30">
+                      <TrendingUp className="h-4 w-4" />
+                      <AlertDescription className="text-slate-200">
+                        Attendance has improved over the last week. Keep reinforcing the positive habits that led to this change.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  {studentInsights.trends.declining && (
+                    <Alert className="mt-4 bg-yellow-500/10 border-yellow-400/30">
+                      <TrendingDown className="h-4 w-4" />
+                      <AlertDescription className="text-slate-200">
+                        Attendance is trending downward compared to the previous week. Review recent absences and plan corrective actions.
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   
                   {studentInsights.attendance.percentage < 75 && (
                     <Alert className="mt-4 bg-red-500/10 border-red-400/30">

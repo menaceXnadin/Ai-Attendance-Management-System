@@ -103,8 +103,8 @@ export const createCameraConstraints = async (preferredDeviceId?: string) => {
   
   const constraints: MediaStreamConstraints = {
     video: {
-      width: { ideal: 640 },
-      height: { ideal: 480 },
+      width: { ideal: 480 },
+      height: { ideal: 640 },
       facingMode: 'user'
     },
     audio: false
@@ -139,8 +139,8 @@ export const testCameraWithFallback = async (): Promise<MediaStream | null> => {
     // Fallback to default constraints
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
+        width: { ideal: 480 },
+        height: { ideal: 640 },
         facingMode: 'user'
       },
       audio: false

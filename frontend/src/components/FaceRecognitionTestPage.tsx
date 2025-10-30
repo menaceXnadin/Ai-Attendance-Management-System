@@ -73,8 +73,8 @@ const FaceRecognitionTestPage: React.FC = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          width: 640, 
-          height: 480,
+          width: 480, 
+          height: 640,
           facingMode: 'user' 
         } 
       });

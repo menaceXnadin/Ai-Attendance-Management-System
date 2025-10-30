@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, case
-from sqlalchemy.orm import selectinload
+from sqlalchemy import select, func, and_, or_, case, extract
+from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Optional
 from datetime import datetime, date, timedelta
 from collections import defaultdict
 from app.core.database import get_db
 from app.models import AttendanceRecord, Student, Subject, Faculty, AttendanceStatus, AttendanceMethod, User, AcademicEvent, EventType, UserRole, ClassSchedule
+from app.utils.attendance import normalize_attendance_status
 from app.api.dependencies import get_current_user
 from app.services.auto_absent_service import auto_absent_service
 
@@ -187,10 +188,10 @@ async def get_attendance_summary(
         total_subjects_that_day = day_record.record_count
         present_subjects_that_day = day_record.present_count
         
-        # Consider a day "present" if student attended majority of classes that day
-        if present_subjects_that_day >= (total_subjects_that_day * 0.5):
+        # NEW RULE: All subjects attended = present, none = absent, anything in between = partial
+        if present_subjects_that_day == total_subjects_that_day:
             days_present += 1
-        if present_subjects_that_day > 0:
+        if present_subjects_that_day > 0 and present_subjects_that_day < total_subjects_that_day:
             days_with_partial_attendance += 1
     
     # Calculate percentages based on total semester days
@@ -228,8 +229,8 @@ async def get_attendance_summary(
     
     return {
         # SEMESTER-BASED METRICS (Primary)
-        "present": days_present,  # Days with majority attendance
-        "absent": total_semester_days - days_with_partial_attendance,  # Days with no attendance
+        "present": days_present,  # Days with ALL subjects attended
+        "absent": total_semester_days - days_present - days_with_partial_attendance,  # Days with NO attendance
         "late": 0,  # Not applicable for day-based calculation
         "excused": 0,  # Could be enhanced to track excused days
         "total": total_semester_days,  # Total academic days in semester
@@ -300,6 +301,20 @@ async def get_students_by_subject(
         date = datetime.now().strftime("%Y-%m-%d")
     
     target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    today = datetime.now().date()
+    
+    # SYSTEM INACTIVE DETECTION: Check if system had ANY activity on this date
+    # Query for any attendance record created on the same day as target_date
+    global_activity_query = select(func.count(AttendanceRecord.id)).where(
+        and_(
+            func.date(AttendanceRecord.date) == target_date,
+            func.date(AttendanceRecord.created_at) == target_date
+        )
+    )
+    global_activity_result = await db.execute(global_activity_query)
+    system_was_active = (global_activity_result.scalar() or 0) > 0
+    
+    print(f"[SYSTEM DETECTION] Date: {target_date}, Today: {today}, System Active: {system_was_active}")
     
     # Get students by faculty and semester
     students_query = select(Student).options(
@@ -332,7 +347,19 @@ async def get_students_by_subject(
     # Prepare response
     students_with_attendance = []
     for student in students:
-        status = attendance_map.get(student.id, "absent")  # Default to absent if no record
+        # Determine default status intelligently
+        if student.id in attendance_map:
+            status = attendance_map[student.id]
+        elif target_date > today:
+            status = "no_data"  # Future date
+        elif target_date == today:
+            status = "no_data"  # Today - classes may not have happened
+        elif not system_was_active and target_date < today:
+            status = "system_inactive"  # Past date with no system activity
+            print(f"[DEBUG] Student {student.id} on {target_date}: SYSTEM_INACTIVE")
+        else:
+            status = "absent"  # Past date, system was active, but student has no record
+            print(f"[DEBUG] Student {student.id} on {target_date}: ABSENT (system was active)")
         students_with_attendance.append({
             "id": student.id,
             "student_id": student.student_id,
@@ -362,109 +389,230 @@ async def get_calendar_attendance(
     Get pre-aggregated attendance data for calendar display.
     Returns daily summaries for a specific month, optimized for calendar views.
     """
-    # Get student ID for current user if they're a student
-    student_id = None
-    if current_user.role == UserRole.student:
-        student_query = select(Student).where(Student.user_id == current_user.id)
-        student_result = await db.execute(student_query)
-        student_record = student_result.scalar_one_or_none()
-        
-        if student_record:
-            student_id = student_record.id
+    try:
+        # Get student for current user
+        student_id = None
+        student_record = None
+        if current_user.role == UserRole.student:
+            student_query = select(Student).options(
+                selectinload(Student.faculty_rel)
+            ).where(Student.user_id == current_user.id)
+            student_result = await db.execute(student_query)
+            student_record = student_result.scalar_one_or_none()
+            
+            if student_record:
+                student_id = student_record.id
+            else:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Student record not found for current user"
+                )
         else:
             raise HTTPException(
-                status_code=404,
-                detail="Student record not found for current user"
+                status_code=403,
+                detail="Calendar endpoint is only available for students"
             )
-    else:
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting student record: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
-            status_code=403,
-            detail="Calendar endpoint is only available for students"
+            status_code=500,
+            detail=f"Error retrieving student information: {str(e)}"
         )
-    
-    # Calculate month date range
-    try:
-        start_date = date(year, month, 1)
-        # Get last day of month
-        if month == 12:
-            end_date = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            end_date = date(year, month + 1, 1) - timedelta(days=1)
-    except ValueError:
+
+    if not student_record.faculty_id or not student_record.semester:
         raise HTTPException(
             status_code=400,
-            detail="Invalid year or month"
+            detail=f"Student {current_user.full_name} is not enrolled in a faculty or semester."
         )
-    
-    # Get attendance records for the month - note: date is DateTime, need to convert
-    records_query = select(AttendanceRecord).where(
-        and_(
-            AttendanceRecord.student_id == student_id,
-            func.date(AttendanceRecord.date) >= start_date,
-            func.date(AttendanceRecord.date) <= end_date
+
+    try:
+        # Calculate month date range
+        try:
+            start_date = date(year, month, 1)
+            # Get last day of month
+            if month == 12:
+                end_date = date(year + 1, 1, 1) - timedelta(days=1)
+            else:
+                end_date = date(year, month + 1, 1) - timedelta(days=1)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid year or month"
+            )
+        
+        # Fetch all academic events for the student's faculty and semester in the month
+        # This is the correct way to determine if there are classes on a specific day
+        events_query = select(AcademicEvent).where(
+            and_(
+                AcademicEvent.start_date.between(start_date, end_date),
+                or_(
+                    AcademicEvent.faculty_id == student_record.faculty_id,
+                    AcademicEvent.faculty_id == None  # Global events
+                )
+            )
         )
-    ).order_by(AttendanceRecord.date)
-    
-    result = await db.execute(records_query)
-    all_records = result.scalars().all()
-    
-    # Group by date and calculate summaries
-    daily_summaries = defaultdict(lambda: {
-        'total': 0, 'present': 0, 'absent': 0, 'late': 0, 'excused': 0
-    })
-    
-    for record in all_records:
-        # Convert datetime to date for grouping
-        date_str = record.date.date().strftime("%Y-%m-%d") if hasattr(record.date, 'date') else record.date.strftime("%Y-%m-%d")
-        daily_summaries[date_str]['total'] += 1
+        events_result = await db.execute(events_query)
+        all_month_events = events_result.scalars().all()
         
-        status = record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower()
-        if status == 'present':
-            daily_summaries[date_str]['present'] += 1
-        elif status == 'absent':
-            daily_summaries[date_str]['absent'] += 1
-        elif status == 'late':
-            daily_summaries[date_str]['late'] += 1
-        elif status == 'excused':
-            daily_summaries[date_str]['excused'] += 1
-    
-    # Convert to the expected format
-    calendar_data = []
-    for date_str, summary in daily_summaries.items():
-        # Determine overall status for the day
-        total = summary['total']
-        present = summary['present']
-        absent = summary['absent'] 
-        late = summary['late']
-        excused = summary['excused']
+        # Group events by date
+        daily_events = defaultdict(list)
+        for event in all_month_events:
+            daily_events[event.start_date.strftime("%Y-%m-%d")].append(event)
         
-        if total == 0:
-            status = 'no_data'
-        elif present == total:
-            status = 'present'
-        elif present == 0:
-            status = 'absent'
-        else:
-            status = 'partial'
-            
-        calendar_data.append({
-            'date': date_str,
-            'status': status,
-            'total_classes': total,
-            'present_count': present,
-            'absent_count': absent,
-            'late_count': late,
-            'excused_count': excused
+        print(f"Found {len(all_month_events)} academic events for the month")
+        
+        # Get attendance records for the month - note: date is DateTime, need to convert
+        records_query = select(AttendanceRecord).where(
+            and_(
+                AttendanceRecord.student_id == student_id,
+                func.date(AttendanceRecord.date) >= start_date,
+                func.date(AttendanceRecord.date) <= end_date
+            )
+        ).order_by(AttendanceRecord.date)
+        
+        result = await db.execute(records_query)
+        all_records = result.scalars().all()
+        
+        print(f"Found {len(all_records)} attendance records for the month")
+        
+        # Group by date and calculate summaries
+        daily_summaries = defaultdict(lambda: {
+            'total': 0, 'present': 0, 'absent': 0, 'late': 0, 'excused': 0
         })
-    
-    # Sort by date
-    calendar_data.sort(key=lambda x: x['date'])
-    
-    return {
-        'calendar_data': calendar_data,
-        'month': month,
-        'year': year
-    }
+        
+        for record in all_records:
+            # Convert datetime to date for grouping
+            date_str = record.date.date().strftime("%Y-%m-%d") if hasattr(record.date, 'date') else record.date.strftime("%Y-%m-%d")
+            daily_summaries[date_str]['total'] += 1
+            
+            status = record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower()
+            if status == 'present':
+                daily_summaries[date_str]['present'] += 1
+            elif status == 'absent':
+                daily_summaries[date_str]['absent'] += 1
+            elif status == 'late':
+                daily_summaries[date_str]['late'] += 1
+            elif status == 'excused':
+                daily_summaries[date_str]['excused'] += 1
+        
+        # Convert to the expected format
+        calendar_data = []
+        current_day = start_date
+        today = date.today()
+        while current_day <= end_date:
+            date_str = current_day.strftime("%Y-%m-%d")
+            summary = daily_summaries.get(date_str)
+            
+            # Get academic events for this specific day
+            events_for_day = daily_events.get(date_str, [])
+            class_events_for_day = [e for e in events_for_day if e.event_type == EventType.CLASS]
+            holiday_event = next((e for e in events_for_day if e.event_type == EventType.HOLIDAY), None)
+            
+            # Count scheduled classes based on actual academic events
+            scheduled_classes_count = len(class_events_for_day)
+
+            status = 'no_data'
+            present_count = absent_count = late_count = excused_count = 0
+            
+            # Check if the current date is in the future
+            is_future = current_day > today
+
+            # Check for holidays first
+            if holiday_event:
+                status = 'holiday'
+            elif scheduled_classes_count > 0:
+                # This day has CLASS events - check actual attendance records
+                if not summary:
+                    # No attendance records for a CLASS day
+                    if is_future:
+                        status = 'no_data'
+                    else:
+                        # Past CLASS day with no records = absent
+                        status = 'absent'
+                        absent_count = 1  # Mark as absent for the day
+                else:
+                    # We have attendance records - analyze them
+                    present_count = summary.get('present', 0)
+                    late_count = summary.get('late', 0)
+                    absent_count = summary.get('absent', 0)
+                    excused_count = summary.get('excused', 0)
+                    total_records = present_count + late_count + absent_count + excused_count
+                    
+                    # Get expected number of subjects for this student's semester/faculty
+                    expected_subjects_query = select(func.count(func.distinct(ClassSchedule.subject_id))).where(
+                        and_(
+                            ClassSchedule.faculty_id == student_record.faculty_id,
+                            ClassSchedule.semester == student_record.semester,
+                            ClassSchedule.is_active == True
+                        )
+                    )
+                    expected_result = await db.execute(expected_subjects_query)
+                    expected_subjects = expected_result.scalar() or 0
+
+                    if is_future:
+                        # Future CLASS day - don't mark as absent yet
+                        status = 'no_data'
+                    elif absent_count > 0 and (present_count > 0 or late_count > 0):
+                        # Mix of present/late AND absent = partial attendance
+                        status = 'partial'
+                    elif total_records < expected_subjects and absent_count == 0:
+                        # Missing some records but none explicitly marked absent
+                        # This means partial attendance (some classes not attended)
+                        status = 'partial'
+                    elif absent_count == 0 and total_records >= expected_subjects:
+                        # All expected subjects attended (present or late) = present for the day
+                        status = 'present'
+                    elif absent_count > 0 and (present_count == 0 and late_count == 0):
+                        # Only absences = absent for the day
+                        status = 'absent'
+                    elif present_count == 0 and late_count == 0 and absent_count == 0:
+                        # No meaningful records = treat as absent
+                        status = 'absent'
+                    else:
+                        # Fallback for edge cases
+                        status = 'partial'
+            elif summary:
+                # Records exist on a day with no scheduled events (e.g., extra class)
+                present_count = summary.get('present', 0)
+                late_count = summary.get('late', 0)
+                attended_count = present_count + late_count
+                if attended_count > 0:
+                    status = 'present' # Considered present as they attended something
+            # else: no events and no records = no_data (default)
+                
+            calendar_data.append({
+                'date': date_str,
+                'status': status,
+                'total_classes': scheduled_classes_count,
+                'present_count': present_count,
+                'absent_count': absent_count,
+                'late_count': late_count,
+                'excused_count': excused_count
+            })
+            current_day += timedelta(days=1)
+
+        # Sort by date
+        calendar_data.sort(key=lambda x: x['date'])
+        
+        print(f"Returning {len(calendar_data)} calendar entries")
+        
+        return {
+            'calendar_data': calendar_data,
+            'month': month,
+            'year': year
+        }
+    except Exception as e:
+        print(f"Error in calendar attendance processing: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing calendar data: {str(e)}"
+        )
 
 @router.get("/{attendance_id}")
 async def get_attendance_record(
@@ -653,11 +801,26 @@ async def get_auto_absent_stats(
 @router.get("/student-subject-breakdown/{student_id}")
 async def get_student_subject_breakdown(
     student_id: int,
+    month: Optional[int] = None,  # Optional month filter (1-12), defaults to current month
+    year: Optional[int] = None,   # Optional year filter, defaults to current year
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get semester-wise subject attendance breakdown for a specific student."""
+    """Get subject attendance breakdown for a specific student, filtered by month/year (defaults to current month)."""
     try:
+        # Default to current month/year if not specified
+        from datetime import date as date_class
+        today = date_class.today()
+        target_month = month if month is not None else today.month
+        target_year = year if year is not None else today.year
+        
+        # Validate month
+        if target_month < 1 or target_month > 12:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Month must be between 1 and 12"
+            )
+        
         # Check if current user can access this student's data
         if current_user.role == UserRole.student:
             # Students can only view their own data
@@ -672,7 +835,7 @@ async def get_student_subject_breakdown(
         
         # Get all subjects for the student's faculty and semester
         student_result = await db.execute(
-            select(Student).options(selectinload(Student.user)).where(Student.id == student_id)
+            select(Student).options(joinedload(Student.user)).where(Student.id == student_id)
         )
         student = student_result.scalar_one_or_none()
         
@@ -682,6 +845,8 @@ async def get_student_subject_breakdown(
                 detail="Student not found"
             )
         
+        print(f"[DEBUG] Student: {student.user.full_name if student.user else 'Unknown'}, Faculty ID: {student.faculty_id}, Semester: {student.semester}")
+        
         # Get subjects for student's faculty AND semester using ClassSchedule
         # Select specific columns to avoid JSON column issues
         subjects_query = (
@@ -690,6 +855,7 @@ async def get_student_subject_breakdown(
             .where(
                 and_(
                     Subject.faculty_id == student.faculty_id,
+                    ClassSchedule.faculty_id == student.faculty_id,
                     ClassSchedule.semester == student.semester
                 )
             )
@@ -698,52 +864,104 @@ async def get_student_subject_breakdown(
         subjects_result = await db.execute(subjects_query)
         subject_rows = subjects_result.all()
         
-        subject_breakdown = []
+        print(f"[DEBUG] Found {len(subject_rows)} subjects for faculty {student.faculty_id}, semester {student.semester}")
+        for row in subject_rows[:5]:  # Log first 5 subjects
+            print(f"  - {row.name} (ID: {row.id}, Faculty: {row.faculty_id})")
         
+        subject_breakdown = []
+
         for subject_row in subject_rows:
-            # Create a subject object from the row data
             subject_id = subject_row.id
             subject_name = subject_row.name
             subject_code = subject_row.code
             subject_credits = subject_row.credits or 3
-            
-            # Get attendance records for this subject using simple query
+
+            # Get student's attendance records for this subject (filtered by month/year)
             attendance_query = select(AttendanceRecord).where(
                 and_(
                     AttendanceRecord.student_id == student_id,
-                    AttendanceRecord.subject_id == subject_id
+                    AttendanceRecord.subject_id == subject_id,
+                    extract('month', AttendanceRecord.date) == target_month,
+                    extract('year', AttendanceRecord.date) == target_year
                 )
             )
-            
+
             attendance_result = await db.execute(attendance_query)
             attendance_records = attendance_result.scalars().all()
+
+            present_count = late_count = absent_count = excused_count = 0
+
+            for record in attendance_records:
+                status = normalize_attendance_status(record.status)
+                if status == "present":
+                    present_count += 1
+                elif status == "late":
+                    late_count += 1
+                elif status == "absent":
+                    absent_count += 1
+                elif status == "excused":
+                    excused_count += 1
+
+            # Calculate total_classes as the ACTUAL number of classes held for this subject in the target month
+            # Query distinct dates where students from the SAME faculty and semester have attendance
+            # This ensures we only count classes relevant to this student's faculty/semester
+            total_classes_query = (
+                select(func.count(func.distinct(AttendanceRecord.date)))
+                .join(Student, AttendanceRecord.student_id == Student.id)
+                .where(
+                    and_(
+                        AttendanceRecord.subject_id == subject_id,
+                        Student.faculty_id == student.faculty_id,
+                        Student.semester == student.semester,
+                        extract('month', AttendanceRecord.date) == target_month,
+                        extract('year', AttendanceRecord.date) == target_year
+                    )
+                )
+            )
+            total_classes_result = await db.execute(total_classes_query)
+            total_classes = total_classes_result.scalar() or 0
             
-            # Calculate stats manually to avoid SQL function issues
-            total_classes = len(attendance_records)
-            attended = sum(1 for record in attendance_records if str(record.status).upper() == 'PRESENT')
-            absent = sum(1 for record in attendance_records if str(record.status).upper() == 'ABSENT')
-            late = sum(1 for record in attendance_records if str(record.status).upper() == 'LATE')
-            
-            # Calculate attendance percentage
-            attendance_percentage = (attended / total_classes * 100) if total_classes > 0 else 0
-            
+            # If no classes have been held for this subject at all, skip it
+            if total_classes == 0:
+                continue
+
+            # Calculate attendance metrics for this subject
+            # attended = classes where student was present (on time or late)
+            # effective_total = total classes minus excused absences
+            attended = present_count + late_count
+            effective_total = total_classes - excused_count
+            effective_total = effective_total if effective_total > 0 else total_classes
+
+            attendance_percentage = (attended / effective_total * 100) if effective_total else 0
+
             subject_breakdown.append({
                 "subject_id": subject_id,
                 "subject_name": subject_name,
                 "subject_code": subject_code,
                 "total_classes": total_classes,
                 "attended": attended,
-                "absent": absent,
-                "late": late,
+                "present": present_count,
+                "absent": absent_count,
+                "late": late_count,
+                "excused": excused_count,
                 "attendance_percentage": round(attendance_percentage, 2),
-                "credits": subject_credits  # Already defaulted to 3 above
+                "credits": subject_credits
             })
         
-        return subject_breakdown
+        # Return data with metadata indicating the time period
+        return {
+            "month": target_month,
+            "year": target_year,
+            "month_name": date_class(target_year, target_month, 1).strftime("%B"),
+            "subjects": subject_breakdown
+        }
         
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"[ERROR] Exception in get_student_subject_breakdown: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error retrieving student subject breakdown: {str(e)}"

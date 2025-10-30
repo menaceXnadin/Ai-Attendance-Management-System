@@ -12,7 +12,7 @@ const blogPosts = [
     title: 'The Future of Classroom Attendance',
     excerpt: 'How AI and facial recognition are transforming the way educators track student attendance.',
     date: 'May 12, 2023',
-    author: 'Dr. Sarah Chen',
+    author: 'Nadin Tamang',
     category: 'Technology',
     readTime: '5 min read',
     image: 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=600&auto=format'
@@ -52,7 +52,7 @@ const blogPosts = [
     title: 'Facial Recognition Technology: What Educators Need to Know',
     excerpt: 'A primer on how facial recognition works and what to consider before implementation.',
     date: 'September 12, 2023',
-    author: 'Dr. Sarah Chen',
+    author: 'Nadin Tamang',
     category: 'Technology',
     readTime: '7 min read',
     image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&auto=format'
@@ -71,58 +71,86 @@ const blogPosts = [
 
 const BlogPage = () => {
   return (
-    <>
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-blue-950">
       <Navbar />
-      
-      <div className="bg-gray-50 py-16">
-        <div className="container mx-auto px-4">
-          <div className="max-w-3xl mx-auto text-center mb-16">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">AttendAI Blog</h1>
-            <p className="text-lg text-gray-600">
-              Insights, updates, and resources about AI in education and attendance tracking.
-            </p>
-          </div>
-          
+
+      {/* Hero Section */}
+      <section className="relative px-6 lg:px-8 pt-20 pb-16">
+        <div className="mx-auto max-w-4xl text-center">
+          <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white mb-6">
+            AttendAI Blog
+          </h1>
+          <p className="text-lg sm:text-xl leading-relaxed text-blue-200/80 max-w-2xl mx-auto">
+            Insights, updates, and resources about AI in education and attendance tracking.
+          </p>
+        </div>
+      </section>
+
+      {/* Blog Posts Grid */}
+      <section className="py-16 px-6 lg:px-8">
+        <div className="mx-auto max-w-7xl">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {blogPosts.map(post => (
-              <Card key={post.id} className="overflow-hidden hover:shadow-md transition-shadow duration-300">
-                <img 
-                  src={post.image} 
-                  alt={post.title} 
-                  className="w-full h-48 object-cover"
-                />
-                <CardHeader>
-                  <div className="flex justify-between items-center mb-2 text-sm text-gray-500">
-                    <span>{post.category}</span>
+              <Card 
+                key={post.id} 
+                className="group overflow-hidden bg-slate-900/60 backdrop-blur-lg border border-slate-700/50 rounded-2xl hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2"
+              >
+                <div className="relative overflow-hidden">
+                  <img 
+                    src={post.image} 
+                    alt={post.title} 
+                    className="w-full h-52 object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div className="absolute top-4 left-4">
+                    <span className="inline-block px-3 py-1 text-xs font-semibold text-white bg-blue-600/80 backdrop-blur-sm rounded-full">
+                      {post.category}
+                    </span>
+                  </div>
+                </div>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2 text-xs text-blue-200/60 mb-3">
                     <span>{post.readTime}</span>
                   </div>
-                  <CardTitle className="text-xl">{post.title}</CardTitle>
+                  <CardTitle className="text-xl font-semibold text-white leading-tight hover:text-blue-300 transition-colors">
+                    {post.title}
+                  </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600">{post.excerpt}</p>
+                <CardContent className="pb-4">
+                  <p className="text-blue-200/70 leading-relaxed">
+                    {post.excerpt}
+                  </p>
                 </CardContent>
-                <CardFooter className="flex justify-between items-center pt-0">
-                  <div className="text-sm text-gray-500">
-                    <span>By {post.author}</span>
-                    <span className="mx-2">•</span>
-                    <span>{post.date}</span>
+                <CardFooter className="flex justify-between items-center border-t border-slate-700/30 pt-4">
+                  <div className="flex flex-col text-sm">
+                    <span className="text-blue-200/80 font-medium">{post.author}</span>
+                    <span className="text-blue-200/50 text-xs">{post.date}</span>
                   </div>
                   <Link to={`/blog/${post.id}`}>
-                    <Button variant="outline" size="sm">Read more</Button>
+                    <Button 
+                      size="sm" 
+                      className="bg-blue-600/80 hover:bg-blue-600 text-white border-0 rounded-lg px-4 transition-all duration-300"
+                    >
+                      Read More
+                    </Button>
                   </Link>
                 </CardFooter>
               </Card>
             ))}
           </div>
           
-          <div className="mt-12 text-center">
-            <Button variant="outline">Load More Articles</Button>
+          {/* Load More Button */}
+          <div className="mt-16 text-center">
+            <Button 
+              className="bg-slate-900/60 backdrop-blur-lg text-white border border-slate-700/50 hover:border-blue-500/30 hover:bg-slate-900/80 rounded-xl px-8 py-6 text-base transition-all duration-300"
+            >
+              Load More Articles
+            </Button>
           </div>
         </div>
-      </div>
-      
+      </section>
+
       <Footer />
-    </>
+    </div>
   );
 };
 
