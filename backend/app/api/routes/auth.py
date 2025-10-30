@@ -83,7 +83,7 @@ async def register_student(
         email=student_data.user.email,
         full_name=student_data.user.full_name,
         hashed_password=get_password_hash(student_data.user.password),
-    role="student"
+        role="student"  # FIXED: Correct indentation
     )
     db.add(user)
     await db.flush()  # Get user ID

@@ -272,7 +272,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       const isCurrentPeriod = currentMinutes >= startTimeMinutes && currentMinutes <= endTimeMinutes;
       const isAfterEnd = currentMinutes > endTimeMinutes;
 
-      // Find matching attendance record in database
+      // Find matching attendance record in database - FIXED: More precise matching
       const attendanceRecord = todayAttendance?.find(record => {
         // Get subject IDs for comparison - handle both string and integer types
         const recordSubjectId = record.subjectId || '';
@@ -285,34 +285,21 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         // Debug: Enhanced logging
         console.log(`[DEBUG] Checking match for ${subject.subjectName} (${subject.subjectCode}):`, {
           scheduleSubjectId: scheduleSubjectIdInt,
+          scheduleStartTime: subject.startTime,
+          scheduleEndTime: subject.endTime,
           recordSubjectId: recordSubjectIdInt,
-          recordStatus: record.status
+          recordStatus: record.status,
+          recordDate: record.date
         });
         
-        // Primary strategy: Integer comparison (most reliable)
+        // FIXED: Only use integer ID comparison - most reliable and prevents false matches
+        // Removed fallback strategies that could cause incorrect matches
         if (recordSubjectIdInt && scheduleSubjectIdInt && recordSubjectIdInt === scheduleSubjectIdInt) {
           console.log(`[DEBUG] ✅ MATCH by ID for ${subject.subjectName}`);
           return true;
         }
         
-        // Fallback strategies for edge cases
-        const extendedRecord = record as Attendance & { 
-          subjectName?: string; 
-          subjectCode?: string; 
-        };
-        
-        // Strategy 2: Subject code matching
-        if (extendedRecord.subjectCode && extendedRecord.subjectCode === subject.subjectCode) {
-          console.log(`[DEBUG] ✅ MATCH by Code for ${subject.subjectName} - ${subject.subjectCode}`);
-          return true;
-        }
-        
-        // Strategy 3: Subject name matching (case-insensitive)
-        if (extendedRecord.subjectName?.toLowerCase() === subject.subjectName?.toLowerCase()) {
-          console.log(`[DEBUG] ✅ MATCH by Name for ${subject.subjectName}`);
-          return true;
-        }
-        
+        console.log(`[DEBUG] ❌ NO MATCH for ${subject.subjectName}`);
         return false;
       });
 
@@ -322,15 +309,21 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
       if (attendanceRecord) {
         // Database record exists - use it as authoritative source
-        attendanceMarked = true;
         const dbStatus = attendanceRecord.status.toLowerCase();
         
         console.log(`[DEBUG] ${subject.subjectName} has DB record with status: ${dbStatus}`);
         
         if (dbStatus === 'present' || dbStatus === 'late') {
           status = 'Present';
+          attendanceMarked = true; // Only set to true for present/late status
         } else if (dbStatus === 'absent') {
           status = 'Absent';
+          // Check if it was manually marked by checking the marked_by field or method
+          const extendedRecord = attendanceRecord as any;
+          const isManuallyMarked = extendedRecord.method === 'manual' || 
+                                   (extendedRecord.marked_by && extendedRecord.marked_by !== 'system');
+          attendanceMarked = isManuallyMarked; // Only true if admin/faculty marked it
+          console.log(`[DEBUG] ${subject.subjectName} absent - manually marked: ${isManuallyMarked}`);
         } else {
           // Unknown status - log warning and use time-based logic
           console.warn('[WARN] Unknown attendance status:', attendanceRecord.status, 'for subject:', subject.subjectName);
@@ -409,6 +402,23 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     
     // Use enhanced calculation that prioritizes database records
     const scheduleWithStatus = calculateSubjectStatusWithDB(baseSchedule);
+    
+    // COMPREHENSIVE DEBUG: Log the final calculated status for each subject
+    console.log('[DEBUG] ========== FINAL SCHEDULE WITH STATUS ==========');
+    scheduleWithStatus.forEach((subject, idx) => {
+      console.log(`[DEBUG] Subject ${idx + 1} (${subject.subjectName}):`, {
+        subjectId: subject.subjectId,
+        subjectCode: subject.subjectCode,
+        startTime: subject.startTime,
+        endTime: subject.endTime,
+        status: subject.status,
+        attendanceMarked: subject.attendanceMarked,
+        isCurrentPeriod: subject.isCurrentPeriod,
+        isBeforeStart: subject.isBeforeStart,
+        isAfterEnd: subject.isAfterEnd
+      });
+    });
+    console.log('[DEBUG] ===================================================');
     
     return scheduleWithStatus;
   }, [generateTodayScheduleFromDB, calculateSubjectStatusWithDB, todayAttendance]);
@@ -661,6 +671,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
             key={`${subject.subjectId}-${subject.startTime}-${index}`}
             className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all"
           >
+            {/* DEBUG: Log what we're rendering */}
+            {console.log(`[RENDER-DEBUG] Rendering subject ${subject.subjectName} with status: ${subject.status}, attendanceMarked: ${subject.attendanceMarked}`)}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
@@ -688,7 +700,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                {subject.attendanceMarked || subject.status === 'Present' ? (
+                {/* FIXED: Only show Present badge when status is actually Present */}
+                {subject.status === 'Present' ? (
                   <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Present
@@ -738,9 +751,9 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       Absent
                     </Badge>
-                    {/* Show if DB-marked or time-based */}
+                    {/* FIXED: Clearer explanation of how attendance was determined */}
                     <p className="text-xs text-slate-400">
-                      {subject.attendanceMarked ? '📋 Admin marked' : '⏰ Auto (ended)'}
+                      {subject.attendanceMarked ? 'Marked by admin' : 'Class ended - no record'}
                     </p>
                   </div>
                 ) : subject.status === 'Starts Soon' ? (

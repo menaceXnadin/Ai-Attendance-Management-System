@@ -39,6 +39,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ loading, records }) =
   }
 
   return (
+    <div className="rounded-lg border border-slate-700/50 overflow-hidden bg-slate-950/50">
     <Table>
       <TableHeader>
         <TableRow>
@@ -57,11 +58,11 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ loading, records }) =
             <TableCell>{record.className}</TableCell>
             <TableCell>{format(new Date(record.date), 'PP')}</TableCell>
             <TableCell>
-              <span className={`px-2 py-1 rounded-full text-xs ${
-                record.status === 'present' ? 'bg-green-100 text-green-800' :
-                record.status === 'absent' ? 'bg-red-100 text-red-800' :
-                record.status === 'excused' ? 'bg-purple-100 text-purple-800' :
-                'bg-blue-100 text-blue-800'
+              <span className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${
+                record.status === 'present' ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30' :
+                record.status === 'absent' ? 'bg-red-500/20 text-red-300 border-red-500/30 hover:bg-red-500/30' :
+                record.status === 'excused' ? 'bg-purple-500/20 text-purple-300 border-purple-500/30 hover:bg-purple-500/30' :
+                'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
               }`}>
                 {record.status.charAt(0).toUpperCase() + record.status.slice(1)}
               </span>
@@ -70,6 +71,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({ loading, records }) =
         ))}
       </TableBody>
     </Table>
+    </div>
   );
 };
 

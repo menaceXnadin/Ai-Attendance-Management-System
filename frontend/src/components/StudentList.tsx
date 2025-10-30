@@ -31,11 +31,15 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
   }, [students]);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Students List</CardTitle>
+    <Card className="bg-slate-900/80 backdrop-blur-md border-slate-700/50 shadow-xl">
+      <CardHeader className="border-b border-slate-700/50 bg-gradient-to-r from-slate-800/50 to-slate-900/50">
+        <CardTitle className="text-white flex items-center gap-2">
+          <User className="h-5 w-5 text-blue-400" />
+          Students List
+        </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-6">
+        <div className="rounded-lg border border-slate-700/50 overflow-hidden bg-slate-950/50">
         <Table>
           <TableCaption>A list of all students registered in the system.</TableCaption>
           <TableHeader>
@@ -86,12 +90,18 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
                         size="sm"
                         onClick={() => navigate(`/app/students/${student.id}/calendar`)}
                         title="View attendance calendar"
+                        className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/50 hover:text-blue-300 transition-all duration-200"
                       >
                         <Calendar className="h-4 w-4 mr-1" />
                         Calendar
                       </Button>
                       
-                      <Button variant="outline" size="sm" onClick={() => onEdit(student)}>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => onEdit(student)}
+                        className="border-green-500/30 text-green-400 hover:bg-green-500/10 hover:border-green-500/50 hover:text-green-300 transition-all duration-200"
+                      >
                         <Edit className="h-4 w-4 mr-1" />
                         Edit
                       </Button>
@@ -99,7 +109,7 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        className="text-red-500 hover:text-red-600" 
+                        className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50 hover:text-red-300 transition-all duration-200" 
                       onClick={() => {
                         console.log("Delete button clicked for student:", student);
                         console.log("Student ID being passed:", student.id);
@@ -127,6 +137,7 @@ const StudentList = ({ students, onEdit, onDelete, isLoading = false }: StudentL
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

@@ -62,13 +62,13 @@ const SidebarNavItem = ({ icon, label, to, onClick, badge, isNew }: SidebarNavIt
           {icon}
           <span>{label}</span>
           {isNew && (
-            <Badge className="bg-green-500/20 text-green-300 text-xs px-1 py-0">
+            <Badge className="sidebar-new-badge bg-green-500/20 text-green-300 text-xs px-1 py-0 border border-green-500/30">
               NEW
             </Badge>
           )}
         </div>
         {badge && (
-          <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30">
+          <Badge variant="outline" className="badge bg-blue-500/20 text-blue-300 border-blue-400/30">
             {badge}
           </Badge>
         )}
@@ -153,35 +153,35 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
                   <SidebarNavItem 
-                    icon={<HomeIcon className="w-5 h-5" />} 
+                    icon={<HomeIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Dashboard" 
                     to="/app" 
                   />
                   <SidebarNavItem 
-                    icon={<UsersIcon className="w-5 h-5" />} 
+                    icon={<UsersIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Students" 
                     to="/app/students"
                     badge={students.length > 0 ? students.length.toString() : undefined}
                   />
                   <SidebarNavItem 
-                    icon={<CalendarIcon className="w-5 h-5" />} 
+                    icon={<CalendarIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Academic Calendar" 
                     to="/app/calendar"
                     isNew={true}
                   />
                   <SidebarNavItem 
-                    icon={<BookOpen className="w-5 h-5" />} 
+                    icon={<BookOpen className="w-5 h-5 transition-transform duration-300" />} 
                     label="Attendance" 
                     to="/app/attendance" 
                   />
                   <SidebarNavItem 
-                    icon={<Shield className="w-5 h-5" />} 
+                    icon={<Shield className="w-5 h-5 transition-transform duration-300" />} 
                     label="Faculties" 
                     to="/app/faculties"
                     badge={classes.length > 0 ? classes.length.toString() : undefined}
                   />
                   <SidebarNavItem 
-                    icon={<CalendarIcon className="w-5 h-5" />} 
+                    icon={<CalendarIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Schedules" 
                     to="/app/schedules"
                   />
@@ -196,19 +196,19 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
                   <SidebarNavItem 
-                    icon={<BarChart3 className="w-5 h-5" />} 
+                    icon={<BarChart3 className="w-5 h-5 transition-transform duration-300" />} 
                     label="Analytics" 
                     to="/app/analytics"
                     isNew={true}
                   />
                   <SidebarNavItem 
-                    icon={<Activity className="w-5 h-5" />} 
+                    icon={<Activity className="w-5 h-5 transition-transform duration-300" />} 
                     label="Live Monitoring" 
                     to="/app/monitoring"
                     isNew={true}
                   />
                   <SidebarNavItem 
-                    icon={<Target className="w-5 h-5" />} 
+                    icon={<Target className="w-5 h-5 transition-transform duration-300" />} 
                     label="Performance" 
                     to="/app/performance"
                   />
@@ -223,24 +223,24 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
                   <SidebarNavItem 
-                    icon={<CalendarIcon className="w-5 h-5" />} 
+                    icon={<CalendarIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Semester Config" 
                     to="/app/admin/semester-configuration"
                     isNew={true}
                   />
                   <SidebarNavItem 
-                    icon={<Bell className="w-5 h-5" />} 
+                    icon={<Bell className="w-5 h-5 transition-transform duration-300" />} 
                     label="Notifications" 
                     to="/app/notifications"
                     isNew={true}
                   />
                   <SidebarNavItem 
-                    icon={<Settings className="w-5 h-5" />} 
+                    icon={<Settings className="w-5 h-5 transition-transform duration-300" />} 
                     label="Settings" 
                     to="/app/settings" 
                   />
                   <SidebarNavItem 
-                    icon={<Shield className="w-5 h-5" />} 
+                    icon={<Shield className="w-5 h-5 transition-transform duration-300" />} 
                     label="Security" 
                     to="/app/security"
                   />

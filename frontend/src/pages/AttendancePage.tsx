@@ -97,7 +97,7 @@ const AttendancePage = () => {
             className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500"
           >
             <UserCheck className="h-4 w-4 mr-2" />
-            Admin Workflow
+            Mark Attendance
           </TabsTrigger>
           <TabsTrigger 
             value="daily-report"

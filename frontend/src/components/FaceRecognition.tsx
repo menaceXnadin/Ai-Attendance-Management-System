@@ -410,7 +410,13 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
     try {
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      // Mirror the canvas to match the mirrored video display
+      context.save();
+      context.scale(-1, 1);
+      context.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
+      context.restore();
+      
       dataUrl = canvas.toDataURL('image/jpeg');
       const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
     
@@ -582,7 +588,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
                 autoPlay 
                 playsInline
                 className="w-full h-full object-cover bg-slate-800"
-                style={{ transform: 'scaleX(-1)' }} // Mirror effect
+                style={{ transform: 'scaleX(-1)' }}
                 width={480}
                 height={640}
               />

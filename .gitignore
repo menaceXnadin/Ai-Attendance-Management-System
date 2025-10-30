@@ -87,3 +87,4 @@ debug*.js
 
 #Ignore insiders AI rules
 .github\instructions\codacy.instructions.md
+codacy-fixes.txt

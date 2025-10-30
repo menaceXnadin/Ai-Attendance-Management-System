@@ -492,37 +492,14 @@ const StudentDashboard = () => {
                             console.log(`[ATTENDANCE-DEBUG] Checking attendance record for ${schedule.subject_name}:`);
                             console.log(`[ATTENDANCE-DEBUG] Record subject ID: ${record.subjectId} (type: ${typeof record.subjectId})`);
                             console.log(`[ATTENDANCE-DEBUG] Schedule subject ID: ${schedule.subject_id} (type: ${typeof schedule.subject_id})`);
-                            console.log(`[ATTENDANCE-DEBUG] Record subject object ID: ${record.subject?.id}`);
-                            console.log(`[ATTENDANCE-DEBUG] Record subject name: ${record.subject?.name}`);
                             
-                            // Strategy 1: Direct subject ID matching (string vs number)
-                            if (record.subjectId === schedule.subject_id.toString()) {
-                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 1 (subjectId string)`);
-                              return true;
-                            }
+                            // FIXED: Use only integer comparison for precise matching
+                            // Parse both IDs to integers for reliable comparison
+                            const recordSubjectIdInt = parseInt(record.subjectId);
+                            const scheduleSubjectIdInt = parseInt(schedule.subject_id.toString());
                             
-                            // Strategy 2: Subject object ID matching  
-                            if (record.subject?.id === schedule.subject_id.toString()) {
-                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 2 (subject.id string)`);
-                              return true;
-                            }
-                            
-                            // Strategy 3: Subject name matching
-                            if (record.subject?.name?.toLowerCase() === schedule.subject_name.toLowerCase()) {
-                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 3 (subject name)`);
-                              return true;
-                            }
-                            
-                            // Strategy 4: Extended record type check for subjectName field
-                            const extendedRecord = record as Attendance & { subjectName?: string };
-                            if (extendedRecord.subjectName?.toLowerCase() === schedule.subject_name.toLowerCase()) {
-                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 4 (subjectName)`);
-                              return true;
-                            }
-                            
-                            // Strategy 5: Integer comparison for subject IDs
-                            if (parseInt(record.subjectId) === schedule.subject_id) {
-                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found via Strategy 5 (integer comparison)`);
+                            if (!isNaN(recordSubjectIdInt) && !isNaN(scheduleSubjectIdInt) && recordSubjectIdInt === scheduleSubjectIdInt) {
+                              console.log(`[ATTENDANCE-DEBUG] ✅ Match found (integer comparison)`);
                               return true;
                             }
                             

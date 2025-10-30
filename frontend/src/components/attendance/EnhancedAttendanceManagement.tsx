@@ -601,9 +601,9 @@ const EnhancedAttendanceManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-white">Enhanced Attendance Management</h2>
+          <h2 className="text-2xl font-bold text-white">Manual Attendance Management</h2>
           <p className="text-blue-200/80 mt-1">
-            View attendance by subject (for marking) or by student (for overview across all subjects)
+            Mark attendance by subject (for entire classes) or by student (for individual records across all subjects)
           </p>
         </div>
       </div>

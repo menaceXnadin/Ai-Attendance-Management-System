@@ -389,7 +389,7 @@ const StudentsPage = () => {
                   <input
                     type="text"
                     placeholder="Search by name, student ID, email, or faculty... (supports partial matching)"
-                    className="w-full border rounded px-10 py-3 bg-slate-900 text-white placeholder:text-slate-400 border-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-10 py-3 bg-slate-800/90 backdrop-blur-sm text-white placeholder:text-slate-400 border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 hover:bg-slate-800 transition-all duration-200 shadow-sm"
                     value={searchStudentId}
                     onChange={e => setSearchStudentId(e.target.value)}
                   />
@@ -412,7 +412,7 @@ const StudentsPage = () => {
               <div className="flex items-center gap-2">
                 <label className="font-medium text-slate-200 whitespace-nowrap">Faculty:</label>
                 <select
-                  className="border rounded px-3 py-3 min-w-[180px] bg-slate-900 text-white border-slate-600 focus:border-blue-500"
+                  className="border rounded-lg px-3 py-3 min-w-[180px] bg-slate-800/90 backdrop-blur-sm text-white border-slate-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/50 hover:bg-slate-800 transition-all duration-200 shadow-sm cursor-pointer"
                   value={selectedFaculty}
                   onChange={e => setSelectedFaculty(e.target.value)}
                 >
