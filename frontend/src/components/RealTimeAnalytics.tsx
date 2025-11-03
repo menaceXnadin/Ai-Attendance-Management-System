@@ -54,10 +54,11 @@ const RealTimeAnalytics: React.FC = () => {
         {[...Array(4)].map((_, i) => (
           <Card key={i} className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
             <CardContent className="p-6">
-              <div className="animate-pulse">
-                <div className="h-4 bg-slate-700 rounded w-3/4 mb-2"></div>
-                <div className="h-8 bg-slate-700 rounded w-1/2 mb-2"></div>
-                <div className="h-3 bg-slate-700 rounded w-full"></div>
+              {/* Use a dedicated skeleton animation to avoid global green glow from .animate-pulse */}
+              <div className="animate-skeleton space-y-3">
+                <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
+                <div className="h-8 bg-slate-700/50 rounded w-1/2"></div>
+                <div className="h-3 bg-slate-700/50 rounded w-full"></div>
               </div>
             </CardContent>
           </Card>
@@ -75,10 +76,10 @@ const RealTimeAnalytics: React.FC = () => {
   };
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Good', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 60) return { status: 'Average', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Low', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
+    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
+    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
+    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
   };
 
   const attendanceStatus = getAttendanceStatus(data.attendanceRate);

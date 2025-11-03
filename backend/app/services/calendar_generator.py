@@ -21,6 +21,7 @@ from app.models import (
     AcademicEvent, EventType, ClassSchedule, DayOfWeek,
     SemesterConfiguration, Subject, Faculty, User
 )
+from app.services.automatic_semester import AutomaticSemesterService
 
 import logging
 
@@ -33,16 +34,20 @@ class CalendarGeneratorService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
-    async def get_current_semester(self) -> Optional[SemesterConfiguration]:
-        """Get the current active semester"""
-        query = select(SemesterConfiguration).where(
-            and_(
-                SemesterConfiguration.is_current == True,
-                SemesterConfiguration.is_active == True
-            )
-        )
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+    async def get_current_semester(self) -> Dict[str, any]:
+        """Get the current semester using automatic detection (with override support)"""
+        # Load override configuration from database (respects 5-min cache)
+        await AutomaticSemesterService.load_override_from_db(self.db)
+        
+        # Get current period (now respects any active override)
+        period = AutomaticSemesterService.get_current_period()
+        return {
+            "semester_name": period.semester_name,
+            "start_date": period.start_date,
+            "end_date": period.end_date,
+            "semester_number": period.semester_number,
+            "academic_year": period.academic_year
+        }
     
     async def get_or_create_system_user(self) -> User:
         """Get or create a system user for automated event creation"""
@@ -281,20 +286,13 @@ class CalendarGeneratorService:
             Statistics about generation
         """
         
-        semester = await self.get_current_semester()
-        
-        if not semester:
-            logger.warning("No current semester configured")
-            return {
-                "error": "No current semester found",
-                "events_created": 0
-            }
+        semester = self.get_current_semester()
         
         # Generate from today to X days ahead, but not beyond semester end
         today = date.today()
         end_date = min(
             today + timedelta(days=days_ahead),
-            semester.end_date
+            semester["end_date"]
         )
         
         logger.info(f"Auto-generating events from {today} to {end_date}")
@@ -302,8 +300,8 @@ class CalendarGeneratorService:
         return await self.generate_events_for_date_range(
             start_date=today,
             end_date=end_date,
-            semester=semester.semester_number,
-            academic_year=semester.academic_year
+            semester=semester["semester_number"],
+            academic_year=semester["academic_year"]
         )
     
     async def generate_full_semester(self) -> Dict[str, int]:
@@ -312,22 +310,15 @@ class CalendarGeneratorService:
         Use this for initial setup or regeneration.
         """
         
-        semester = await self.get_current_semester()
+        semester = self.get_current_semester()
         
-        if not semester:
-            logger.warning("No current semester configured")
-            return {
-                "error": "No current semester found",
-                "events_created": 0
-            }
-        
-        logger.info(f"Generating full semester: {semester.semester_name}")
+        logger.info(f"Generating full semester: {semester['semester_name']}")
         
         return await self.generate_events_for_date_range(
-            start_date=semester.start_date,
-            end_date=semester.end_date,
-            semester=semester.semester_number,
-            academic_year=semester.academic_year
+            start_date=semester["start_date"],
+            end_date=semester["end_date"],
+            semester=semester["semester_number"],
+            academic_year=semester["academic_year"]
         )
     
     async def cleanup_old_events(self, days_old: int = 90) -> int:

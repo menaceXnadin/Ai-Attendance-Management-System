@@ -21,16 +21,16 @@ from app.services.academic_calculator import SemesterService
 
 # Pydantic models for request/response
 class SemesterConfigRequest(BaseModel):
-    semester_number: int = Field(..., ge=1, le=8, description="Semester number (1-8)")
-    academic_year: int = Field(..., ge=2020, le=2030, description="Academic year")
-    semester_name: str = Field(..., max_length=100, description="Semester name (e.g., 'Fall 2025')")
-    start_date: date = Field(..., description="Semester start date")
-    end_date: date = Field(..., description="Semester end date")
-    total_weeks: Optional[int] = Field(None, ge=1, le=20, description="Total weeks in semester")
+    semester_number: Optional[int] = Field(None, ge=1, le=8, description="Optional reference semester for sorting/display (not used for filtering)")
+    academic_year: int = Field(..., ge=2020, le=2030, description="Academic year (e.g., 2025-2026 enter 2025)")
+    semester_name: str = Field(..., max_length=100, description="Period name (e.g., 'Fall 2025 Academic Period')")
+    start_date: date = Field(..., description="Period start date (applies to entire university)")
+    end_date: date = Field(..., description="Period end date (applies to entire university)")
+    total_weeks: Optional[int] = Field(None, ge=1, le=20, description="Duration in weeks")
     exam_week_start: Optional[date] = Field(None, description="Exam period start date")
     exam_week_end: Optional[date] = Field(None, description="Exam period end date")
-    is_current: bool = Field(False, description="Whether this is the current semester")
-    is_active: bool = Field(True, description="Whether this semester is active")
+    is_current: bool = Field(False, description="Whether this is the active academic period")
+    is_active: bool = Field(True, description="Whether this period is active")
     
     @validator('end_date')
     def validate_end_date(cls, v, values):

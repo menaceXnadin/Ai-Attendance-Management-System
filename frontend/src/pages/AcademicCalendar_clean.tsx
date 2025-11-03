@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, momentLocalizer, Views, View } from 'react-big-calendar';
+import { Calendar, momentLocalizer, Views, View, type SlotInfo } from 'react-big-calendar';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import {
@@ -16,7 +16,7 @@ import {
   ChevronRight,
   TrendingUp
 } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '@/contexts/useAuth';
 
 const localizer = momentLocalizer(moment);
 
@@ -53,16 +53,30 @@ interface CalendarSettings {
   time_format: string;
 }
 
+interface CalendarDisplayEvent {
+  id: number;
+  title: string;
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  resource: CalendarEvent;
+  style: {
+    backgroundColor: string;
+    borderColor: string;
+    color: string;
+  };
+}
+
 const AcademicCalendar: React.FC = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
 
   // State management
   const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarDisplayEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [currentView, setCurrentView] = useState<'month' | 'week' | 'day'>('month');
+  const [currentView, setCurrentView] = useState<View>('month');
   const [filterType, setFilterType] = useState<string>('all');
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -111,7 +125,7 @@ const AcademicCalendar: React.FC = () => {
         setEvents(data);
         
         // Convert to react-big-calendar format
-        const formattedEvents = data.map((event: CalendarEvent) => ({
+        const formattedEvents: CalendarDisplayEvent[] = data.map((event: CalendarEvent) => ({
           id: event.id,
           title: event.title,
           start: event.is_all_day 
@@ -140,7 +154,7 @@ const AcademicCalendar: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentDate, currentView]);
+  }, [currentDate]);
 
   // Fetch calendar stats
   const fetchStats = async () => {
@@ -163,13 +177,13 @@ const AcademicCalendar: React.FC = () => {
   };
 
   // Handle event click
-  const handleEventClick = (event: any) => {
+  const handleEventClick = (event: CalendarDisplayEvent) => {
     setSelectedEvent(event.resource);
     setShowEventModal(true);
   };
 
   // Handle slot selection for creating events
-  const handleSlotSelect = (slotInfo: any) => {
+  const handleSlotSelect = (_slotInfo: SlotInfo) => {
     if (isAdmin) {
       // Handle creating new event
       setShowCreateModal(true);
@@ -178,7 +192,7 @@ const AcademicCalendar: React.FC = () => {
 
   // Get event type info
   const getEventTypeInfo = (type: string) => {
-    const types: { [key: string]: { icon: any; color: string; label: string } } = {
+    const types: Record<string, { icon: React.ComponentType<{ className?: string }>; color: string; label: string }> = {
       class: { icon: BookOpen, color: '#10B981', label: 'Class' },
       exam: { icon: AlertCircle, color: '#F59E0B', label: 'Exam' },
       holiday: { icon: CalendarDays, color: '#EF4444', label: 'Holiday' },
@@ -191,11 +205,13 @@ const AcademicCalendar: React.FC = () => {
   // Navigation handlers
   const navigateToday = () => setCurrentDate(new Date());
   const navigateBack = () => {
-    const newDate = moment(currentDate).subtract(1, currentView).toDate();
+    const view = currentView === 'work_week' ? 'week' : currentView;
+    const newDate = moment(currentDate).subtract(1, view as moment.unitOfTime.DurationConstructor).toDate();
     setCurrentDate(newDate);
   };
   const navigateNext = () => {
-    const newDate = moment(currentDate).add(1, currentView).toDate();
+    const view = currentView === 'work_week' ? 'week' : currentView;
+    const newDate = moment(currentDate).add(1, view as moment.unitOfTime.DurationConstructor).toDate();
     setCurrentDate(newDate);
   };
 
@@ -444,11 +460,13 @@ const AcademicCalendar: React.FC = () => {
                 <div className="flex items-start space-x-4">
                   <div 
                     className="p-3 rounded-xl"
-                    style={{ backgroundColor: selectedEvent.color_code + '20' }}
+                    style={{ 
+                      backgroundColor: selectedEvent.color_code + '20',
+                      color: selectedEvent.color_code
+                    }}
                   >
                     {React.createElement(getEventTypeInfo(selectedEvent.event_type).icon, {
                       className: "w-6 h-6",
-                      style: { color: selectedEvent.color_code }
                     })}
                   </div>
                   <div>

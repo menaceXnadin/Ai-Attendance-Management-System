@@ -14,7 +14,8 @@ import {
   Pause,
   CheckSquare,
   Lock,
-  Shield
+  Shield,
+  XCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -37,11 +38,13 @@ interface SubjectSchedule {
   subjectCode: string;
   startTime: string;
   endTime: string;
-  status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent';
+  status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' | 'Cancelled';
   attendanceMarked: boolean;
   isCurrentPeriod: boolean;
   isBeforeStart: boolean;
   isAfterEnd: boolean;
+  is_cancelled?: boolean;
+  cancellation_reason?: string;
 }
 
 interface StudentData {
@@ -62,6 +65,11 @@ interface TodayClassScheduleProps {
   todayAttendance?: Attendance[];
   onAttendanceMarked?: () => void;
 }
+
+type AttendanceWithMeta = Attendance & {
+  method?: string;
+  marked_by?: string;
+};
 
 const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({ 
   studentData, 
@@ -89,12 +97,6 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   // Update current time every minute
   useEffect(() => {
-    // Log initial time for debugging
-    const now = new Date();
-    console.log('[TIME-CHECK] TodayClassSchedule - Client time:', now.toISOString());
-    console.log('[TIME-CHECK] TodayClassSchedule - Hours:', now.getHours(), 'Minutes:', now.getMinutes());
-    console.log('[TIME-CHECK] TodayClassSchedule - Date:', now.toDateString());
-    
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
@@ -107,12 +109,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     queryFn: async () => {
       if (!studentData?.semester) return [];
       try {
-        console.log('[DEBUG] Fetching student-specific today schedules for faculty_id:', studentData.faculty_id, 'semester:', studentData.semester);
-        
         // Use the proper student-specific endpoint that handles faculty and semester filtering
         const schedules = await api.schedules.getStudentToday();
-          
-        console.log('[DEBUG] Student-specific schedules fetched:', schedules);
         return schedules;
       } catch (error) {
         console.error('Error fetching student schedules:', error);
@@ -124,17 +122,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   // Generate today's schedule from real database schedules
   const generateTodayScheduleFromDB = React.useCallback((): SubjectSchedule[] => {
-    // Debug log student data
-    console.log('[DEBUG] TodayClassSchedule studentData:', {
-      faculty_id: studentData?.faculty_id,
-      faculty: studentData?.faculty,
-      semester: studentData?.semester,
-      fullData: studentData
-    });
-
     // Check if we have real schedule data from the database
     if (realSchedules && realSchedules.length > 0) {
-      console.log('[DEBUG] Using real schedules from database:', realSchedules.length, 'schedules found');
       
       // Convert real schedules to frontend format
       const schedule: SubjectSchedule[] = realSchedules.map((dbSchedule) => ({
@@ -143,18 +132,17 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         subjectCode: dbSchedule.subject_code,
         startTime: dbSchedule.start_time,
         endTime: dbSchedule.end_time,
-        status: 'Starts Soon' as const,
+        status: dbSchedule.is_cancelled ? 'Cancelled' as const : 'Starts Soon' as const,
         attendanceMarked: false,
         isCurrentPeriod: false,
         isBeforeStart: true,
-        isAfterEnd: false
+        isAfterEnd: false,
+        is_cancelled: dbSchedule.is_cancelled,
+        cancellation_reason: dbSchedule.cancellation_reason
       }));
 
-      console.log('[DEBUG] Generated schedule from real database schedules:', schedule);
       return schedule;
     }
-
-    console.log('[DEBUG] No real schedules found - realSchedules:', realSchedules);
     // Return empty schedule if no real schedules are available
     return [];
   }, [realSchedules, studentData]);
@@ -166,6 +154,18 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     return schedule.map(subject => {
+      // If class is cancelled, always show Cancelled status
+      if (subject.is_cancelled) {
+        return {
+          ...subject,
+          status: 'Cancelled' as const,
+          attendanceMarked: true, // Prevent marking attendance
+          isCurrentPeriod: false,
+          isBeforeStart: false,
+          isAfterEnd: true
+        };
+      }
+      
       const [startHour, startMin] = subject.startTime.split(':').map(Number);
       const [endHour, endMin] = subject.endTime.split(':').map(Number);
       const startTimeMinutes = startHour * 60 + startMin;
@@ -178,28 +178,14 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       // Determine status based on attendance and time
       let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
       
-      console.log(`[DEBUG] Status calculation for ${subject.subjectName}:`, {
-        attendanceMarked: subject.attendanceMarked,
-        isAfterEnd,
-        isCurrentPeriod,
-        isBeforeStart,
-        currentMinutes,
-        startTimeMinutes,
-        endTimeMinutes
-      });
-      
       if (subject.attendanceMarked) {
         status = 'Present';
-        console.log(`[DEBUG] ${subject.subjectName} set to Present due to attendanceMarked: true`);
       } else if (isAfterEnd) {
         status = 'Absent';
-        console.log(`[DEBUG] ${subject.subjectName} set to Absent due to isAfterEnd: true`);
       } else if (isCurrentPeriod) {
         status = 'Pending';
-        console.log(`[DEBUG] ${subject.subjectName} set to Pending due to isCurrentPeriod: true`);
       } else {
         status = 'Starts Soon';
-        console.log(`[DEBUG] ${subject.subjectName} set to Starts Soon (default)`);
       }
 
       return {
@@ -218,28 +204,16 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     queryKey: ['today-attendance-by-subject', user?.id, studentData?.id],
     queryFn: async () => {
       if (!user?.id || !studentData?.id) {
-        console.log('[DEBUG] Missing IDs - user?.id:', user?.id, 'studentData?.id:', studentData?.id);
-        console.log('[DEBUG] Full studentData:', JSON.stringify(studentData, null, 2));
         return [];
       }
       try {
         // FIXED: Use local date instead of UTC to avoid timezone issues
         const today = getTodayLocalDate();
-        const now = new Date();
-        
-        console.log('[DEBUG] Fetching attendance for student ID:', studentData.id, 'user ID:', user.id, 'date:', today);
-        console.log('[DEBUG] Local date (not UTC):', today, '- Client time:', now.toString());
-        console.log('[DEBUG] StudentData fields:', {
-          id: studentData.id,
-          student_id: (studentData as Student & { student_id?: string }).student_id,
-          name: studentData.name,
-          email: studentData.email
-        });
-        const records = await api.attendance.getAll({
+        const response = await api.attendance.getAll({
           studentId: studentData.id, // Use student record ID, not user ID
           date: today
         });
-        console.log('[DEBUG] Fetched attendance records:', records.length, 'records');
+        const records = response.records || [];
         return records;
       } catch (error) {
         console.error('Error fetching today attendance:', error);
@@ -253,16 +227,39 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   });
 
   // Use prop data if available, otherwise use fetched data
-  const todayAttendance = React.useMemo(() => {
-    return todayAttendanceProp || fetchedAttendance || [];
+  const todayAttendance = React.useMemo<AttendanceWithMeta[]>(() => {
+    const base = todayAttendanceProp ?? fetchedAttendance ?? [];
+    return base.map((record) => {
+      const recordData = record as Record<string, unknown>;
+      const methodValue = typeof recordData.method === 'string' ? recordData.method : undefined;
+      const markedByValue = typeof recordData.marked_by === 'string' ? recordData.marked_by : undefined;
+
+      return {
+        ...record,
+        method: methodValue,
+        marked_by: markedByValue,
+      };
+    });
   }, [todayAttendanceProp, fetchedAttendance]);
 
   // Enhanced status calculation that uses database records as authoritative source
   const calculateSubjectStatusWithDB = React.useCallback((schedule: SubjectSchedule[]): SubjectSchedule[] => {
     const now = currentTime;
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    
-    return schedule.map(subject => {
+
+    return schedule.map((subject) => {
+      // If class is cancelled, always show Cancelled status and disable actions
+      if (subject.is_cancelled) {
+        return {
+          ...subject,
+          status: 'Cancelled' as const,
+          attendanceMarked: true,
+          isCurrentPeriod: false,
+          isBeforeStart: false,
+          isAfterEnd: true,
+        };
+      }
+
       const [startHour, startMin] = subject.startTime.split(':').map(Number);
       const [endHour, endMin] = subject.endTime.split(':').map(Number);
       const startTimeMinutes = startHour * 60 + startMin;
@@ -273,62 +270,41 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
       const isAfterEnd = currentMinutes > endTimeMinutes;
 
       // Find matching attendance record in database - FIXED: More precise matching
-      const attendanceRecord = todayAttendance?.find(record => {
-        // Get subject IDs for comparison - handle both string and integer types
+      const attendanceRecord = todayAttendance.find((record) => {
         const recordSubjectId = record.subjectId || '';
         const scheduleSubjectId = subject.subjectId;
-        
-        // Normalize both IDs to integers for reliable comparison
         const recordSubjectIdInt = recordSubjectId ? parseInt(recordSubjectId.toString()) : null;
         const scheduleSubjectIdInt = scheduleSubjectId ? parseInt(scheduleSubjectId.toString()) : null;
-        
-        // Debug: Enhanced logging
-        console.log(`[DEBUG] Checking match for ${subject.subjectName} (${subject.subjectCode}):`, {
-          scheduleSubjectId: scheduleSubjectIdInt,
-          scheduleStartTime: subject.startTime,
-          scheduleEndTime: subject.endTime,
-          recordSubjectId: recordSubjectIdInt,
-          recordStatus: record.status,
-          recordDate: record.date
-        });
-        
-        // FIXED: Only use integer ID comparison - most reliable and prevents false matches
-        // Removed fallback strategies that could cause incorrect matches
-        if (recordSubjectIdInt && scheduleSubjectIdInt && recordSubjectIdInt === scheduleSubjectIdInt) {
-          console.log(`[DEBUG] ✅ MATCH by ID for ${subject.subjectName}`);
-          return true;
-        }
-        
-        console.log(`[DEBUG] ❌ NO MATCH for ${subject.subjectName}`);
-        return false;
+        return Boolean(
+          recordSubjectIdInt &&
+          scheduleSubjectIdInt &&
+          recordSubjectIdInt === scheduleSubjectIdInt
+        );
       });
 
-      // FIXED: Always prioritize database record if it exists
-      let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' = 'Starts Soon';
+      // Always prioritize database record if it exists
+      let status: 'Starts Soon' | 'Pending' | 'Present' | 'Absent' | 'Cancelled' = 'Starts Soon';
       let attendanceMarked = false;
 
       if (attendanceRecord) {
-        // Database record exists - use it as authoritative source
-        const dbStatus = attendanceRecord.status.toLowerCase();
-        
+        const dbStatus = String(attendanceRecord.status).toLowerCase();
         console.log(`[DEBUG] ${subject.subjectName} has DB record with status: ${dbStatus}`);
-        
+
         if (dbStatus === 'present' || dbStatus === 'late') {
           status = 'Present';
-          attendanceMarked = true; // Only set to true for present/late status
+          attendanceMarked = true; // present/late
         } else if (dbStatus === 'absent') {
           status = 'Absent';
-          // Check if it was manually marked by checking the marked_by field or method
-          const extendedRecord = attendanceRecord as any;
-          const isManuallyMarked = extendedRecord.method === 'manual' || 
-                                   (extendedRecord.marked_by && extendedRecord.marked_by !== 'system');
-          attendanceMarked = isManuallyMarked; // Only true if admin/faculty marked it
-          console.log(`[DEBUG] ${subject.subjectName} absent - manually marked: ${isManuallyMarked}`);
+          const isManuallyMarked = attendanceRecord.method === 'manual' ||
+            (attendanceRecord.marked_by && attendanceRecord.marked_by !== 'system');
+          attendanceMarked = Boolean(isManuallyMarked);
+          console.log(`[DEBUG] ${subject.subjectName} absent - manually marked: ${attendanceMarked}`);
+        } else if (dbStatus === 'cancelled' || dbStatus === 'canceled') {
+          status = 'Cancelled';
+          attendanceMarked = true; // disable actions for cancelled
         } else {
           // Unknown status - log warning and use time-based logic
           console.warn('[WARN] Unknown attendance status:', attendanceRecord.status, 'for subject:', subject.subjectName);
-          
-          // Fallback to time-based logic for unknown statuses
           if (isAfterEnd) {
             status = 'Absent';
           } else if (isCurrentPeriod) {
@@ -337,20 +313,19 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
             status = 'Starts Soon';
           }
         }
-        
-        console.log(`[DEBUG] ${subject.subjectName} final status from DB: ${status}`);
       } else {
         // No database record - calculate based on time
-        console.log(`[DEBUG] ${subject.subjectName} has NO DB record. Time-based: isAfterEnd=${isAfterEnd}, isCurrentPeriod=${isCurrentPeriod}, isBeforeStart=${isBeforeStart}`);
-        
+        console.log(
+          `[DEBUG] ${subject.subjectName} has NO DB record. Time-based: isAfterEnd=${isAfterEnd}, isCurrentPeriod=${isCurrentPeriod}, isBeforeStart=${isBeforeStart}`
+        );
+
         if (isAfterEnd) {
-          status = 'Absent'; // Class ended, no attendance = Absent
-          console.log(`[DEBUG] ${subject.subjectName} marked Absent (class ended, no record)`);
+          status = 'Absent';
         } else if (isCurrentPeriod) {
-          status = 'Pending'; // Class ongoing, waiting for attendance
+          status = 'Pending';
           console.log(`[DEBUG] ${subject.subjectName} marked Pending (class ongoing)`);
         } else {
-          status = 'Starts Soon'; // Class hasn't started yet
+          status = 'Starts Soon';
           console.log(`[DEBUG] ${subject.subjectName} marked Starts Soon (not started yet)`);
         }
       }
@@ -361,65 +336,15 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         attendanceMarked,
         isCurrentPeriod,
         isBeforeStart,
-        isAfterEnd
+        isAfterEnd,
       };
     });
   }, [currentTime, todayAttendance]);
 
-  // Combine schedule with attendance status
   const todaySchedule = React.useMemo(() => {
     const baseSchedule = generateTodayScheduleFromDB();
-    
-    console.log('[DEBUG] Recalculating todaySchedule...');
-    console.log('[DEBUG] Base schedule:', baseSchedule);
-    console.log('[DEBUG] Today attendance records:', todayAttendance);
-    
-    // Log detailed attendance record structure
-    if (todayAttendance && todayAttendance.length > 0) {
-      console.log('[DEBUG] First attendance record structure:', JSON.stringify(todayAttendance[0], null, 2));
-      todayAttendance.forEach((record, index) => {
-        console.log(`[DEBUG] Attendance Record ${index + 1}:`, {
-          id: record.id,
-          subjectId: record.subjectId,
-          subjectName: (record as Attendance & { subjectName?: string }).subjectName,
-          subjectCode: (record as Attendance & { subjectCode?: string }).subjectCode,
-          status: record.status
-        });
-      });
-    }
-    // Log today's schedule subjects for comparison
-    if (baseSchedule && baseSchedule.length > 0) {
-      baseSchedule.forEach((subject, idx) => {
-        console.log(`[DEBUG] Schedule Subject ${idx + 1}:`, {
-          subjectId: subject.subjectId,
-          subjectName: subject.subjectName,
-          subjectCode: subject.subjectCode,
-          startTime: subject.startTime,
-          endTime: subject.endTime
-        });
-      });
-    }
-    
     // Use enhanced calculation that prioritizes database records
     const scheduleWithStatus = calculateSubjectStatusWithDB(baseSchedule);
-    
-    // COMPREHENSIVE DEBUG: Log the final calculated status for each subject
-    console.log('[DEBUG] ========== FINAL SCHEDULE WITH STATUS ==========');
-    scheduleWithStatus.forEach((subject, idx) => {
-      console.log(`[DEBUG] Subject ${idx + 1} (${subject.subjectName}):`, {
-        subjectId: subject.subjectId,
-        subjectCode: subject.subjectCode,
-        startTime: subject.startTime,
-        endTime: subject.endTime,
-        status: subject.status,
-        attendanceMarked: subject.attendanceMarked,
-        isCurrentPeriod: subject.isCurrentPeriod,
-        isBeforeStart: subject.isBeforeStart,
-        isAfterEnd: subject.isAfterEnd
-      });
-    });
-    console.log('[DEBUG] ===================================================');
-    
     return scheduleWithStatus;
   }, [generateTodayScheduleFromDB, calculateSubjectStatusWithDB, todayAttendance]);
 
@@ -504,6 +429,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         return <CheckSquare className="h-4 w-4" />;
       case 'Absent':
         return <AlertTriangle className="h-4 w-4" />;
+      case 'Cancelled':
+        return <XCircle className="h-4 w-4" />;
       default:
         return <Clock className="h-4 w-4" />;
     }
@@ -519,6 +446,8 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         return 'bg-green-500/20 text-green-300 border-green-400/30';
       case 'Absent':
         return 'bg-red-500/20 text-red-300 border-red-400/30';
+      case 'Cancelled':
+        return 'bg-gray-600/30 text-gray-400 border-gray-500/30';
       default:
         return 'bg-slate-500/20 text-slate-300 border-slate-400/30';
     }
@@ -671,8 +600,6 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
             key={`${subject.subjectId}-${subject.startTime}-${index}`}
             className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all"
           >
-            {/* DEBUG: Log what we're rendering */}
-            {console.log(`[RENDER-DEBUG] Rendering subject ${subject.subjectName} with status: ${subject.status}, attendanceMarked: ${subject.attendanceMarked}`)}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4 flex-1">
                 <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
@@ -701,7 +628,19 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
               <div className="flex flex-col items-end gap-2">
                 {/* FIXED: Only show Present badge when status is actually Present */}
-                {subject.status === 'Present' ? (
+                {subject.status === 'Cancelled' ? (
+                  <div className="flex flex-col items-end gap-1">
+                    <Badge className="bg-gray-600/30 text-gray-400 border-gray-500/30">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Cancelled
+                    </Badge>
+                    {subject.cancellation_reason && (
+                      <p className="text-xs text-gray-400 text-right max-w-48">
+                        {subject.cancellation_reason}
+                      </p>
+                    )}
+                  </div>
+                ) : subject.status === 'Present' ? (
                   <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Present
@@ -753,7 +692,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
                     </Badge>
                     {/* FIXED: Clearer explanation of how attendance was determined */}
                     <p className="text-xs text-slate-400">
-                      {subject.attendanceMarked ? 'Marked by admin' : 'Class ended - no record'}
+                      {subject.attendanceMarked ? 'Marked by admin' : 'Auto-marked absent'}
                     </p>
                   </div>
                 ) : subject.status === 'Starts Soon' ? (

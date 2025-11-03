@@ -2,9 +2,10 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.core.database import get_db
 from app.core.security import verify_token
-from app.models import User, Student, Admin
+from app.models import User, Student, Admin, Teacher
 
 security = HTTPBearer()
 
@@ -133,5 +134,50 @@ def require_student_role(current_user: User = Depends(get_current_user)) -> User
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Student access required"
+        )
+    return current_user
+
+async def get_current_teacher(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> Teacher:
+    """Get current teacher (requires teacher/faculty role)."""
+    current_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if current_role != "faculty":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    
+    result = await db.execute(
+        select(Teacher).options(selectinload(Teacher.user)).where(Teacher.user_id == current_user.id)
+    )
+    teacher = result.scalar_one_or_none()
+    
+    if teacher is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Teacher profile not found"
+        )
+    
+    return teacher
+
+def require_teacher_role(current_user: User = Depends(get_current_user)) -> User:
+    """Require teacher/faculty role."""
+    current_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if current_role != "faculty":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Teacher access required"
+        )
+    return current_user
+
+def require_admin_or_teacher(current_user: User = Depends(get_current_user)) -> User:
+    """Require either admin or teacher role."""
+    current_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if current_role not in ["admin", "faculty"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or teacher access required"
         )
     return current_user

@@ -60,11 +60,10 @@ class MediaPipeFaceDetectionService {
   private async doInitialize(): Promise<void> {
     try {
       const { FaceDetection } = await import('@mediapipe/face_detection');
+      const { mediapipeLocateFile } = await import('@/lib/mediapipe');
       
       this.faceDetection = new FaceDetection({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`;
-        }
+        locateFile: (file) => mediapipeLocateFile(file)
       });
 
       await new Promise<void>((resolve, reject) => {

@@ -3,10 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
-from datetime import time, datetime
+from datetime import time, datetime, date
 from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.models import ClassSchedule, Subject, Faculty, DayOfWeek, Student
+from app.models.calendar import AcademicEvent, EventType
 from app.api.dependencies import get_current_user, get_current_admin, get_current_student
 
 router = APIRouter(prefix="/schedules", tags=["schedules"])
@@ -55,6 +56,8 @@ class ScheduleResponse(BaseModel):
     notes: Optional[str]
     duration_minutes: int
     time_slot_display: str
+    is_cancelled: bool = False
+    cancellation_reason: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -280,6 +283,7 @@ async def get_today_schedule(
     
     # Get current day of week (Monday=0, Sunday=6 in Python weekday())
     today = datetime.now()
+    today_date = today.date()
     day_map = {
         0: DayOfWeek.MONDAY,
         1: DayOfWeek.TUESDAY,
@@ -293,6 +297,22 @@ async def get_today_schedule(
     
     # Get current academic year (you might want to adjust this logic)
     current_academic_year = today.year
+    
+    # CRITICAL FIX: Check if today is a holiday or fully cancelled day
+    holiday_check = select(AcademicEvent).where(
+        and_(
+            AcademicEvent.start_date == today_date,
+            AcademicEvent.event_type.in_([EventType.HOLIDAY, EventType.CANCELLED_CLASS]),
+            AcademicEvent.is_active == True,
+            AcademicEvent.subject_id.is_(None)  # Full day holiday/cancellation
+        )
+    )
+    holiday_result = await db.execute(holiday_check)
+    holiday_event = holiday_result.scalar_one_or_none()
+    
+    # If it's a full holiday, return empty schedule
+    if holiday_event:
+        return []
     
     # Build query with joins to get subject and faculty names
     query = select(ClassSchedule).options(
@@ -322,9 +342,29 @@ async def get_today_schedule(
     result = await db.execute(query)
     schedules = result.scalars().all()
     
-    # Transform to response format
+    # Get cancelled classes with reasons for today
+    cancelled_classes_query = select(
+        AcademicEvent.subject_id,
+        AcademicEvent.notification_settings
+    ).where(
+        and_(
+            AcademicEvent.start_date == today_date,
+            AcademicEvent.event_type == EventType.CANCELLED_CLASS,
+            AcademicEvent.is_active == True,
+            AcademicEvent.subject_id.isnot(None)
+        )
+    )
+    cancelled_result = await db.execute(cancelled_classes_query)
+    cancelled_data = {row[0]: row[1] for row in cancelled_result.fetchall()}
+    
+    # Include ALL schedules with cancellation status
     schedule_responses = []
     for schedule in schedules:
+        is_cancelled = schedule.subject_id in cancelled_data
+        cancellation_reason = None
+        if is_cancelled and cancelled_data[schedule.subject_id]:
+            cancellation_reason = cancelled_data[schedule.subject_id].get('cancellation_reason')
+        
         schedule_responses.append(ScheduleResponse(
             id=schedule.id,
             subject_id=schedule.subject_id,
@@ -342,7 +382,9 @@ async def get_today_schedule(
             is_active=schedule.is_active,
             notes=schedule.notes,
             duration_minutes=schedule.duration_minutes,
-            time_slot_display=schedule.time_slot_display
+            time_slot_display=schedule.time_slot_display,
+            is_cancelled=is_cancelled,
+            cancellation_reason=cancellation_reason
         ))
     
     return schedule_responses
@@ -356,6 +398,7 @@ async def get_student_today_schedule(
     
     # Get current day of week (Monday=0, Sunday=6 in Python weekday())
     today = datetime.now()
+    today_date = today.date()
     day_map = {
         0: DayOfWeek.MONDAY,
         1: DayOfWeek.TUESDAY,
@@ -369,6 +412,22 @@ async def get_student_today_schedule(
     
     # Get current academic year (you might want to adjust this logic)
     current_academic_year = today.year
+    
+    # CRITICAL FIX: Check if today is a holiday or fully cancelled day
+    holiday_check = select(AcademicEvent).where(
+        and_(
+            AcademicEvent.start_date == today_date,
+            AcademicEvent.event_type.in_([EventType.HOLIDAY, EventType.CANCELLED_CLASS]),
+            AcademicEvent.is_active == True,
+            AcademicEvent.subject_id.is_(None)  # Full day holiday/cancellation (not subject-specific)
+        )
+    )
+    holiday_result = await db.execute(holiday_check)
+    holiday_event = holiday_result.scalar_one_or_none()
+    
+    # If it's a full holiday, return empty schedule
+    if holiday_event:
+        return []
     
     # PRIMARY FILTER: By student's faculty and semester (this is the correct approach)
     # Students should see subjects from their own faculty for their semester
@@ -394,13 +453,29 @@ async def get_student_today_schedule(
     result = await db.execute(query)
     schedules = result.scalars().all()
     
-    # If no subjects found for this faculty/semester, this means:
-    # 1. No schedules exist for this faculty on this day/semester
-    # 2. Student might be cross-enrolled (but we prioritize faculty-based subjects)
+    # Get cancelled classes with reasons for today
+    cancelled_classes_query = select(
+        AcademicEvent.subject_id,
+        AcademicEvent.notification_settings
+    ).where(
+        and_(
+            AcademicEvent.start_date == today_date,
+            AcademicEvent.event_type == EventType.CANCELLED_CLASS,
+            AcademicEvent.is_active == True,
+            AcademicEvent.subject_id.isnot(None)
+        )
+    )
+    cancelled_result = await db.execute(cancelled_classes_query)
+    cancelled_data = {row[0]: row[1] for row in cancelled_result.fetchall()}
     
-    # Transform to response format
+    # Include ALL schedules with cancellation status
     schedule_responses = []
     for schedule in schedules:
+        is_cancelled = schedule.subject_id in cancelled_data
+        cancellation_reason = None
+        if is_cancelled and cancelled_data[schedule.subject_id]:
+            cancellation_reason = cancelled_data[schedule.subject_id].get('cancellation_reason')
+        
         schedule_responses.append(ScheduleResponse(
             id=schedule.id,
             subject_id=schedule.subject_id,
@@ -418,7 +493,9 @@ async def get_student_today_schedule(
             is_active=schedule.is_active,
             notes=schedule.notes,
             duration_minutes=schedule.duration_minutes,
-            time_slot_display=schedule.time_slot_display
+            time_slot_display=schedule.time_slot_display,
+            is_cancelled=is_cancelled,
+            cancellation_reason=cancellation_reason
         ))
     
     return schedule_responses

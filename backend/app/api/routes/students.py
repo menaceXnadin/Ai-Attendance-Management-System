@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.models import Student, User, Faculty
 from app.schemas import Student as StudentSchema, StudentCreate, StudentUpdate
 from app.api.dependencies import get_current_admin, get_current_user
+from app.utils import generate_student_id
 
 router = APIRouter(prefix="/students", tags=["students"])
 
@@ -167,14 +168,27 @@ async def create_student(
             detail="Email already registered"
         )
     
-    # Check if student ID already exists
-    result = await db.execute(select(Student).where(Student.student_id == student_data.student_id))
-    if result.scalar_one_or_none():
-        print(f"[Backend] Student ID already exists: {student_data.student_id}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Student ID already exists"
-        )
+    # Auto-generate student ID if not provided
+    if not student_data.student_id:
+        try:
+            generated_id = await generate_student_id(student_data.faculty_id, db)
+            student_data.student_id = generated_id
+            print(f"[Backend] Auto-generated student ID: {generated_id}")
+        except Exception as e:
+            print(f"[Backend] Error generating student ID: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate student ID: {str(e)}"
+            )
+    else:
+        # Check if manually provided student ID already exists
+        result = await db.execute(select(Student).where(Student.student_id == student_data.student_id))
+        if result.scalar_one_or_none():
+            print(f"[Backend] Student ID already exists: {student_data.student_id}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Student ID already exists"
+            )
     
     try:
         # Create user first

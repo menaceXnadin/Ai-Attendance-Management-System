@@ -43,7 +43,8 @@ const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({
         endDate
       };
       
-      const records = await api.attendance.getAll(filters);
+      const response = await api.attendance.getAll(filters);
+      const records = response?.records ?? [];
       
       // Group records by date
       const recordsByDate = records.reduce((acc, record) => {

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Time, Boolean, ForeignKey, Enum as SQLEnum, UniqueConstraint
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.core.database import Base
 import enum
 
@@ -22,8 +22,10 @@ class ClassSchedule(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Subject and Faculty relationships
-    subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
-    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=False)
+    # Ensure DB-level cascades so schedules are removed when the parent is deleted
+    subject_id = Column(Integer, ForeignKey("subjects.id", ondelete="CASCADE"), nullable=False)
+    faculty_id = Column(Integer, ForeignKey("faculties.id", ondelete="CASCADE"), nullable=False)
+    teacher_id = Column(Integer, ForeignKey("teachers.id", ondelete="SET NULL"), nullable=True)
     
     # Time and day information
     day_of_week = Column(SQLEnum(DayOfWeek, name="day_of_week"), nullable=False)
@@ -43,8 +45,10 @@ class ClassSchedule(Base):
     notes = Column(String, nullable=True)  # Additional notes
     
     # Relationships
-    subject = relationship("Subject", backref="schedules")
-    faculty = relationship("Faculty", backref="class_schedules")
+    # Use passive_deletes so SQLAlchemy doesn't try to NULL FKs (DB handles cascading)
+    subject = relationship("Subject", backref=backref("schedules", passive_deletes=True))
+    faculty = relationship("Faculty", backref=backref("class_schedules", passive_deletes=True))
+    teacher = relationship("Teacher", back_populates="schedules")
     
     # Constraints
     __table_args__ = (

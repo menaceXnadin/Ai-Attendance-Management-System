@@ -14,6 +14,10 @@ const AttendancePage = () => {
   const {
     selectedDate,
     setSelectedDate,
+    selectedFaculty,
+    setSelectedFaculty,
+    selectedSemester,
+    setSelectedSemester,
     selectedClass,
     setSelectedClass,
     activeTab,
@@ -21,11 +25,22 @@ const AttendancePage = () => {
     classes,
     classesLoading,
     classesError,
+    faculties,
+    facultiesLoading,
     attendanceRecords,
     attendanceLoading,
     attendanceError,
     user,
-    authLoading
+    authLoading,
+    searchQuery,
+    setSearchQuery,
+    statusFilter,
+    setStatusFilter,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    totalRecords
   } = useAttendanceData();
 
   // Show loading state while checking authentication
@@ -74,7 +89,8 @@ const AttendancePage = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 md:p-8">
+      <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-100 to-blue-200 bg-clip-text text-transparent">
@@ -90,7 +106,7 @@ const AttendancePage = () => {
         </Button>
       </div>
 
-      <Tabs defaultValue="admin-workflow" className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50">
           <TabsTrigger 
             value="admin-workflow"
@@ -135,16 +151,35 @@ const AttendancePage = () => {
               <AttendanceFilters
                 selectedDate={selectedDate}
                 setSelectedDate={setSelectedDate}
+                selectedFaculty={selectedFaculty}
+                setSelectedFaculty={setSelectedFaculty}
+                selectedSemester={selectedSemester}
+                setSelectedSemester={setSelectedSemester}
                 selectedClass={selectedClass}
                 setSelectedClass={setSelectedClass}
                 classes={classes}
                 classesLoading={classesLoading}
+                faculties={faculties}
+                facultiesLoading={facultiesLoading}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
               />
               
               <div className="mt-4">
                 <AttendanceTable 
                   loading={attendanceLoading} 
-                  records={attendanceRecords} 
+                  records={attendanceRecords}
+                  searchQuery={searchQuery}
+                  statusFilter={statusFilter}
+                  selectedClass={selectedClass}
+                  classes={classes}
+                  currentPage={currentPage}
+                  pageSize={pageSize}
+                  totalRecords={totalRecords}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={setPageSize}
                 />
               </div>
             </CardContent>
@@ -171,6 +206,7 @@ const AttendancePage = () => {
           <IndividualStudentAnalysis />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 };

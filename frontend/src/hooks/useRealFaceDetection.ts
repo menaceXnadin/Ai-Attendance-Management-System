@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { FaceDetection } from '@mediapipe/face_detection';
 import { Camera } from '@mediapipe/camera_utils';
+import { mediapipeLocateFile } from '@/lib/mediapipe';
 
 interface DetectedFace {
   x: number;
@@ -150,7 +151,7 @@ export const useRealFaceDetection = ({
       isInitializingRef.current = true;
 
       const faceDetection = new FaceDetection({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_detection/${file}`
+        locateFile: (file) => mediapipeLocateFile(file)
       });
 
       faceDetection.setOptions({

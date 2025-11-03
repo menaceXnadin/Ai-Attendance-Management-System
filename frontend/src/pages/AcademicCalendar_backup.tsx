@@ -151,7 +151,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [currentView, setCurrentView] = useState<'month' | 'week' | 'day'>('month');
+  const [currentView, setCurrentView] = useState<View>('month');
   const [filterType, setFilterType] = useState<string>('all');
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -711,13 +711,21 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
   // Navigation handlers
   const navigateToday = () => setCurrentDate(new Date());
-  const navigateBack = () => {
-    const newDate = moment(currentDate).subtract(1, currentView).toDate();
+  const handlePrev = () => {
+    const view = currentView === 'work_week' ? 'week' : currentView;
+    const newDate = moment(currentDate).subtract(1, view as moment.unitOfTime.DurationConstructor).toDate();
     setCurrentDate(newDate);
   };
-  const navigateNext = () => {
-    const newDate = moment(currentDate).add(1, currentView).toDate();
+
+  const handleNext = () => {
+    const view = currentView === 'work_week' ? 'week' : currentView;
+    const newDate = moment(currentDate).add(1, view as moment.unitOfTime.DurationConstructor).toDate();
     setCurrentDate(newDate);
+  };
+
+  const handleToday = () => {
+    setCurrentDate(new Date());
+    setCurrentView('month');
   };
 
   // Format date for display
@@ -831,7 +839,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
               {/* Date Navigation */}
               <div className="flex items-center gap-2 bg-slate-800/60 rounded-xl p-2">
                 <button
-                  onClick={navigateBack}
+                  onClick={handlePrev}
                   className="p-2 hover:bg-slate-700/60 rounded-lg transition-all duration-200"
                 >
                   <ChevronLeft className="w-5 h-5 text-slate-300" />
@@ -842,14 +850,14 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 </div>
                 
                 <button
-                  onClick={navigateNext}
+                  onClick={handleNext}
                   className="p-2 hover:bg-slate-700/60 rounded-lg transition-all duration-200"
                 >
                   <ChevronRight className="w-5 h-5 text-slate-300" />
                 </button>
                 
                 <button
-                  onClick={navigateToday}
+                  onClick={handleToday}
                   className="px-3 py-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-lg hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
                 >
                   Today

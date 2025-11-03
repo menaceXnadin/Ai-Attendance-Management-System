@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -114,10 +113,18 @@ interface DecisionRecord {
 
 const IndividualStudentAnalysis: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<string>('');
+  
+  // Only persist selected student in sessionStorage (not the data)
+  const [selectedStudent, setSelectedStudent] = useState<string>(() => {
+    return sessionStorage.getItem('individualAnalysisSelectedStudent') || '';
+  });
+  
+  // Don't cache the actual data - always fetch fresh
   const [studentInsights, setStudentInsights] = useState<StudentInsights | null>(null);
   const [attendanceTrends, setAttendanceTrends] = useState<AttendanceTrend[]>([]);
+  
   const [loading, setLoading] = useState(false);
+  const [semesterStartDate, setSemesterStartDate] = useState<Date | null>(null);
   const [actionItems, setActionItems] = useState<ActionItem[]>([]);
   const [showAddAction, setShowAddAction] = useState(false);
   const [newActionItem, setNewActionItem] = useState<Omit<ActionItem, 'id' | 'status' | 'created_at'>>({
@@ -157,6 +164,29 @@ const IndividualStudentAnalysis: React.FC = () => {
     };
 
     fetchStudents();
+    
+    // Fetch current semester configuration to get start date
+    const fetchSemesterConfig = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/admin/semester-config/current', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        });
+        if (response.ok) {
+          const config = await response.json();
+          if (config.start_date) {
+            setSemesterStartDate(new Date(config.start_date));
+            console.log('Semester starts:', config.start_date, 'Name:', config.semester_name);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching semester config:', error);
+        // Fall back to first attendance date if API fails
+      }
+    };
+    
+    fetchSemesterConfig();
   }, [toast]);
 
   const fetchStudentAnalysis = useCallback(async (studentId: string) => {
@@ -245,13 +275,19 @@ const IndividualStudentAnalysis: React.FC = () => {
 
   const handleStudentSelect = useCallback((studentId: string) => {
     setSelectedStudent(studentId);
+    
+    // Persist selected student to sessionStorage
     if (studentId) {
+      sessionStorage.setItem('individualAnalysisSelectedStudent', studentId);
       fetchStudentAnalysis(studentId);
       fetchAttendanceTrends(studentId);
     } else {
       setStudentInsights(null);
       setAttendanceTrends([]);
       setActionItems([]);
+      
+      // Clear sessionStorage when student is deselected
+      sessionStorage.removeItem('individualAnalysisSelectedStudent');
     }
   }, [fetchStudentAnalysis, fetchAttendanceTrends]);
 
@@ -495,6 +531,7 @@ const IndividualStudentAnalysis: React.FC = () => {
             .table th, .table td { border: 1px solid #d1d5db; padding: 8px; text-align: left; }
             .table th { background-color: #f3f4f6; font-weight: bold; }
             .badge { padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+            .badge-excellent { background-color: #dbeafe; color: #1e40af; }
             .badge-good { background-color: #dcfce7; color: #166534; }
             .badge-warning { background-color: #fef3c7; color: #92400e; }
             .badge-critical { background-color: #fee2e2; color: #dc2626; }
@@ -579,7 +616,7 @@ const IndividualStudentAnalysis: React.FC = () => {
                   <td>${subject.late ?? 0}</td>
                   <td>${subject.absent ?? subject.total_classes - subject.attended}</td>
                   <td>${subject.attendance_percentage.toFixed(1)}%</td>
-                  <td><span class="badge badge-${subject.attendance_percentage >= 85 ? 'good' : subject.attendance_percentage >= 75 ? 'warning' : 'critical'}">${subject.attendance_percentage >= 85 ? 'Good' : subject.attendance_percentage >= 75 ? 'Warning' : 'Critical'}</span></td>
+                  <td><span class="badge badge-${subject.attendance_percentage >= 90 ? 'excellent' : subject.attendance_percentage >= 85 ? 'good' : subject.attendance_percentage >= 75 ? 'warning' : 'critical'}">${subject.attendance_percentage >= 90 ? 'Excellent' : subject.attendance_percentage >= 85 ? 'Good' : subject.attendance_percentage >= 75 ? 'Warning' : 'Critical'}</span></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -654,8 +691,21 @@ const IndividualStudentAnalysis: React.FC = () => {
               Individual Student Analysis
             </CardTitle>
             
-            {selectedStudentData && (
+            {selectedStudent && (
               <div className="flex gap-2">
+                <Button
+                  onClick={() => {
+                    if (selectedStudent) {
+                      fetchStudentAnalysis(selectedStudent);
+                      fetchAttendanceTrends(selectedStudent);
+                    }
+                  }}
+                  variant="outline"
+                  className="border-blue-600 text-blue-300 hover:bg-blue-900/30"
+                >
+                  <AlertCircle className="h-4 w-4 mr-2" />
+                  Refresh Data
+                </Button>
                 <Button
                   onClick={handlePrint}
                   variant="outline"
@@ -842,14 +892,18 @@ const IndividualStudentAnalysis: React.FC = () => {
                               <TableCell className="text-center">
                                 <Badge 
                                   className={
-                                    subject.attendance_percentage >= 85 
+                                    subject.attendance_percentage >= 90
+                                      ? 'bg-blue-500/20 text-blue-300 border-blue-400/30'
+                                      : subject.attendance_percentage >= 85 
                                       ? 'bg-green-500/20 text-green-300 border-green-400/30'
                                       : subject.attendance_percentage >= 75
                                       ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30'
                                       : 'bg-red-500/20 text-red-300 border-red-400/30'
                                   }
                                 >
-                                  {subject.attendance_percentage >= 85 
+                                  {subject.attendance_percentage >= 90
+                                    ? 'Excellent'
+                                    : subject.attendance_percentage >= 85 
                                     ? 'Good' 
                                     : subject.attendance_percentage >= 75 
                                     ? 'Warning' 
@@ -870,30 +924,6 @@ const IndividualStudentAnalysis: React.FC = () => {
                   )}
                 </CardContent>
               </Card>
-
-              {/* Attendance Trends Chart */}
-              {attendanceTrends.length > 0 && (
-                <Card className="bg-slate-800/50 border-slate-700/50">
-                  <CardHeader>
-                    <CardTitle className="text-lg text-slate-200 flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Attendance Trends
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <AttendanceChart 
-                      data={attendanceTrends.map(trend => ({
-                        name: trend.date,
-                        present: trend.attended_classes,
-                        absent: trend.total_classes - trend.attended_classes,
-                        late: 0
-                      }))}
-                      title="Daily Attendance Trends"
-                      type="line"
-                    />
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Decision Support - Action Items */}
               <Card className="bg-slate-800/50 border-slate-700/50">

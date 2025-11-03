@@ -20,10 +20,11 @@ interface AttendanceChartProps {
 const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceChartProps) => {
   const { theme } = useTheme();
   
-  // Define colors based on theme
+  // Define colors based on theme - using clear, contrasting colors
+  // Present = Green, Absent = Red, Late = Orange/Yellow
   const COLORS = {
-    light: ['#38bdf8', '#0ea5e9', '#2563eb'],
-    dark: ['#38bdf8', '#0ea5e9', '#2563eb'],
+    light: ['#22c55e', '#ef4444', '#f59e0b'],  // green-500, red-500, amber-500
+    dark: ['#22c55e', '#ef4444', '#f59e0b'],   // green-500, red-500, amber-500
   };
   
   // Choose color set based on theme

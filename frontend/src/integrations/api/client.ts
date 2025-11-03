@@ -97,11 +97,31 @@ const apiRequest = async <T = any>(
     throw error;
   }
 
+  // Gracefully handle empty responses (e.g., 204 No Content)
   const contentType = res.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const data = await res.json();
-    return data as T;
+  const contentLength = res.headers.get('content-length');
+  const isNoContent = res.status === 204 || contentLength === '0';
+
+  if (isNoContent) {
+    // Return undefined for no-content responses
+    return undefined as unknown as T;
   }
+
+  // If server claims JSON but returns empty body, avoid JSON parse error
+  if (contentType.includes('application/json')) {
+    const raw = await res.text();
+    if (!raw || raw.trim() === '') {
+      return undefined as unknown as T;
+    }
+    try {
+      return JSON.parse(raw) as T;
+    } catch (err) {
+      console.warn('[API] Failed to parse JSON; returning raw text', err);
+      return raw as unknown as T;
+    }
+  }
+
+  // Fallback to text for non-JSON responses
   const text = await res.text();
   return text as unknown as T;
 };
@@ -365,17 +385,51 @@ export const api = {
 
   // Attendance methods (unified, snake_case params, no trailing slash)
   attendance: {
-    getAll: async (filters: AttendanceFilters = {}): Promise<Attendance[]> => {
+    getAll: async (filters: AttendanceFilters = {}): Promise<{ records: Attendance[]; total: number; hasMore: boolean }> => {
       const params = new URLSearchParams();
       if (filters.studentId) params.append('student_id', filters.studentId);
+      if (filters.subjectId) params.append('subject_id', filters.subjectId);
+      if (filters.status) params.append('status', filters.status);
       if (filters.date) params.append('date', filters.date);
       if (filters.startDate) params.append('start_date', filters.startDate);
       if (filters.endDate) params.append('end_date', filters.endDate);
+      if (filters.search) params.append('search', filters.search);
+      if (filters.faculty_id) params.append('faculty_id', filters.faculty_id.toString());
+      if (filters.semester) params.append('semester', filters.semester.toString());
+      if (filters.limit) params.append('limit', filters.limit.toString());
+      if (filters.skip !== undefined) params.append('skip', filters.skip.toString());
       const endpoint = params.toString() ? `/attendance?${params}` : '/attendance';
       const response = await apiRequest(endpoint);
-      return (Array.isArray(response) ? response : []).map((record: Record<string, unknown>) => ({
+      
+      // Handle both old array response and new paginated response
+      if (Array.isArray(response)) {
+        // Old format - return as-is with default metadata
+        const records = response.map((record: Record<string, unknown>) => ({
+          id: record?.id?.toString?.() || '',
+          studentId: record?.student_id?.toString?.() || record?.studentId?.toString?.() || '',
+          studentName: (record as any)?.studentName || (record as any)?.student_name || 'Unknown Student',
+          studentNumber: (record as any)?.studentNumber || (record as any)?.student_number || 'N/A',
+          subjectId: record?.subjectId?.toString?.() || record?.subject_id?.toString?.() || record?.class_id?.toString?.() || '',
+          subjectName: (record as any)?.subjectName?.toString?.() || (record as any)?.subject_name?.toString?.(),
+          subjectCode: (record as any)?.subjectCode?.toString?.() || (record as any)?.subject_code?.toString?.(),
+          date: (record?.date ?? '').toString(),
+          status: (record?.status ?? 'absent') as Attendance['status'],
+          timeIn: (record as any)?.timeIn?.toString?.() || (record as any)?.time_in?.toString?.(),
+          timeOut: (record as any)?.timeOut?.toString?.() || (record as any)?.time_out?.toString?.(),
+          createdAt: (record as any)?.createdAt?.toString?.() || (record as any)?.created_at?.toString?.(),
+          is_cancelled: (record as any)?.is_cancelled || false,
+          cancellation_reason: (record as any)?.cancellation_reason,
+        }));
+        return { records, total: records.length, hasMore: false };
+      }
+      
+      // New paginated format
+      const recordsList = Array.isArray(response.records) ? response.records : [];
+      const records = recordsList.map((record: Record<string, unknown>) => ({
         id: record?.id?.toString?.() || '',
         studentId: record?.student_id?.toString?.() || record?.studentId?.toString?.() || '',
+        studentName: (record as any)?.studentName || (record as any)?.student_name || 'Unknown Student',
+        studentNumber: (record as any)?.studentNumber || (record as any)?.student_number || 'N/A',
         subjectId: record?.subjectId?.toString?.() || record?.subject_id?.toString?.() || record?.class_id?.toString?.() || '',
         subjectName: (record as any)?.subjectName?.toString?.() || (record as any)?.subject_name?.toString?.(),
         subjectCode: (record as any)?.subjectCode?.toString?.() || (record as any)?.subject_code?.toString?.(),
@@ -384,7 +438,15 @@ export const api = {
         timeIn: (record as any)?.timeIn?.toString?.() || (record as any)?.time_in?.toString?.(),
         timeOut: (record as any)?.timeOut?.toString?.() || (record as any)?.time_out?.toString?.(),
         createdAt: (record as any)?.createdAt?.toString?.() || (record as any)?.created_at?.toString?.(),
+        is_cancelled: (record as any)?.is_cancelled || false,
+        cancellation_reason: (record as any)?.cancellation_reason,
       }));
+      
+      return {
+        records,
+        total: response.total || records.length,
+        hasMore: response.hasMore || false
+      };
     },
 
     getById: async (id: string): Promise<Attendance> => {
@@ -755,9 +817,12 @@ export const api = {
   // Faculties methods
   faculties: {
     getAll: async () => apiRequest('/faculties/'),
-    create: async (facultyData: { name: string; description?: string }) =>
+    create: async (facultyData: { name: string; code: string; description?: string }) =>
       apiRequest('/faculties/', { method: 'POST', body: JSON.stringify(facultyData) }),
-    delete: async (facultyId: number) => apiRequest(`/faculties/${facultyId}`, { method: 'DELETE' }),
+    getCascadePreview: async (facultyId: number) => 
+      apiRequest(`/faculties/${facultyId}/cascade-preview`),
+    delete: async (facultyId: number, force: boolean = false) => 
+      apiRequest(`/faculties/${facultyId}?force=${force}`, { method: 'DELETE' }),
   },
 
   // Schedules methods
@@ -1025,6 +1090,273 @@ export const api = {
       if (classId) params.append('class_id', classId.toString());
       const endpoint = params.toString() ? `/analytics/class-averages?${params}` : '/analytics/class-averages';
       return apiRequest(endpoint);
+    },
+  },
+
+  // System Settings methods
+  systemSettings: {
+    getAttendanceThresholds: async (activeOnly: boolean = true) => {
+      const params = activeOnly ? '?active_only=true' : '';
+      return apiRequest(`/system-settings/attendance-thresholds${params}`);
+    },
+
+    getAttendanceThreshold: async (id: number) => {
+      return apiRequest(`/system-settings/attendance-thresholds/${id}`);
+    },
+
+    updateAttendanceThreshold: async (id: number, data: any) => {
+      return apiRequest(`/system-settings/attendance-thresholds/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    createAttendanceThreshold: async (data: any) => {
+      return apiRequest(`/system-settings/attendance-thresholds`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    deleteAttendanceThreshold: async (id: number) => {
+      return apiRequest(`/system-settings/attendance-thresholds/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    resetAttendanceThresholds: async () => {
+      return apiRequest(`/system-settings/attendance-thresholds/reset`, {
+        method: 'POST',
+      });
+    },
+
+    getSettings: async (category?: string) => {
+      const params = category ? `?category=${category}` : '';
+      return apiRequest(`/system-settings/settings${params}`);
+    },
+
+    getSetting: async (key: string) => {
+      return apiRequest(`/system-settings/settings/${key}`);
+    },
+  },
+
+  // Teacher Dashboard methods
+  teacher: {
+    getDashboard: async () => {
+      return apiRequest('/teacher/dashboard');
+    },
+
+    getSchedule: async (dayOfWeek?: string) => {
+      const params = dayOfWeek ? `?day_of_week=${dayOfWeek}` : '';
+      return apiRequest(`/teacher/schedule${params}`);
+    },
+
+    getSubjectStudents: async (subjectId: number, semester: number, facultyId?: number) => {
+      const params = new URLSearchParams();
+      params.append('semester', semester.toString());
+      if (facultyId) params.append('faculty_id', facultyId.toString());
+      return apiRequest(`/teacher/subjects/${subjectId}/students?${params}`);
+    },
+
+    getSubjectStudentsWithAttendance: async (
+      subjectId: number,
+      semester: number,
+      date?: string
+    ) => {
+      const params = new URLSearchParams();
+      params.append('semester', semester.toString());
+      if (date) params.append('date', date);
+      return apiRequest(`/teacher/subjects/${subjectId}/students-with-attendance?${params}`);
+    },
+
+    getSubjectAttendance: async (subjectId: number, startDate?: string, endDate?: string) => {
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const query = params.toString() ? `?${params}` : '';
+      return apiRequest(`/teacher/subjects/${subjectId}/attendance${query}`);
+    },
+
+    getSubjectAnalytics: async (subjectId: number, semester: number) => {
+      return apiRequest(`/teacher/subjects/${subjectId}/analytics?semester=${semester}`);
+    },
+
+    getProfile: async () => {
+      return apiRequest('/teachers/me');
+    },
+
+    updateProfile: async (data: any) => {
+      return apiRequest('/teachers/me', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // Attendance marking endpoints
+    getMyClasses: async () => {
+      return apiRequest('/teacher/attendance/my-classes');
+    },
+
+    markAttendance: async (data: {
+      student_id: number;
+      subject_id: number;
+      date: string;
+      status: string;
+      period?: number;
+      time_slot?: string;
+      notes?: string;
+    }) => {
+      return apiRequest('/teacher/attendance/mark', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    bulkMarkAttendance: async (data: {
+      subject_id: number;
+      semester: number;
+      faculty_id: number;
+      date: string;
+      period?: number;
+      time_slot?: string;
+      attendance_records: Array<{ student_id: number; status: string }>;
+    }) => {
+      return apiRequest('/teacher/attendance/bulk-mark', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    // Calendar endpoints (view-only)
+    getCalendar: async (startDate: string, endDate: string) => {
+      const params = new URLSearchParams({
+        start_date: startDate,
+        end_date: endDate,
+      });
+      return apiRequest(`/teacher/calendar?${params}`);
+    },
+
+    // Notification endpoints
+    sendNotification: async (data: {
+      title: string;
+      message: string;
+      subject_id: number;
+      semester: number;
+      priority?: string;
+      type?: string;
+    }) => {
+      return apiRequest('/teacher/notifications/send', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+
+    getNotifications: async (skip: number = 0, limit: number = 50) => {
+      const params = new URLSearchParams({
+        skip: skip.toString(),
+        limit: limit.toString(),
+      });
+      return apiRequest(`/teacher/notifications?${params}`);
+    },
+
+    // Class cancellation
+    cancelClass: async (data: {
+      schedule_id: number;
+      date: string;
+      reason?: string;
+      notify_students?: boolean;
+    }) => {
+      return apiRequest('/teacher/classes/cancel', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          schedule_id: data.schedule_id,
+          date: data.date,
+          reason: data.reason || 'Teacher unavailable',
+          notify_students: data.notify_students !== false, // Default true
+        }),
+      });
+    },
+  },
+
+  // Teachers Admin methods (for admin panel teacher management)
+  teachers: {
+    getAll: async (facultyId?: number) => {
+      const params = facultyId ? `?faculty_id=${facultyId}` : '';
+      return apiRequest(`/teachers/${params}`);
+    },
+
+    getById: async (id: number) => {
+      return apiRequest(`/teachers/${id}`);
+    },
+
+    create: async (data: {
+      user: { email: string; full_name: string; password: string };
+      teacher_id?: string; // optional: server will auto-generate when omitted
+      name: string;
+      faculty_id?: number;
+      department?: string;
+      phone_number?: string;
+      office_location?: string;
+    }) => {
+      // Omit undefined to keep payload clean
+      const payload: any = { ...data };
+      if (!payload.teacher_id) delete payload.teacher_id;
+      return apiRequest('/teachers/', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    },
+
+    update: async (id: number, data: {
+      faculty_id?: number;
+      department?: string;
+      phone_number?: string;
+      office_location?: string;
+    }) => {
+      return apiRequest(`/teachers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+    },
+
+    delete: async (id: number) => {
+      return apiRequest(`/teachers/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    // Subject assignment management
+    getAssignments: async (teacherId: number) => {
+      return apiRequest(`/teachers/${teacherId}/assignments`);
+    },
+
+    addAssignment: async (teacherId: number, scheduleId: number) => {
+      return apiRequest(`/teachers/${teacherId}/assignments`, {
+        method: 'POST',
+        body: JSON.stringify({ schedule_id: scheduleId }),
+      });
+    },
+
+    removeAssignment: async (teacherId: number, scheduleId: number) => {
+      return apiRequest(`/teachers/${teacherId}/assignments/${scheduleId}`, {
+        method: 'DELETE',
+      });
+    },
+
+    getUnassignedSchedules: async (facultyId?: number, semester?: number) => {
+      const params = new URLSearchParams();
+      if (facultyId) params.append('faculty_id', facultyId.toString());
+      if (semester) params.append('semester', semester.toString());
+      const query = params.toString() ? `?${params}` : '';
+      return apiRequest(`/teachers/schedules/unassigned${query}`);
+    },
+
+    getCount: async (facultyId?: number) => {
+      const params = facultyId ? `?faculty_id=${facultyId}` : '';
+      return apiRequest(`/teachers/stats/count${params}`);
     },
   },
 };

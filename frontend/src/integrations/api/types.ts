@@ -69,17 +69,22 @@ export interface Subject {
 export interface Attendance {
   id: string;
   studentId: string;
+  studentName?: string; // Student name from backend join (User.full_name)
+  studentNumber?: string; // Student ID from backend join (Student.student_id)
   subjectId: string;  // Fixed: should be subjectId, not classId
   subjectName?: string; // Subject name from backend join
   subjectCode?: string; // Subject code from backend join
   date: string;
-  status: 'present' | 'absent' | 'late' | 'excused';
+  status: 'present' | 'absent' | 'late' | 'excused' | 'cancelled';
   // Optional timestamps for accurate time displays
   timeIn?: string;   // HH:MM:SS when attendance was marked (from backend time_in)
   timeOut?: string;  // HH:MM:SS when student left (from backend time_out)
   createdAt?: string; // ISO datetime when record was created (from backend created_at)
   student?: Student;
   subject?: Subject;  // Fixed: should be subject, not class
+  // Cancellation information
+  is_cancelled?: boolean;  // True if the class was cancelled
+  cancellation_reason?: string;  // Reason for cancellation
 }
 
 export interface AttendanceSummary {
@@ -125,8 +130,15 @@ export interface AttendanceFilters {
   startDate?: string;
   endDate?: string;
   classId?: string;
+  subjectId?: string;
   studentId?: string;
+  faculty_id?: number;
+  semester?: number;
+  status?: string;
   date?: string;
+  search?: string; // server-side search across student name/number
+  limit?: number;
+  skip?: number;
 }
 
 export interface RegisterData {

@@ -13,6 +13,7 @@ const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const { user, signOut } = useAuth();
   const location = useLocation();
+  const showBlog = location.pathname !== '/';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -53,10 +54,12 @@ const Navbar = () => {
               <Home size={18} />
               <span>Home</span>
             </Link>
-            <Link to="/blog" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
-              <Book size={18} />
-              <span>Blog</span>
-            </Link>
+            {/* {showBlog && (
+              <Link to="/blog" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
+                <Book size={18} />
+                <span>Blog</span>
+              </Link>
+            )} */}
             <Link to="/about" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
               <Info size={18} />
               <span>About</span>
@@ -113,14 +116,16 @@ const Navbar = () => {
               <Home size={18} />
               <span>Home</span>
             </Link>
-            <Link
-              to="/blog"
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
-              onClick={toggleMenu}
-            >
-              <Book size={18} />
-              <span>Blog</span>
-            </Link>
+            {showBlog && (
+              <Link
+                to="/blog"
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
+                onClick={toggleMenu}
+              >
+                <Book size={18} />
+                <span>Blog</span>
+              </Link>
+            )}
             <Link
               to="/about"
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}

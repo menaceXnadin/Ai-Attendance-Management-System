@@ -42,30 +42,8 @@ const StudentAttendanceReport = () => {
     },
     enabled: !!studentId
   });
-  
-  // Fetch recent attendance records for the activity feed
-  const { data: recentRecords = [], isLoading: isLoadingRecords } = useQuery({
-    queryKey: ['student-attendance-recent', studentId],
-    queryFn: async () => {
-      try {
-        const today = new Date();
-        const twoWeeksAgo = new Date();
-        twoWeeksAgo.setDate(today.getDate() - 14);
-        
-        // Use the working attendance endpoint instead of the broken student-attendance/records endpoint
-        return await api.attendance.getAll({
-          startDate: twoWeeksAgo.toISOString().split('T')[0],
-          endDate: today.toISOString().split('T')[0]
-        });
-      } catch (error) {
-        console.error('Error fetching recent records:', error);
-        return [];
-      }
-    },
-    enabled: !!studentId
-  });
 
-  const isLoading = isLoadingSummary || isLoadingBreakdown || isLoadingRecords;
+  const isLoading = isLoadingSummary || isLoadingBreakdown;
   
   // Calculate enhanced statistics
   const enhancedStats = React.useMemo(() => {
@@ -310,58 +288,6 @@ const StudentAttendanceReport = () => {
                       </div>
                     </div>
                     <Progress value={percentage} className="h-2" />
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Recent Activity */}
-      {recentRecords.length > 0 && (
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <CalendarIcon className="h-5 w-5 text-blue-400" />
-              Recent Activity
-            </CardTitle>
-            <CardDescription className="text-slate-400">
-              Your latest attendance records
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {recentRecords.slice(0, 8).map((record, index) => {
-                // Handle different response formats from different endpoints
-                const status = record.status || 'unknown';
-                const date = record.date || new Date().toISOString().split('T')[0];
-                const recordWithExtendedProps = record as Attendance & { 
-                  subject_name?: string; 
-                  subjectName?: string;
-                  marked_at?: string;
-                  markedAt?: string;
-                };
-                const subjectName = recordWithExtendedProps.subject_name || 
-                                   recordWithExtendedProps.subjectName || 
-                                   `Subject ${record.subjectId || 'Unknown'}`;
-                const markedAt = recordWithExtendedProps.marked_at || 
-                                recordWithExtendedProps.markedAt || 
-                                null;
-                
-                return (
-                  <div key={index} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                    <div className="flex items-center space-x-3">
-                      {getStatusIcon(status)}
-                      <div>
-                        <p className="font-medium text-white">{subjectName}</p>
-                        <p className="text-sm text-slate-400">
-                          {new Date(date).toLocaleDateString()} 
-                          {markedAt && ` at ${new Date(markedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                        </p>
-                      </div>
-                    </div>
-                    {getStatusBadge(status)}
                   </div>
                 );
               })}

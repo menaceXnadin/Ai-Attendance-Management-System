@@ -1,10 +1,24 @@
 import { useState, useRef } from 'react';
 
+interface DetectionPayload extends Record<string, unknown> {
+  faces_detected?: number;
+}
+
+interface RegistrationPayload extends Record<string, unknown> {
+  success?: boolean;
+  message?: string;
+}
+
+type FaceRecognitionResult =
+  | { type: 'detection'; data: DetectionPayload }
+  | { type: 'registration'; data: RegistrationPayload }
+  | null;
+
 export default function FaceRegistrationDebugPage() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<FaceRecognitionResult>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -44,7 +58,7 @@ export default function FaceRegistrationDebugPage() {
     // Stop camera
     const stream = video.srcObject as MediaStream;
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach(track => { track.stop(); });
     }
     setIsCapturing(false);
   };
@@ -64,9 +78,12 @@ export default function FaceRegistrationDebugPage() {
       });
 
       const data = await response.json();
-      setResult({ type: 'detection', data });
+      const detectionData: DetectionPayload =
+        data && typeof data === 'object' ? (data as DetectionPayload) : {};
+      setResult({ type: 'detection', data: detectionData });
 
-      alert(`Face Detection Complete: ${data.faces_detected} faces detected`);
+      const facesDetected = typeof detectionData.faces_detected === 'number' ? detectionData.faces_detected : 0;
+      alert(`Face Detection Complete: ${facesDetected} faces detected`);
     } catch (error) {
       console.error('Detection error:', error);
       alert('Failed to detect faces');
@@ -90,9 +107,13 @@ export default function FaceRegistrationDebugPage() {
       });
 
       const data = await response.json();
-      setResult({ type: 'registration', data });
+      const registrationData: RegistrationPayload =
+        data && typeof data === 'object' ? (data as RegistrationPayload) : {};
+      setResult({ type: 'registration', data: registrationData });
 
-      alert(`Registration ${data.success ? 'Success' : 'Failed'}: ${data.message}`);
+      const isSuccess = registrationData.success === true;
+      const message = typeof registrationData.message === 'string' ? registrationData.message : 'No message available';
+      alert(`Registration ${isSuccess ? 'Success' : 'Failed'}: ${message}`);
     } catch (error) {
       console.error('Registration error:', error);
       alert('Failed to register face');

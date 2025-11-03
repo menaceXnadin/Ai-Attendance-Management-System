@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from datetime import datetime, date, time as time_type
 from typing import List, Optional, Dict, Any
 from app.core.database import get_db
-from app.models import Student, AttendanceRecord, Subject, ClassSchedule, DayOfWeek
+from app.models import Student, AttendanceRecord, Subject, ClassSchedule, DayOfWeek, AttendanceStatus, AttendanceMethod
 from app.schemas import (
     FaceRecognitionRequest, FaceRecognitionResponse, FaceRegistrationRequest,
     MultiImageFaceRegistrationRequest,
@@ -130,85 +130,121 @@ async def mark_attendance_with_face(
 ):
     """Mark attendance using face recognition."""
     try:
-        # Get all registered students with face encodings
-        result = await db.execute(
-            select(Student).where(Student.face_encoding.isnot(None))
-        )
-        students = result.scalars().all()
+        print(f"[DEBUG] Mark attendance request - Student ID: {current_student.id}, Subject ID: {recognition_data.subject_id}")
         
-        if not students:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="No registered students found"
+        # Verify the face matches the current logged-in student
+        if current_student.face_encoding is None:
+            return FaceRecognitionResponse(
+                success=False,
+                message="No registered face found. Please register your face first.",
+                attendance_marked=False
             )
         
-        # Prepare known encodings
-        known_encodings = [
-            (student.id, student.face_encoding) 
-            for student in students 
-            if student.face_encoding
-        ]
-        
-        # Process face recognition with InsightFace
-        recognition_result = insightface_service.process_attendance_image(
-            recognition_data.image_data,
-            known_encodings
-        )
-        
-        if recognition_result.success and recognition_result.student_id:
-            # Ensure the recognized face matches the authenticated student
-            if recognition_result.student_id != current_student.id:
-                return FaceRecognitionResponse(
-                    success=False,
-                    message="Face does not match the current logged-in user.",
-                    attendance_marked=False
-                )
+        # Decode and extract embedding for the provided image
+        image = insightface_service.decode_base64_image(recognition_data.image_data)
+        face_info = insightface_service.extract_face_features(image)
 
-            # Check if attendance already marked today for this subject
-            today = datetime.now().date()
-            existing_record = await db.execute(
-                select(AttendanceRecord).where(
-                    AttendanceRecord.student_id == recognition_result.student_id,
-                    AttendanceRecord.subject_id == recognition_data.subject_id,
-                    AttendanceRecord.date == today
-                )
+        if not face_info:
+            return FaceRecognitionResponse(
+                success=False,
+                message="No clear face detected in the image.",
+                attendance_marked=False
             )
-            
-            if existing_record.scalar_one_or_none():
-                return FaceRecognitionResponse(
-                    success=False,
-                    message="Attendance already marked for today",
-                    attendance_marked=False
-                )
-            
-            # Create attendance record with proper fields
-            current_time = datetime.now()
-            attendance = AttendanceRecord(
-                student_id=recognition_result.student_id,
-                subject_id=recognition_data.subject_id,  # Critical: Link to specific subject
-                date=today,  # Date only
-                time_in=current_time,  # Time when attendance was marked
-                time_out=None,  # Will be filled when student leaves (optional)
-                status="present",
-                method="face",  # Use face method for facial recognition
-                confidence_score=recognition_result.confidence_score,
-                location="Face Recognition System",  # Indicate it was marked via face recognition
-                notes=f"Face recognition confidence: {recognition_result.confidence_score:.2f}%, Marked via self-service attendance system",
-                marked_by=current_student.user_id  # Reference to the student's user ID who marked their own attendance
+
+        if face_info['confidence'] < insightface_service.confidence_threshold:
+            return FaceRecognitionResponse(
+                success=False,
+                message=f"Face detection confidence too low ({face_info['confidence']:.2f}).",
+                attendance_marked=False
             )
-            
-            db.add(attendance)
-            await db.commit()
-            
-            # Auto-mark absent for any expired classes TODAY that have no attendance record
-            await mark_absent_for_expired_classes(db, recognition_result.student_id, current_student, today)
-            
-            recognition_result.attendance_marked = True
-            recognition_result.message = "Attendance marked successfully!"
+
+        unknown_embedding = face_info['embedding']
+        is_match, similarity_score, _ = insightface_service.compare_embeddings(
+            [current_student.face_encoding], unknown_embedding
+        )
+
+        if not is_match:
+            return FaceRecognitionResponse(
+                success=False,
+                message=f"Face does not match the current logged-in user (similarity: {similarity_score:.1f}%).",
+                attendance_marked=False
+            )
+
+        # Verify subject exists
+        subject_result = await db.execute(
+            select(Subject).where(Subject.id == recognition_data.subject_id)
+        )
+        subject = subject_result.scalar_one_or_none()
+        if not subject:
+            print(f"[ERROR] Subject ID {recognition_data.subject_id} not found")
+            return FaceRecognitionResponse(
+                success=False,
+                message=f"Subject with ID {recognition_data.subject_id} not found.",
+                attendance_marked=False
+            )
         
-        return recognition_result
+        print(f"[DEBUG] Subject found: {subject.name}")
+
+        # Check if attendance already marked today for this subject
+        today = datetime.now().date()
+        today_datetime = datetime.combine(today, datetime.min.time())  # Convert to datetime for database
+        existing_record = await db.execute(
+            select(AttendanceRecord).where(
+                AttendanceRecord.student_id == current_student.id,
+                AttendanceRecord.subject_id == recognition_data.subject_id,
+                func.date(AttendanceRecord.date) == today
+            )
+        )
+        
+        if existing_record.scalar_one_or_none():
+            return FaceRecognitionResponse(
+                success=False,
+                message="Attendance already marked for today",
+                attendance_marked=False
+            )
+        
+        # Create attendance record with proper fields
+        current_time = datetime.now()
+        attendance = AttendanceRecord(
+            student_id=current_student.id,
+            subject_id=recognition_data.subject_id,  # Critical: Link to specific subject
+            date=today_datetime,  # Use datetime object for database
+            time_in=current_time,  # Time when attendance was marked
+            time_out=None,  # Will be filled when student leaves (optional)
+            status=AttendanceStatus.present,  # Use enum value
+            method=AttendanceMethod.face,  # Use enum value for facial recognition
+            confidence_score=similarity_score,
+            location="Face Recognition System",  # Indicate it was marked via face recognition
+            notes=f"Face recognition confidence: {similarity_score:.2f}%, Marked via self-service attendance system",
+            marked_by=current_student.user_id  # Reference to the student's user ID who marked their own attendance
+        )
+        
+        print(f"[DEBUG] Creating attendance record with data: student_id={current_student.id}, subject_id={recognition_data.subject_id}, date={today_datetime}")
+        
+        db.add(attendance)
+        try:
+            await db.commit()
+            print(f"[DEBUG] Attendance record created successfully")
+        except Exception as commit_error:
+            print(f"[ERROR] Database commit failed: {str(commit_error)}")
+            await db.rollback()
+            raise commit_error
+        
+        # Auto-mark absent for any expired classes TODAY that have no attendance record
+        await mark_absent_for_expired_classes(db, current_student.id, current_student, today)
+        
+        return FaceRecognitionResponse(
+            success=True,
+            message="Attendance marked successfully!",
+            student_id=current_student.id,
+            confidence_score=similarity_score,
+            attendance_marked=True
+        )
     
     except Exception as e:
+        print(f"[ERROR] Exception in mark_attendance_with_face: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing face recognition: {str(e)}"

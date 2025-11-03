@@ -23,7 +23,7 @@ def normalize_attendance_status(status: Union[str, AttendanceStatus, None]) -> O
         status_str = status_str.split("attendance_status.", 1)[1]
 
     # Direct matches
-    if status_str in {"present", "absent", "late", "excused", "half_day", "halfday"}:
+    if status_str in {"present", "absent", "late", "excused", "cancelled", "half_day", "halfday"}:
         return "half_day" if status_str in {"half_day", "halfday"} else status_str
 
     if "present" in status_str:
@@ -34,6 +34,8 @@ def normalize_attendance_status(status: Union[str, AttendanceStatus, None]) -> O
         return "late"
     if "excused" in status_str:
         return "excused"
+    if "cancelled" in status_str or "canceled" in status_str:
+        return "cancelled"
 
     return None
 

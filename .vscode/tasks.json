@@ -9,6 +9,13 @@
 			"isBackground": true,
 			"problemMatcher": [],
 			"args": []
+		},
+		{
+			"label": "Run Vite Frontend",
+			"type": "shell",
+			"command": "npm run dev",
+			"args": [],
+			"isBackground": true
 		}
 	]
 }

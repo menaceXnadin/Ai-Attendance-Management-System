@@ -69,10 +69,10 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
     ((attendanceSummary.percentagePresent - data.attendanceRate) || 0) : 0;
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Good', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 60) return { status: 'Average', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Needs Attention', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
+    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
+    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
+    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
   };
 
   const attendanceStatus = getAttendanceStatus(data.attendanceRate);

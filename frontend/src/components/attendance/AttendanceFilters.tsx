@@ -11,64 +11,134 @@ import { CalendarIcon, Search, X, Filter, UserSearch, Hash, BookOpen, Graduation
 interface ClassOption {
   id: string;
   name: string;
+  semester?: number;
+  faculty_id?: number;
 }
 
 interface AttendanceFiltersProps {
   selectedDate: Date;
   setSelectedDate: (date: Date) => void;
+  selectedFaculty: string;
+  setSelectedFaculty: (faculty: string) => void;
+  selectedSemester: string;
+  setSelectedSemester: (semester: string) => void;
   selectedClass: string;
   setSelectedClass: (classId: string) => void;
   classes: ClassOption[];
   classesLoading: boolean;
+  faculties: Array<{id: string; name: string}>;
+  facultiesLoading: boolean;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  statusFilter: string;
+  setStatusFilter: (status: string) => void;
 }
 
 const AttendanceFilters: React.FC<AttendanceFiltersProps> = ({
   selectedDate,
   setSelectedDate,
+  selectedFaculty,
+  setSelectedFaculty,
+  selectedSemester,
+  setSelectedSemester,
   selectedClass,
   setSelectedClass,
   classes,
-  classesLoading
+  classesLoading,
+  faculties,
+  facultiesLoading,
+  searchQuery,
+  setSearchQuery,
+  statusFilter,
+  setStatusFilter
 }) => {
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState('all');
-  const [dateRangeStart, setDateRangeStart] = React.useState<Date | undefined>(undefined);
-  const [dateRangeEnd, setDateRangeEnd] = React.useState<Date | undefined>(undefined);
-  const [facultyFilter, setFacultyFilter] = React.useState('all');
-  const [semesterFilter, setSemesterFilter] = React.useState('all');
-  const [showAdvancedFilters, setShowAdvancedFilters] = React.useState(false);
-
-  // Extract unique faculties from classes (assuming classes have faculty info)
-  const faculties = React.useMemo(() => {
-    const uniqueFaculties = new Set(classes.map(c => c.name.split(' - ')[0]));
-    return Array.from(uniqueFaculties);
-  }, [classes]);
-
   const activeFiltersCount = React.useMemo(() => {
     let count = 0;
     if (searchQuery.trim()) count++;
     if (statusFilter !== 'all') count++;
-    if (dateRangeStart || dateRangeEnd) count++;
-    if (facultyFilter !== 'all') count++;
-    if (semesterFilter !== 'all') count++;
+    if (selectedFaculty && selectedFaculty !== 'all') count++;
+    if (selectedSemester && selectedSemester !== 'all') count++;
+    if (selectedClass && selectedClass !== 'all') count++;
     return count;
-  }, [searchQuery, statusFilter, dateRangeStart, dateRangeEnd, facultyFilter, semesterFilter]);
+  }, [searchQuery, statusFilter, selectedFaculty, selectedSemester, selectedClass]);
 
   const clearAllFilters = () => {
     setSearchQuery('');
     setStatusFilter('all');
-    setDateRangeStart(undefined);
-    setDateRangeEnd(undefined);
-    setFacultyFilter('all');
-    setSemesterFilter('all');
+    setSelectedFaculty('all');
+    setSelectedSemester('all');
     setSelectedClass('all');
     setSelectedDate(new Date());
   };
 
+  // Filter classes by selected faculty and semester
+  const filteredClasses = React.useMemo(() => {
+    let filtered = classes;
+    
+    // Filter by faculty first
+    if (selectedFaculty && selectedFaculty !== 'all') {
+      const facultyNum = parseInt(selectedFaculty);
+      filtered = filtered.filter(cls => cls.faculty_id === facultyNum);
+    }
+    
+    // Then filter by semester
+    if (selectedSemester && selectedSemester !== 'all') {
+      const semesterNum = parseInt(selectedSemester);
+      filtered = filtered.filter(cls => cls.semester === semesterNum);
+    }
+    
+    return filtered;
+  }, [classes, selectedFaculty, selectedSemester]);
+
   return (
     <div className="space-y-4">
       {/* Primary Filters Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {/* Faculty Selection */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
+            <GraduationCap className="h-4 w-4 text-blue-400" />
+            Faculty
+          </label>
+          <Select value={selectedFaculty} onValueChange={setSelectedFaculty} disabled={facultiesLoading}>
+            <SelectTrigger className="bg-slate-800/90 border-slate-600 text-white">
+              <SelectValue placeholder="All Faculties" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Faculties</SelectItem>
+              {faculties.map(faculty => (
+                <SelectItem key={faculty.id} value={faculty.id}>
+                  {faculty.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Semester Selection */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
+            <Hash className="h-4 w-4 text-blue-400" />
+            Semester
+          </label>
+          <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+            <SelectTrigger className="bg-slate-800/90 border-slate-600 text-white">
+              <SelectValue placeholder="All Semesters" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Semesters</SelectItem>
+              <SelectItem value="1">Semester 1</SelectItem>
+              <SelectItem value="2">Semester 2</SelectItem>
+              <SelectItem value="3">Semester 3</SelectItem>
+              <SelectItem value="4">Semester 4</SelectItem>
+              <SelectItem value="5">Semester 5</SelectItem>
+              <SelectItem value="6">Semester 6</SelectItem>
+              <SelectItem value="7">Semester 7</SelectItem>
+              <SelectItem value="8">Semester 8</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {/* Class Selection */}
         <div className="space-y-2">
           <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
@@ -77,11 +147,11 @@ const AttendanceFilters: React.FC<AttendanceFiltersProps> = ({
           </label>
           <Select value={selectedClass} onValueChange={setSelectedClass} disabled={classesLoading}>
             <SelectTrigger className="bg-slate-800/90 border-slate-600 text-white">
-              <SelectValue placeholder="Select class" />
+              <SelectValue placeholder={filteredClasses.length === 0 ? "No classes for semester" : "Select class"} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Classes</SelectItem>
-              {classes.map(cls => (
+              {filteredClasses.map(cls => (
                 <SelectItem key={cls.id} value={cls.id}>
                   {cls.name}
                 </SelectItem>
@@ -164,148 +234,21 @@ const AttendanceFilters: React.FC<AttendanceFiltersProps> = ({
         </div>
       </div>
 
-      {/* Advanced Filters Toggle */}
-      <div className="flex items-center justify-between">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className="text-blue-400 border-blue-400/30 hover:bg-blue-500/10"
-        >
-          <Filter className="h-4 w-4 mr-2" />
-          {showAdvancedFilters ? 'Hide' : 'Show'} Advanced Filters
-          {activeFiltersCount > 0 && (
-            <Badge className="ml-2 bg-blue-500/20 text-blue-300 border-blue-400/30">
-              {activeFiltersCount}
-            </Badge>
-          )}
-        </Button>
-
-        {activeFiltersCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearAllFilters}
-            className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-          >
-            <X className="h-4 w-4 mr-2" />
-            Clear All Filters
-          </Button>
-        )}
-      </div>
-
-      {/* Advanced Filters Panel */}
-      {showAdvancedFilters && (
-        <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50 space-y-4 animate-in slide-in-from-top-2">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Filter className="h-4 w-4 text-blue-400" />
-            Advanced Filters
-          </h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Faculty Filter */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
-                <GraduationCap className="h-4 w-4 text-blue-400" />
-                Faculty
-              </label>
-              <Select value={facultyFilter} onValueChange={setFacultyFilter}>
-                <SelectTrigger className="bg-slate-800/90 border-slate-600 text-white">
-                  <SelectValue placeholder="All Faculties" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Faculties</SelectItem>
-                  {faculties.map(faculty => (
-                    <SelectItem key={faculty} value={faculty}>
-                      {faculty}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Semester Filter */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
-                <Hash className="h-4 w-4 text-blue-400" />
-                Semester
-              </label>
-              <Select value={semesterFilter} onValueChange={setSemesterFilter}>
-                <SelectTrigger className="bg-slate-800/90 border-slate-600 text-white">
-                  <SelectValue placeholder="All Semesters" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Semesters</SelectItem>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                    <SelectItem key={sem} value={sem.toString()}>
-                      Semester {sem}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Date Range - Start */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-blue-400" />
-                Date Range (Start)
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal bg-slate-800/90 border-slate-600 text-white hover:bg-slate-800"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRangeStart ? format(dateRangeStart, 'PP') : 'Select start date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dateRangeStart}
-                    onSelect={setDateRangeStart}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Date Range - End */}
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-300 flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-blue-400" />
-                Date Range (End)
-              </label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal bg-slate-800/90 border-slate-600 text-white hover:bg-slate-800"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateRangeEnd ? format(dateRangeEnd, 'PP') : 'Select end date'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={dateRangeEnd}
-                    onSelect={setDateRangeEnd}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Active Filters Display */}
       {activeFiltersCount > 0 && (
         <div className="flex flex-wrap gap-2 p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
-          <span className="text-sm font-medium text-blue-300">Active Filters:</span>
+          <span className="text-sm font-medium text-blue-300 flex items-center gap-2">
+            Active Filters:
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAllFilters}
+              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 h-6 px-2"
+            >
+              <X className="h-3 w-3 mr-1" />
+              Clear All
+            </Button>
+          </span>
           {searchQuery.trim() && (
             <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30">
               <UserSearch className="h-3 w-3 mr-1" />
@@ -318,22 +261,22 @@ const AttendanceFilters: React.FC<AttendanceFiltersProps> = ({
               Status: {statusFilter}
             </Badge>
           )}
-          {facultyFilter !== 'all' && (
-            <Badge className="bg-purple-500/20 text-purple-300 border-purple-400/30">
+          {selectedFaculty && selectedFaculty !== 'all' && (
+            <Badge className="bg-indigo-500/20 text-indigo-300 border-indigo-400/30">
               <GraduationCap className="h-3 w-3 mr-1" />
-              Faculty: {facultyFilter}
+              Faculty Selected
             </Badge>
           )}
-          {semesterFilter !== 'all' && (
-            <Badge className="bg-yellow-500/20 text-yellow-300 border-yellow-400/30">
+          {selectedSemester && selectedSemester !== 'all' && (
+            <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30">
               <Hash className="h-3 w-3 mr-1" />
-              Semester: {semesterFilter}
+              Semester: {selectedSemester}
             </Badge>
           )}
-          {(dateRangeStart || dateRangeEnd) && (
-            <Badge className="bg-teal-500/20 text-teal-300 border-teal-400/30">
-              <CalendarIcon className="h-3 w-3 mr-1" />
-              Date Range: {dateRangeStart ? format(dateRangeStart, 'PP') : '...'} - {dateRangeEnd ? format(dateRangeEnd, 'PP') : '...'}
+          {selectedClass && selectedClass !== 'all' && (
+            <Badge className="bg-purple-500/20 text-purple-300 border-purple-400/30">
+              <BookOpen className="h-3 w-3 mr-1" />
+              Class Selected
             </Badge>
           )}
         </div>

@@ -7,6 +7,7 @@ from datetime import datetime, date, timedelta, time
 from app.core.database import get_db
 from app.models import AcademicEvent, EventType, HolidayType, User
 from app.api.dependencies import get_current_user
+from app.services.automatic_semester import AutomaticSemesterService
 import calendar
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
@@ -71,16 +72,11 @@ async def get_semester_info(
 ):
     """Get current semester information and statistics"""
     
-    # Determine current semester dates
-    current_year = datetime.now().year
-    if datetime.now().month >= 8:  # Fall semester
-        semester_start = date(current_year, 8, 1)
-        semester_end = date(current_year, 12, 15)
-        semester_name = f"Fall {current_year}"
-    else:  # Spring semester
-        semester_start = date(current_year, 1, 15)
-        semester_end = date(current_year, 5, 30)
-        semester_name = f"Spring {current_year}"
+    # Use automatic semester detection
+    period = AutomaticSemesterService.get_current_period()
+    semester_start = period.start_date
+    semester_end = period.end_date
+    semester_name = period.semester_name
     
     # Get all academic events in current semester
     events_query = select(AcademicEvent).where(
@@ -145,16 +141,11 @@ async def populate_semester_calendar(
             detail="Only administrators can populate calendar data"
         )
     
-    # Determine current semester dates
-    current_year = datetime.now().year
-    if datetime.now().month >= 8:  # Fall semester
-        semester_start = date(current_year, 8, 1)
-        semester_end = date(current_year, 12, 15)
-        semester_name = f"Fall {current_year}"
-    else:  # Spring semester
-        semester_start = date(current_year, 1, 15)
-        semester_end = date(current_year, 5, 30)
-        semester_name = f"Spring {current_year}"
+    # Use automatic semester detection
+    period = AutomaticSemesterService.get_current_period()
+    semester_start = period.start_date
+    semester_end = period.end_date
+    semester_name = period.semester_name
     
     # Clear existing events for this semester
     delete_query = delete(AcademicEvent).where(
@@ -232,12 +223,10 @@ async def get_academic_days_count(
     # Use current semester if no dates provided
     if not start_date or not end_date:
         current_year = datetime.now().year
-        if datetime.now().month >= 8:  # Fall semester
-            start = date(current_year, 8, 1)
-            end = date(current_year, 12, 15)
-        else:  # Spring semester
-            start = date(current_year, 1, 15)
-            end = date(current_year, 5, 30)
+        # Use automatic semester detection
+        period = AutomaticSemesterService.get_current_period()
+        start = period.start_date
+        end = period.end_date
     else:
         start = datetime.strptime(start_date, "%Y-%m-%d").date()
         end = datetime.strptime(end_date, "%Y-%m-%d").date()

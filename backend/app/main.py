@@ -6,6 +6,8 @@ from app.api.routes import auth, face_recognition, students, classes, attendance
 from app.api.routes.faculties import router as faculties_router
 from app.api.routes.subjects import router as subjects_router
 from app.api.routes.admins import router as admins_router
+from app.api.routes.teachers import router as teachers_router
+from app.api.routes.teacher_dashboard import router as teacher_dashboard_router
 from app.api.routes.schedules import router as schedules_router
 from app.api.routes.face_testing import router as face_testing_router
 from app.api.routes.event_sessions import router as event_sessions_router
@@ -13,14 +15,19 @@ from app.api.routes.academic_metrics import router as academic_metrics_router
 from app.api.routes.student_attendance import router as student_attendance_router
 from app.api.routes.session_metrics import router as session_metrics_router
 from app.api.routes.admin_semester_config import router as admin_semester_config_router
+from app.api.routes.admin_calendar_config import router as admin_calendar_config_router
 from app.api.routes.student_calendar import router as student_calendar_router
 from app.api.routes.calendar_generator import router as calendar_generator_router
+from app.api.routes.streaks_badges import router as streaks_badges_router
+from app.api.routes.auto_absent_trigger import router as auto_absent_trigger_router
+from app.api.routes.system_settings import router as system_settings_router
 from app.api.endpoints.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
 from app.services.scheduler_service import scheduler_service
 import logging
 import warnings
+from contextlib import asynccontextmanager
 
 # Suppress pkg_resources deprecation warning
 warnings.filterwarnings("ignore", category=UserWarning, module="face_recognition_models")
@@ -29,13 +36,52 @@ warnings.filterwarnings("ignore", category=UserWarning, module="face_recognition
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan context replacing deprecated on_event handlers.
+
+    - Pre-yield: startup logic (configure, warm-up, start background tasks)
+    - Post-yield: shutdown logic (cleanup, stop background tasks)
+    """
+    # Startup
+    logger.info("Registered routes:")
+    for route in app.routes:
+        logger.info(f"Route: {getattr(route, 'path', str(route))} - Methods: {getattr(route, 'methods', set())}")
+
+    # Load academic calendar override configuration
+    logger.info("Loading academic calendar configuration...")
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.services.automatic_semester import AutomaticSemesterService
+
+        async with AsyncSessionLocal() as session:
+            override_active = await AutomaticSemesterService.load_override_from_db(session)
+            if override_active:
+                logger.info("✅ Academic calendar override loaded from database")
+            else:
+                logger.info("✅ Using default academic calendar dates")
+    except Exception as e:
+        logger.warning(f"Failed to load calendar override (using defaults): {e}")
+
+    # Start the background scheduler for auto-absent processing
+    logger.info("Starting background scheduler...")
+    await scheduler_service.start()
+
+    # Hand control to application runtime
+    yield
+
+    # Shutdown
+    logger.info("Stopping background scheduler...")
+    await scheduler_service.stop()
+
+# Create FastAPI app with lifespan handler
 app = FastAPI(
     title=settings.project_name,
     version=settings.version,
     description="AI-powered attendance management system with face recognition",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware with more permissive settings
@@ -87,13 +133,19 @@ app.include_router(comprehensive.router, prefix="/api")
 app.include_router(faculties_router, prefix="/api")
 app.include_router(subjects_router, prefix="/api")
 app.include_router(admins_router, prefix="/api")
+app.include_router(teachers_router, prefix="/api")
+app.include_router(teacher_dashboard_router, prefix="/api")
 app.include_router(schedules_router, prefix="/api")
 app.include_router(academic_metrics_router, prefix="/api")
 app.include_router(session_metrics_router, prefix="/api")
 app.include_router(student_attendance_router, prefix="/api")
 app.include_router(student_calendar_router, prefix="/api")
 app.include_router(calendar_generator_router, prefix="/api")
+app.include_router(streaks_badges_router, prefix="/api")
 app.include_router(admin_semester_config_router, prefix="/api")
+app.include_router(admin_calendar_config_router)
+app.include_router(auto_absent_trigger_router, prefix="/api")
+app.include_router(system_settings_router, prefix="/api/system-settings", tags=["System Settings"])
 app.include_router(notifications_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(event_sessions_router, prefix="/api")
@@ -107,21 +159,7 @@ async def root():
         "docs": "/docs"
     }
     
-@app.on_event("startup")
-async def startup_event():
-    logger.info("Registered routes:")
-    for route in app.routes:
-        logger.info(f"Route: {route.path} - Methods: {route.methods}")
-    
-    # Start the background scheduler for auto-absent processing
-    logger.info("Starting background scheduler...")
-    await scheduler_service.start()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Stop background tasks on shutdown"""
-    logger.info("Stopping background scheduler...")
-    await scheduler_service.stop()
+# (startup/shutdown moved to lifespan above)
 
 @app.get("/health")
 async def health_check():
@@ -170,3 +208,4 @@ if __name__ == "__main__":
         port=8000,
         reload=settings.debug
     )
+ 

@@ -178,27 +178,61 @@ async def get_student_attendance_calendar(
         
         print(f"[DEBUG] Found {len(all_records)} attendance records")
         
-        # CRITICAL: Fetch ALL attendance records for the entire month (all students)
+        # CRITICAL: Fetch ALL attendance records with student info for faculty+semester filtering
         # This is needed to detect if the system was active on any given day
-        global_activity_query = select(AttendanceRecord).where(
-            and_(
-                func.date(AttendanceRecord.date) >= start_date,
-                func.date(AttendanceRecord.date) <= end_date
+        global_activity_query = (
+            select(
+                AttendanceRecord,
+                Student.faculty_id.label('student_faculty_id'),
+                Student.semester.label('student_semester')
             )
-        ).order_by(AttendanceRecord.date)
+            .join(Student, AttendanceRecord.student_id == Student.id)
+            .where(
+                and_(
+                    func.date(AttendanceRecord.date) >= start_date,
+                    func.date(AttendanceRecord.date) <= end_date
+                )
+            )
+            .order_by(AttendanceRecord.date)
+        )
         
         global_result = await db.execute(global_activity_query)
-        all_global_records = global_result.scalars().all()
+        all_global_records = global_result.all()
         
-        # Build a map of dates with system activity (any student had attendance recorded)
+        # Build a map of dates with system activity or manual attendance
+        # FACULTY+SEMESTER SPECIFIC LOGIC: 
+        # Only count manual attendance for THIS student's faculty and semester
+        # This prevents CS Sem 1 manual attendance from affecting IT Sem 1 or CS Sem 2
         dates_with_system_activity = set()
-        for record in all_global_records:
+        dates_with_manual_attendance = set()
+        
+        for row in all_global_records:
+            # Unpack tuple: (AttendanceRecord, faculty_id, semester)
+            record = row[0]
+            record_faculty_id = row[1]
+            record_semester = row[2]
+            
             date_obj = record.date.date() if hasattr(record.date, 'date') else record.date
-            # Check if record was created on the same day (system was running that day)
+            
+            # Check if record was created on the same day (real-time system activity)
             if record.created_at.date() == date_obj:
                 dates_with_system_activity.add(date_obj)
+            
+            # Check if this is manual attendance for THIS faculty+semester
+            # Manual attendance indicates classes were held, just marked retroactively
+            method = record.method.value if hasattr(record.method, 'value') else str(record.method) if record.method else None
+            if method and method.lower() == 'manual':
+                # Only count if it's from a student in the SAME faculty AND semester
+                if (record_faculty_id == student.faculty_id and 
+                    record_semester == student.semester):
+                    dates_with_manual_attendance.add(date_obj)
         
-        print(f"[DEBUG] System was active on {len(dates_with_system_activity)} days in this month")
+        # Combine: day is "active" if it has real-time OR manual attendance for this faculty+semester
+        dates_with_classes_held = dates_with_system_activity.union(dates_with_manual_attendance)
+        
+        print(f"[DEBUG] Days with real-time system activity: {len(dates_with_system_activity)}")
+        print(f"[DEBUG] Days with manual attendance (Faculty {student.faculty_id}, Sem {student.semester}): {len(dates_with_manual_attendance)}")
+        print(f"[DEBUG] Total days with classes held: {len(dates_with_classes_held)}")
         
         # Fetch subject information for enrichment - ONLY for student's faculty and semester
         subject_query = (
@@ -236,6 +270,31 @@ async def get_student_attendance_calendar(
                 'location': record.location,
                 'notes': record.notes
             })
+        
+        # CRITICAL FIX: Deduplicate records by subject_id for each date
+        # This fixes the issue where auto-absent system created multiple records for same subject
+        deduplicated_daily_records = defaultdict(list)
+        for date_str, records_for_day in daily_records.items():
+            # Keep only the latest record for each subject on each day
+            subject_map = {}
+            for record in records_for_day:
+                subject_id = record['subject_id']
+                # Prioritize real attendance over auto-absent, then keep latest by ID
+                if subject_id not in subject_map:
+                    subject_map[subject_id] = record
+                else:
+                    existing = subject_map[subject_id]
+                    # Keep non-auto-absent over auto-absent
+                    if existing['location'] == 'AUTO_ABSENT_SYSTEM' and record['location'] != 'AUTO_ABSENT_SYSTEM':
+                        subject_map[subject_id] = record
+                    # If both same type, keep the one with higher ID (more recent)
+                    elif record['id'] > existing['id']:
+                        subject_map[subject_id] = record
+            
+            deduplicated_daily_records[date_str] = list(subject_map.values())
+        
+        daily_records = deduplicated_daily_records
+        print(f"[DEBUG] After deduplication: {sum(len(v) for v in daily_records.values())} total records")
         
         # Build calendar data - day-by-day status
         calendar_days = []
@@ -282,22 +341,25 @@ async def get_student_attendance_calendar(
                 expected_result = await db.execute(expected_subjects_query)
                 expected_subjects = expected_result.scalar() or 0
 
-                # INTELLIGENT DETECTION: Check if system had ANY activity on this date (from ANY student)
-                system_was_active = current in dates_with_system_activity
+                # INTELLIGENT DETECTION: Check if classes were held on this date
+                # Classes are considered "held" if:
+                # 1. System was active (real-time records), OR
+                # 2. Manual attendance exists (admin marked retroactively)
+                classes_were_held = current in dates_with_classes_held
 
                 if is_future:
                     # Future dates or today (classes haven't happened yet)
                     day_status = 'no_data'
-                elif total_records == 0 and not system_was_active and current < today:
-                    # Past date: No records for this student AND no system activity at all = system was down
+                elif total_records == 0 and not classes_were_held and current < today:
+                    # Past date: No records AND no evidence classes were held = system was down
                     day_status = 'system_inactive'
-                    print(f"[DETECTION] {current}: System was INACTIVE (no database activity from any student)")
-                elif total_records == 0 and system_was_active:
-                    # No records for this student BUT system was active (other students had records)
+                    print(f"[DETECTION] {current}: System was INACTIVE (no attendance from any student)")
+                elif total_records == 0 and classes_were_held:
+                    # No records for this student BUT classes were held (other students have records)
                     # This is a real absence
                     day_status = 'absent'
                     absent_count = 1
-                    print(f"[DETECTION] {current}: Real ABSENCE (system active, student didn't attend)")
+                    print(f"[DETECTION] {current}: Real ABSENCE (classes held, student didn't attend)")
                 elif total_records == 0 and current == today:
                     # Today but no records yet - classes may not have happened
                     day_status = 'no_data'
@@ -337,12 +399,15 @@ async def get_student_attendance_calendar(
                 if present_count > 0:
                     day_status = 'present'
 
+            # Total classes should be the actual number of attendance records (subjects) for that day
+            total_classes_for_day = len(records_for_day) if records_for_day else 0
+            
             calendar_days.append({
                 'date': date_str,
                 'day': current.day,
                 'weekday': current.strftime('%A'),
                 'status': day_status,
-                'total_classes': scheduled_classes_count,
+                'total_classes': total_classes_for_day,
                 'present': present_count,
                 'absent': absent_count,
                 'late': late_count,
@@ -351,19 +416,77 @@ async def get_student_attendance_calendar(
             
             current += timedelta(days=1)
         
-        # Calculate monthly statistics
-        total_classes_in_month = sum(day['total_classes'] for day in calendar_days if day['status'] not in ['no_data', 'holiday'])
-        present_total = sum(day['present'] for day in calendar_days)
-        absent_total = sum(day['absent'] for day in calendar_days)
-        late_total = sum(day['late'] for day in calendar_days)
+        # Calculate monthly statistics - COUNT UNIQUE DAYS, NOT RECORDS!
+        # A day is "present" if student attended at least some classes
+        # A day is "absent" if student missed ALL classes on that day
+        # A day is "late" if student was late to at least one class
         
-        excused_total = sum(1 for r in all_records if (r.status.value if hasattr(r.status, 'value') else str(r.status)) == 'excused')
-
-        attended_total = present_total + late_total
-        attendance_rate = round((attended_total / total_classes_in_month * 100), 2) if total_classes_in_month > 0 else 0.0
+        days_present = sum(1 for day in calendar_days if day['status'] == 'present')
+        days_absent = sum(1 for day in calendar_days if day['status'] == 'absent')
+        days_late = sum(1 for day in calendar_days if day['status'] == 'late')
+        days_partial = sum(1 for day in calendar_days if day['status'] == 'partial')
         
-        # Subject-wise breakdown - only include subjects from student's faculty/semester
-        subject_stats = defaultdict(lambda: {'total': 0, 'present': 0, 'absent': 0, 'late': 0})
+        # Total class days = days with status indicating classes were held
+        total_class_days = sum(1 for day in calendar_days if day['status'] not in ['no_data', 'holiday', 'system_inactive'])
+        
+        # Days attended = present + late + partial (any attendance counts)
+        days_attended = days_present + days_late + days_partial
+        
+        # Attendance rate based on days, not individual records
+        attendance_rate = round((days_attended / total_class_days * 100), 2) if total_class_days > 0 else 0.0
+        
+        # Subject-wise breakdown - Count classes held (CLASS days × subjects scheduled)
+        
+        # Get class schedules for this student's faculty/semester
+        schedules_query = select(ClassSchedule).where(
+            and_(
+                ClassSchedule.faculty_id == student.faculty_id,
+                ClassSchedule.semester == student.semester,
+                ClassSchedule.is_active == True
+            )
+        )
+        schedules_result = await db.execute(schedules_query)
+        class_schedules = schedules_result.scalars().all()
+        
+        # Group schedules by day of week
+        schedules_by_day = defaultdict(list)
+        for schedule in class_schedules:
+            day = schedule.day_of_week.name if hasattr(schedule.day_of_week, 'name') else str(schedule.day_of_week).upper()
+            subject_name = subjects.get(schedule.subject_id, 'Unknown Subject')
+            schedules_by_day[day].append(subject_name)
+        
+        # Count classes held per subject (CLASS event days ONLY where classes were actually held)
+        classes_held_per_subject = defaultdict(int)
+        
+        # Iterate through the month and count CLASS days where classes were held
+        current = start_date
+        while current <= end_date:
+            date_str = current.strftime("%Y-%m-%d")
+            events_for_day = daily_events.get(date_str, [])
+            
+            # Check if this day has a CLASS event (not a holiday)
+            has_class = any(e.event_type == EventType.CLASS for e in events_for_day)
+            is_holiday = any(e.event_type == EventType.HOLIDAY for e in events_for_day)
+            
+            # CRITICAL FIX: Count days where classes were ACTUALLY HELD
+            # This includes both real-time system activity AND manual attendance
+            classes_were_held_on_date = current in dates_with_classes_held
+            
+            if has_class and not is_holiday and classes_were_held_on_date:
+                # Get the day of week and count subjects scheduled for this day
+                day_name = current.strftime('%A').upper()
+                subjects_for_day = schedules_by_day.get(day_name, [])
+                
+                for subject_name in subjects_for_day:
+                    classes_held_per_subject[subject_name] += 1
+            
+            current += timedelta(days=1)
+        
+        print(f"[DEBUG] Classes held per subject (real-time + manual): {dict(classes_held_per_subject)}")
+        
+        # Count actual attendance status per subject
+        subject_stats = defaultdict(lambda: {'present': 0, 'absent': 0, 'late': 0})
+        
         for record in all_records:
             subject_id = record.subject_id
             # Skip records for subjects not in this student's faculty/semester
@@ -373,7 +496,6 @@ async def get_student_attendance_calendar(
             subject_name = subjects.get(subject_id, 'Unknown Subject')
             status = record.status.value if hasattr(record.status, 'value') else str(record.status)
             
-            subject_stats[subject_name]['total'] += 1
             if status == 'present':
                 subject_stats[subject_name]['present'] += 1
             elif status == 'absent':
@@ -381,15 +503,27 @@ async def get_student_attendance_calendar(
             elif status == 'late':
                 subject_stats[subject_name]['late'] += 1
         
+        # Build subject breakdown using classes held as total
         subject_breakdown = []
-        for subject_name, stats in subject_stats.items():
-            subject_rate = round((stats['present'] / stats['total'] * 100), 2) if stats['total'] > 0 else 0.0
+        for subject_name in subjects.values():
+            total_classes = classes_held_per_subject.get(subject_name, 0)
+            
+            if total_classes == 0:
+                continue  # Skip subjects with no classes held in this month
+            
+            stats = subject_stats.get(subject_name, {'present': 0, 'absent': 0, 'late': 0})
+            present = stats['present']
+            late = stats['late']
+            absent = stats['absent']
+            attended = present + late
+            subject_rate = round((attended / total_classes * 100), 2) if total_classes > 0 else 0.0
+            
             subject_breakdown.append({
                 'subject_name': subject_name,
-                'total_classes': stats['total'],
-                'present': stats['present'],
-                'absent': stats['absent'],
-                'late': stats['late'],
+                'total_classes': total_classes,  # Classes held (CLASS event days)
+                'present': present,
+                'absent': absent,
+                'late': late,
                 'attendance_rate': subject_rate
             })
         
@@ -421,15 +555,15 @@ async def get_student_attendance_calendar(
             'month_name': start_date.strftime('%B'),
             'calendar_days': calendar_days,
             'statistics': {
-                'total_classes': total_classes_in_month,
-                'present': present_total,
-                'absent': absent_total,
-                'late': late_total,
-                'excused': excused_total,
+                'total_classes': total_class_days,  # Now counting unique days
+                'present': days_present,  # Days fully present
+                'absent': days_absent,  # Days fully absent
+                'late': days_late,  # Days with late arrival
+                'partial': days_partial,  # Days with partial attendance
                 'attendance_rate': attendance_rate,
                 'current_streak': current_streak,
                 'longest_streak': longest_streak,
-                'days_with_classes': len([d for d in calendar_days if d['total_classes'] > 0])
+                'days_with_classes': total_class_days
             },
             'subject_breakdown': sorted(subject_breakdown, key=lambda x: x['total_classes'], reverse=True)
         }
@@ -490,14 +624,46 @@ async def get_student_attendance_summary(
         result = await db.execute(records_query)
         all_records = result.scalars().all()
         
-        # Calculate statistics
-        total = len(all_records)
-        present = sum(1 for r in all_records if (r.status.value if hasattr(r.status, 'value') else str(r.status)) == 'present')
-        absent = sum(1 for r in all_records if (r.status.value if hasattr(r.status, 'value') else str(r.status)) == 'absent')
-        late = sum(1 for r in all_records if (r.status.value if hasattr(r.status, 'value') else str(r.status)) == 'late')
-        excused = sum(1 for r in all_records if (r.status.value if hasattr(r.status, 'value') else str(r.status)) == 'excused')
+        # Calculate statistics - COUNT UNIQUE DAYS, NOT INDIVIDUAL RECORDS
+        # Group records by date
+        from collections import defaultdict
+        records_by_date = defaultdict(list)
+        for record in all_records:
+            record_date = record.date.date() if isinstance(record.date, datetime) else record.date
+            records_by_date[record_date].append(record)
         
-        attendance_rate = round((present / total * 100), 2) if total > 0 else 0.0
+        # Count days based on overall status
+        days_present = 0
+        days_absent = 0
+        days_late = 0
+        days_partial = 0
+        
+        for date_key, day_records in records_by_date.items():
+            present_count = sum(1 for r in day_records if r.status.value == 'present')
+            absent_count = sum(1 for r in day_records if r.status.value == 'absent')
+            late_count = sum(1 for r in day_records if r.status.value == 'late')
+            total_records = len(day_records)
+            
+            # Determine day status
+            if absent_count == total_records:
+                # All classes absent = absent day
+                days_absent += 1
+            elif present_count == total_records:
+                # All classes present = present day
+                days_present += 1
+            elif late_count == total_records:
+                # All classes late = late day
+                days_late += 1
+            elif present_count > 0 or late_count > 0:
+                # Mix of attendance = partial day
+                days_partial += 1
+            else:
+                # Shouldn't happen, but count as absent
+                days_absent += 1
+        
+        total_class_days = len(records_by_date)
+        days_attended = days_present + days_late + days_partial
+        attendance_rate = round((days_attended / total_class_days * 100), 2) if total_class_days > 0 else 0.0
         
         return {
             'student_id': student_id,
@@ -508,11 +674,11 @@ async def get_student_attendance_summary(
                 'days': (end_date - start_date).days + 1
             },
             'statistics': {
-                'total_classes': total,
-                'present': present,
-                'absent': absent,
-                'late': late,
-                'excused': excused,
+                'total_classes': total_class_days,
+                'present': days_present,
+                'absent': days_absent,
+                'late': days_late,
+                'partial': days_partial,
                 'attendance_rate': attendance_rate
             }
         }

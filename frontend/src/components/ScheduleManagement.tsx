@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, Calendar, Clock, Users, MapPin, User, FileText, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Calendar, Clock, Users, MapPin, User, FileText, ToggleLeft, ToggleRight, Filter, Search, X, AlertTriangle } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -8,7 +8,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from './ui/dialog';
 import { Alert, AlertDescription } from './ui/alert';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
@@ -59,8 +59,11 @@ const semesterOptions = Array.from({ length: 8 }, (_, i) => ({
 const ScheduleManagement: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [scheduleToDelete, setScheduleToDelete] = useState<number | null>(null);
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [formData, setFormData] = useState<ScheduleFormData>(initialFormData);
+  const [showFilters, setShowFilters] = useState(true);
   const [filters, setFilters] = useState({
     faculty_id: 'all',
     semester: 'all',
@@ -244,10 +247,17 @@ const ScheduleManagement: React.FC = () => {
   }, [editingSchedule, formData, updateScheduleMutation]);
 
   const handleDeleteSchedule = useCallback((id: number) => {
-    if (window.confirm('Are you sure you want to delete this schedule?')) {
-      deleteScheduleMutation.mutate(id);
+    setScheduleToDelete(id);
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (scheduleToDelete !== null) {
+      deleteScheduleMutation.mutate(scheduleToDelete);
+      setIsDeleteDialogOpen(false);
+      setScheduleToDelete(null);
     }
-  }, [deleteScheduleMutation]);
+  }, [scheduleToDelete, deleteScheduleMutation]);
 
   const resetForm = () => {
     setFormData(initialFormData);
@@ -275,258 +285,388 @@ const ScheduleManagement: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Schedule Management</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage class schedules and timetables
-          </p>
-        </div>
-        
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Schedule
+    <div className="p-6 md:p-8">
+      <div className="w-full">
+      <div className="space-y-6">
+        {/* Header Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-slate-700/50">
+          <div className="space-y-1">
+            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-400 via-blue-500 to-indigo-500 bg-clip-text text-transparent">
+              Schedule Management
+            </h1>
+            <p className="text-slate-400 text-sm sm:text-base">
+              Organize and manage class schedules and timetables
+            </p>
+          </div>
+          
+          <div className="flex gap-3">
+            <Button 
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white transition-all duration-200"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              {showFilters ? 'Hide' : 'Show'} Filters
             </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  onClick={resetForm}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-200"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Schedule
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
+                <DialogHeader>
+                  <DialogTitle className="text-2xl font-semibold text-white">Create New Schedule</DialogTitle>
+                </DialogHeader>
+                <ScheduleForm
+                  formData={formData}
+                  setFormData={setFormData}
+                  subjects={subjects}
+                  faculties={faculties}
+                  isLoading={createScheduleMutation.isPending}
+                  onFacultyChange={setSelectedFaculty}
+                  onSemesterChange={setSelectedSemester}
+                />
+                <DialogFooter className="gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setIsCreateDialogOpen(false)}
+                    className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleCreateSchedule}
+                    disabled={createScheduleMutation.isPending}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                  >
+                    {createScheduleMutation.isPending ? 'Creating...' : 'Create Schedule'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+
+        {/* Filters Section */}
+        {showFilters && (
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-blue-400" />
+                  Filter Schedules
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFilters({
+                    faculty_id: 'all',
+                    semester: 'all',
+                    day_of_week: 'all',
+                    status: 'active',
+                    academic_year: new Date().getFullYear().toString()
+                  })}
+                  className="text-slate-400 hover:text-white hover:bg-slate-700/50 text-xs"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear Filters
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="filter-faculty" className="text-slate-300 text-sm font-medium">Faculty</Label>
+                  <Select
+                    value={filters.faculty_id}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, faculty_id: value }))}
+                  >
+                    <SelectTrigger 
+                      id="filter-faculty" 
+                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+                    >
+                      <SelectValue placeholder="All Faculties" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Faculties</SelectItem>
+                      {faculties.map((faculty) => (
+                        <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
+                          {faculty.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filter-semester" className="text-slate-300 text-sm font-medium">Semester</Label>
+                  <Select
+                    value={filters.semester}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
+                  >
+                    <SelectTrigger 
+                      id="filter-semester" 
+                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+                    >
+                      <SelectValue placeholder="All Semesters" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Semesters</SelectItem>
+                      {semesterOptions.map((sem) => (
+                        <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
+                          {sem.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filter-day" className="text-slate-300 text-sm font-medium">Day of Week</Label>
+                  <Select
+                    value={filters.day_of_week}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, day_of_week: value }))}
+                  >
+                    <SelectTrigger 
+                      id="filter-day" 
+                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+                    >
+                      <SelectValue placeholder="All Days" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Days</SelectItem>
+                      {dayOptions.map((day) => (
+                        <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-800 focus:bg-slate-800">
+                          {day.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filter-status" className="text-slate-300 text-sm font-medium">Status</Label>
+                  <Select
+                    value={filters.status}
+                    onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+                  >
+                    <SelectTrigger 
+                      id="filter-status" 
+                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+                    >
+                      <SelectValue placeholder="All Statuses" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Statuses</SelectItem>
+                      <SelectItem value="active" className="text-white hover:bg-slate-800 focus:bg-slate-800">Active Only</SelectItem>
+                      <SelectItem value="inactive" className="text-white hover:bg-slate-800 focus:bg-slate-800">Inactive Only</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="filter-year" className="text-slate-300 text-sm font-medium">Academic Year</Label>
+                  <Input
+                    id="filter-year"
+                    type="number"
+                    value={filters.academic_year}
+                    onChange={(e) => setFilters(prev => ({ ...prev, academic_year: e.target.value }))}
+                    min="2020"
+                    max="2030"
+                    className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Schedules List */}
+        <div className="space-y-4">
+          {isLoadingSchedules ? (
+            // Skeleton loading animation
+            <div className="grid gap-4">
+              {Array.from({ length: 3 }, (_, index) => (
+                <ScheduleCardSkeleton key={index} />
+              ))}
+            </div>
+          ) : schedules.length === 0 ? (
+            <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
+              <CardContent className="flex flex-col items-center justify-center py-16">
+                <div className="w-20 h-20 rounded-full bg-slate-700/30 flex items-center justify-center mb-4">
+                  <Calendar className="h-10 w-10 text-slate-500" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">No schedules found</h3>
+                <p className="text-slate-400 text-center max-w-md mb-6">
+                  Create your first schedule or adjust the filters to see existing schedules.
+                </p>
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setIsCreateDialogOpen(true);
+                  }}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Schedule
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {schedules.map((schedule) => (
+                <ScheduleCard
+                  key={schedule.id}
+                  schedule={schedule}
+                  onEdit={handleEditSchedule}
+                  onDelete={handleDeleteSchedule}
+                  onToggleStatus={(id) => toggleScheduleMutation.mutate(id)}
+                  isToggling={toggleScheduleMutation.isPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pagination Controls */}
+        {schedules.length > 0 && (
+          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
+            <CardContent className="py-4">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-sm text-slate-400">
+                  Showing <span className="font-semibold text-white">{schedules.length}</span> schedule(s) on page <span className="font-semibold text-white">{page}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={page === 1 || isLoadingSchedules}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    Previous
+                  </Button>
+                  <div className="px-3 py-1 bg-slate-900/50 border border-slate-700 rounded-md text-sm font-medium text-white">
+                    {page}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isLoadingSchedules || schedules.length < pageSize}
+                    onClick={() => setPage((p) => p + 1)}
+                    className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    Next
+                  </Button>
+                  <Select
+                    value={String(pageSize)}
+                    onValueChange={(v) => {
+                      setPageSize(parseInt(v));
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-[130px] bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-slate-700">
+                      <SelectItem value="10" className="text-white hover:bg-slate-800">10 / page</SelectItem>
+                      <SelectItem value="20" className="text-white hover:bg-slate-800">20 / page</SelectItem>
+                      <SelectItem value="50" className="text-white hover:bg-slate-800">50 / page</SelectItem>
+                      <SelectItem value="100" className="text-white hover:bg-slate-800">100 / page</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
             <DialogHeader>
-              <DialogTitle>Create New Schedule</DialogTitle>
+              <DialogTitle className="text-2xl font-semibold text-white">Edit Schedule</DialogTitle>
             </DialogHeader>
             <ScheduleForm
               formData={formData}
               setFormData={setFormData}
               subjects={subjects}
               faculties={faculties}
-              isLoading={createScheduleMutation.isPending}
+              isLoading={updateScheduleMutation.isPending}
               onFacultyChange={setSelectedFaculty}
               onSemesterChange={setSelectedSemester}
             />
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button 
                 variant="outline" 
-                onClick={() => setIsCreateDialogOpen(false)}
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  resetForm();
+                }}
+                className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
               >
                 Cancel
               </Button>
               <Button 
-                onClick={handleCreateSchedule}
-                disabled={createScheduleMutation.isPending}
+                onClick={handleUpdateSchedule}
+                disabled={updateScheduleMutation.isPending}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
               >
-                {createScheduleMutation.isPending ? 'Creating...' : 'Create Schedule'}
+                {updateScheduleMutation.isPending ? 'Updating...' : 'Update Schedule'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+            <DialogHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                  <AlertTriangle className="h-6 w-6 text-red-500" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-semibold text-white">Delete Schedule</DialogTitle>
+                  <DialogDescription className="text-slate-400 text-sm mt-1">
+                    This action cannot be undone
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-slate-300 leading-relaxed">
+                Are you sure you want to delete this schedule? This will permanently remove the schedule from the system and cannot be recovered.
+              </p>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsDeleteDialogOpen(false);
+                  setScheduleToDelete(null);
+                }}
+                className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={confirmDelete}
+                disabled={deleteScheduleMutation.isPending}
+                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
+              >
+                {deleteScheduleMutation.isPending ? 'Deleting...' : 'Delete Schedule'}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="filter-faculty" className="text-slate-200">Faculty</Label>
-              <Select
-                value={filters.faculty_id}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, faculty_id: value }))}
-              >
-                <SelectTrigger id="filter-faculty" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
-                  <SelectValue placeholder="All Faculties" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
-                  <SelectItem value="all" className="text-white hover:bg-slate-700 focus:bg-slate-700">All Faculties</SelectItem>
-                  {faculties.map((faculty) => (
-                    <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-700 focus:bg-slate-700">
-                      {faculty.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="filter-semester" className="text-slate-200">Semester</Label>
-              <Select
-                value={filters.semester}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
-              >
-                <SelectTrigger id="filter-semester" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
-                  <SelectValue placeholder="All Semesters" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
-                  <SelectItem value="all" className="text-white hover:bg-slate-700 focus:bg-slate-700">All Semesters</SelectItem>
-                  {semesterOptions.map((sem) => (
-                    <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-700 focus:bg-slate-700">
-                      {sem.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="filter-day" className="text-slate-200">Day of Week</Label>
-              <Select
-                value={filters.day_of_week}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, day_of_week: value }))}
-              >
-                <SelectTrigger id="filter-day" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
-                  <SelectValue placeholder="All Days" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
-                  <SelectItem value="all" className="text-white hover:bg-slate-700 focus:bg-slate-700">All Days</SelectItem>
-                  {dayOptions.map((day) => (
-                    <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-700 focus:bg-slate-700">
-                      {day.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="filter-status" className="text-slate-200">Status</Label>
-              <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger id="filter-status" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
-                  <SelectValue placeholder="All Statuses" />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
-                  <SelectItem value="all" className="text-white hover:bg-slate-700 focus:bg-slate-700">All Statuses</SelectItem>
-                  <SelectItem value="active" className="text-white hover:bg-slate-700 focus:bg-slate-700">Active Only</SelectItem>
-                  <SelectItem value="inactive" className="text-white hover:bg-slate-700 focus:bg-slate-700">Inactive Only</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="filter-year" className="text-slate-200">Academic Year</Label>
-              <Input
-                id="filter-year"
-                type="number"
-                value={filters.academic_year}
-                onChange={(e) => setFilters(prev => ({ ...prev, academic_year: e.target.value }))}
-                min="2020"
-                max="2030"
-                className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500 placeholder:text-slate-400"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Schedules List */}
-      <div className="grid gap-4">
-        {isLoadingSchedules ? (
-          // Skeleton loading animation
-          Array.from({ length: pageSize }, (_, index) => (
-            <ScheduleCardSkeleton key={index} />
-          ))
-        ) : schedules.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-8">
-              <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No schedules found</h3>
-              <p className="text-muted-foreground text-center">
-                Create your first schedule or adjust the filters to see existing schedules.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          schedules.map((schedule) => (
-            <ScheduleCard
-              key={schedule.id}
-              schedule={schedule}
-              onEdit={handleEditSchedule}
-              onDelete={handleDeleteSchedule}
-              onToggleStatus={(id) => toggleScheduleMutation.mutate(id)}
-              isToggling={toggleScheduleMutation.isPending}
-            />
-          ))
-        )}
       </div>
-
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between mt-4">
-        <div className="text-sm text-slate-400">
-          Showing {schedules.length} item(s) on page {page}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            disabled={page === 1 || isLoadingSchedules}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            disabled={isLoadingSchedules || schedules.length < pageSize}
-            onClick={() => setPage((p) => p + 1)}
-          >
-            Next
-          </Button>
-          <Select
-            value={String(pageSize)}
-            onValueChange={(v) => {
-              setPageSize(parseInt(v));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[120px] bg-slate-800 border-slate-600 text-white">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-600">
-              <SelectItem value="10" className="text-white">10 / page</SelectItem>
-              <SelectItem value="20" className="text-white">20 / page</SelectItem>
-              <SelectItem value="50" className="text-white">50 / page</SelectItem>
-              <SelectItem value="100" className="text-white">100 / page</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Schedule</DialogTitle>
-          </DialogHeader>
-          <ScheduleForm
-            formData={formData}
-            setFormData={setFormData}
-            subjects={subjects}
-            faculties={faculties}
-            isLoading={updateScheduleMutation.isPending}
-            onFacultyChange={setSelectedFaculty}
-            onSemesterChange={setSelectedSemester}
-          />
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsEditDialogOpen(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleUpdateSchedule}
-              disabled={updateScheduleMutation.isPending}
-            >
-              {updateScheduleMutation.isPending ? 'Updating...' : 'Update Schedule'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
@@ -552,10 +692,13 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
   onSemesterChange
 }) => {
   return (
-    <div className="grid gap-4 py-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="faculty" className="text-slate-200">Faculty *</Label>
+    <div className="space-y-6 py-2">
+      {/* Faculty and Semester */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="faculty" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            Faculty <span className="text-red-400">*</span>
+          </Label>
           <Select
             value={formData.faculty_id?.toString() || ''}
             onValueChange={(value) => {
@@ -565,20 +708,26 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
             }}
             disabled={isLoading}
           >
-            <SelectTrigger id="faculty" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
+            <SelectTrigger 
+              id="faculty" 
+              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+            >
               <SelectValue placeholder="Select a faculty" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-600">
+            <SelectContent className="bg-slate-900 border-slate-700">
               {faculties.map((faculty) => (
-                <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
                   {faculty.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label htmlFor="semester" className="text-slate-200">Semester *</Label>
+        
+        <div className="space-y-2">
+          <Label htmlFor="semester" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            Semester <span className="text-red-400">*</span>
+          </Label>
           <Select
             value={formData.semester.toString()}
             onValueChange={(value) => {
@@ -588,12 +737,15 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
             }}
             disabled={isLoading}
           >
-            <SelectTrigger id="semester" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
+            <SelectTrigger 
+              id="semester" 
+              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+            >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-600">
+            <SelectContent className="bg-slate-900 border-slate-700">
               {semesterOptions.map((sem) => (
-                <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
                   {sem.label}
                 </SelectItem>
               ))}
@@ -601,8 +753,12 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
           </Select>
         </div>
       </div>
-      <div>
-        <Label htmlFor="subject" className="text-slate-200">Subject *</Label>
+
+      {/* Subject */}
+      <div className="space-y-2">
+        <Label htmlFor="subject" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+          Subject <span className="text-red-400">*</span>
+        </Label>
         <Select
           value={formData.subject_id?.toString() || ''}
           onValueChange={(value) => setFormData(prev => ({ 
@@ -611,7 +767,10 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
           }))}
           disabled={isLoading || subjects.length === 0}
         >
-          <SelectTrigger id="subject" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
+          <SelectTrigger 
+            id="subject" 
+            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+          >
             <SelectValue placeholder={
               !formData.faculty_id || !formData.semester 
                 ? "Select faculty and semester first" 
@@ -620,9 +779,9 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
                 : "Select a subject"
             } />
           </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-slate-600">
+          <SelectContent className="bg-slate-900 border-slate-700">
             {subjects.map((subject) => (
-              <SelectItem key={subject.id} value={subject.id.toString()} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+              <SelectItem key={subject.id} value={subject.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
                 {subject.code} - {subject.name}
               </SelectItem>
             ))}
@@ -630,9 +789,12 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
         </Select>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div>
-          <Label htmlFor="day" className="text-slate-200">Day of Week *</Label>
+      {/* Day and Time */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="day" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            Day <span className="text-red-400">*</span>
+          </Label>
           <Select
             value={formData.day_of_week || ''}
             onValueChange={(value) => setFormData(prev => ({ 
@@ -641,12 +803,15 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
             }))}
             disabled={isLoading}
           >
-            <SelectTrigger id="day" className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500">
+            <SelectTrigger 
+              id="day" 
+              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+            >
               <SelectValue placeholder="Select day" />
             </SelectTrigger>
-            <SelectContent className="bg-slate-800 border-slate-600">
+            <SelectContent className="bg-slate-900 border-slate-700">
               {dayOptions.map((day) => (
-                <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-700 focus:bg-slate-700">
+                <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-800 focus:bg-slate-800">
                   {day.label}
                 </SelectItem>
               ))}
@@ -654,34 +819,41 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
           </Select>
         </div>
 
-        <div>
-          <Label htmlFor="start-time" className="text-slate-200">Start Time *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="start-time" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            Start Time <span className="text-red-400">*</span>
+          </Label>
           <Input
             id="start-time"
             type="time"
             value={formData.start_time}
             onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
             disabled={isLoading}
-            className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500"
+            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
           />
         </div>
 
-        <div>
-          <Label htmlFor="end-time" className="text-slate-200">End Time *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="end-time" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            End Time <span className="text-red-400">*</span>
+          </Label>
           <Input
             id="end-time"
             type="time"
             value={formData.end_time}
             onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
             disabled={isLoading}
-            className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500"
+            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
           />
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="academic-year" className="text-slate-200">Academic Year *</Label>
+      {/* Academic Year and Classroom */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="academic-year" className="text-slate-300 text-sm font-medium flex items-center gap-1">
+            Academic Year <span className="text-red-400">*</span>
+          </Label>
           <Input
             id="academic-year"
             type="number"
@@ -693,36 +865,39 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
             min="2020"
             max="2030"
             disabled={isLoading}
-            className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500"
+            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
           />
         </div>
-        <div>
-          <Label htmlFor="classroom" className="text-slate-200">Classroom</Label>
+        
+        <div className="space-y-2">
+          <Label htmlFor="classroom" className="text-slate-300 text-sm font-medium">Classroom</Label>
           <Input
             id="classroom"
             value={formData.classroom}
             onChange={(e) => setFormData(prev => ({ ...prev, classroom: e.target.value }))}
             placeholder="e.g., Room 101, Lab A"
             disabled={isLoading}
-            className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500 placeholder:text-slate-400"
+            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
           />
         </div>
       </div>
 
-      <div>
-        <Label htmlFor="instructor" className="text-slate-200">Instructor Name</Label>
+      {/* Instructor */}
+      <div className="space-y-2">
+        <Label htmlFor="instructor" className="text-slate-300 text-sm font-medium">Instructor Name</Label>
         <Input
           id="instructor"
           value={formData.instructor_name}
           onChange={(e) => setFormData(prev => ({ ...prev, instructor_name: e.target.value }))}
           placeholder="e.g., Dr. John Smith"
           disabled={isLoading}
-          className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500 placeholder:text-slate-400"
+          className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
         />
       </div>
 
-      <div>
-        <Label htmlFor="notes" className="text-slate-200">Notes</Label>
+      {/* Notes */}
+      <div className="space-y-2">
+        <Label htmlFor="notes" className="text-slate-300 text-sm font-medium">Notes</Label>
         <Textarea
           id="notes"
           value={formData.notes}
@@ -730,7 +905,7 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
           placeholder="Additional notes about this schedule..."
           rows={3}
           disabled={isLoading}
-          className="bg-slate-800 border-slate-600 text-white hover:bg-slate-700 focus:ring-slate-500 placeholder:text-slate-400"
+          className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500 resize-none"
         />
       </div>
     </div>
@@ -762,139 +937,218 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
   };
 
   return (
-    <Card className={`transition-all duration-300 hover:shadow-lg border ${
+    <Card className={`group relative overflow-hidden transition-all duration-300 border ${
       !schedule.is_active 
-        ? 'bg-slate-800/50 border-slate-700 shadow-sm' 
-        : 'bg-slate-800 border-slate-600 shadow-md hover:border-slate-500'
+        ? 'bg-slate-800/30 backdrop-blur-sm border-slate-700/30 opacity-75 hover:opacity-90' 
+        : 'bg-slate-800/40 backdrop-blur-sm border-slate-700/50 hover:border-slate-600/60 hover:shadow-2xl hover:shadow-blue-500/10'
     }`}>
-      <CardHeader className="pb-3">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <CardTitle className={`text-lg transition-colors duration-300 ${
+      {/* Gradient accent on hover */}
+      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-indigo-500/0 to-purple-500/0 group-hover:from-blue-500/5 group-hover:via-indigo-500/5 group-hover:to-purple-500/5 transition-all duration-500"></div>
+      
+      <CardHeader className="pb-4 relative">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+          <div className="flex-1 space-y-3">
+            {/* Title and Code */}
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle className={`text-xl font-bold transition-colors duration-300 ${
                 !schedule.is_active ? 'text-slate-400' : 'text-white'
               }`}>
                 {schedule.subject_name}
               </CardTitle>
-              <Badge variant="secondary" className="bg-slate-700 text-slate-300 border-slate-600">
+              <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors duration-200 font-mono text-xs px-2.5 py-0.5">
                 {schedule.subject_code}
               </Badge>
-              <div className={`px-3 py-1 rounded-full text-xs font-semibold transition-all duration-300 ${
+              <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
                 schedule.is_active 
-                  ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                  : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10 shadow-sm' 
+                  : 'bg-slate-600/20 text-slate-400 border border-slate-600/30'
               }`}>
-                {schedule.is_active ? 'ACTIVE' : 'INACTIVE'}
+                {schedule.is_active ? 'Active' : 'Inactive'}
               </div>
             </div>
-            <p className={`text-sm transition-colors duration-300 ${
-              !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-            }`}>
-              {schedule.faculty_name} • Semester {schedule.semester} • {schedule.academic_year}
-            </p>
+            
+            {/* Meta Info */}
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className={`font-medium transition-colors duration-300 ${
+                !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
+              }`}>
+                {schedule.faculty_name}
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className={`transition-colors duration-300 ${
+                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
+              }`}>
+                Semester {schedule.semester}
+              </span>
+              <span className="text-slate-600">•</span>
+              <span className={`transition-colors duration-300 ${
+                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
+              }`}>
+                {schedule.academic_year}
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
+          
+          {/* Action Buttons */}
+          <div className="flex gap-2 shrink-0">
+            {/* Toggle Button */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onToggleStatus(schedule.id)}
               disabled={isToggling}
-              className={`relative overflow-hidden transition-all duration-300 hover:scale-105 px-3 py-2 ${
+              className={`group/toggle relative overflow-hidden transition-all duration-300 hover:scale-105 px-3 py-2 h-auto ${
                 schedule.is_active 
-                  ? 'hover:bg-green-500/10 border border-green-500/30' 
-                  : 'hover:bg-red-500/10 border border-red-500/30'
+                  ? 'hover:bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50' 
+                  : 'hover:bg-slate-600/10 border border-slate-600/30 hover:border-slate-600/50'
               }`}
+              title={schedule.is_active ? 'Deactivate schedule' : 'Activate schedule'}
             >
               <div className={`flex items-center gap-2 transition-all duration-300 ${
                 isToggling ? 'animate-pulse' : ''
               }`}>
-                <div className={`w-10 h-5 rounded-full relative transition-all duration-300 border ${
+                <div className={`w-11 h-6 rounded-full relative transition-all duration-300 ${
                   schedule.is_active 
-                    ? 'bg-green-500 border-green-400' 
-                    : 'bg-slate-600 border-slate-500'
+                    ? 'bg-emerald-500 shadow-emerald-500/30 shadow-sm' 
+                    : 'bg-slate-600'
                 }`}>
-                  <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-lg transition-all duration-300 ${
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${
                     schedule.is_active 
-                      ? 'translate-x-5' 
-                      : 'translate-x-0.5'
+                      ? 'translate-x-6' 
+                      : 'translate-x-1'
                   }`}></div>
                 </div>
-                <span className={`text-xs font-bold transition-colors duration-300 ${
-                  schedule.is_active ? 'text-green-400' : 'text-slate-400'
+                <span className={`text-xs font-bold uppercase tracking-wide transition-colors duration-300 ${
+                  schedule.is_active ? 'text-emerald-400' : 'text-slate-400'
                 }`}>
                   {schedule.is_active ? 'ON' : 'OFF'}
                 </span>
               </div>
             </Button>
+            
+            {/* Edit Button */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onEdit(schedule)}
-              className="hover:bg-slate-700 text-slate-300 hover:text-white"
+              className="hover:bg-blue-500/10 text-slate-400 hover:text-blue-400 border border-blue-500/0 hover:border-blue-500/30 transition-all duration-200 h-auto p-2"
+              title="Edit schedule"
             >
               <Edit2 className="h-4 w-4" />
             </Button>
+            
+            {/* Delete Button */}
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onDelete(schedule.id)}
-              className="hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-red-500/30 hover:border-red-500/50"
+              className="hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-red-500/0 hover:border-red-500/30 transition-all duration-200 h-auto p-2"
+              title="Delete schedule"
             >
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
-        <div className={`grid grid-cols-2 md:grid-cols-4 gap-4 text-sm transition-colors duration-300 ${
+      
+      <CardContent className="pt-0 relative">
+        {/* Schedule Details Grid */}
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 transition-colors duration-300 ${
           !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
         }`}>
-          <div className="flex items-center gap-2">
-            <Calendar className={`h-4 w-4 transition-colors duration-300 ${
-              !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-            }`} />
-            <span className="capitalize">{schedule.day_of_week}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className={`h-4 w-4 transition-colors duration-300 ${
-              !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-            }`} />
-            <span>{formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}</span>
-          </div>
-          {schedule.classroom && (
-            <div className="flex items-center gap-2">
-              <MapPin className={`h-4 w-4 transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
+          {/* Day */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+              !schedule.is_active ? 'bg-slate-700/30' : 'bg-blue-500/10'
+            }`}>
+              <Calendar className={`h-5 w-5 transition-colors duration-300 ${
+                !schedule.is_active ? 'text-slate-500' : 'text-blue-400'
               }`} />
-              <span>{schedule.classroom}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Day</p>
+              <p className="font-semibold capitalize truncate">{schedule.day_of_week}</p>
+            </div>
+          </div>
+          
+          {/* Time */}
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
+            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+              !schedule.is_active ? 'bg-slate-700/30' : 'bg-indigo-500/10'
+            }`}>
+              <Clock className={`h-5 w-5 transition-colors duration-300 ${
+                !schedule.is_active ? 'text-slate-500' : 'text-indigo-400'
+              }`} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Time</p>
+              <p className="font-semibold text-sm truncate">{formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}</p>
+            </div>
+          </div>
+          
+          {/* Classroom */}
+          {schedule.classroom && (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
+              <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+                !schedule.is_active ? 'bg-slate-700/30' : 'bg-purple-500/10'
+              }`}>
+                <MapPin className={`h-5 w-5 transition-colors duration-300 ${
+                  !schedule.is_active ? 'text-slate-500' : 'text-purple-400'
+                }`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Location</p>
+                <p className="font-semibold truncate">{schedule.classroom}</p>
+              </div>
             </div>
           )}
+          
+          {/* Instructor */}
           {schedule.instructor_name && (
-            <div className="flex items-center gap-2">
-              <User className={`h-4 w-4 transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-              }`} />
-              <span>{schedule.instructor_name}</span>
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
+              <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
+                !schedule.is_active ? 'bg-slate-700/30' : 'bg-emerald-500/10'
+              }`}>
+                <User className={`h-5 w-5 transition-colors duration-300 ${
+                  !schedule.is_active ? 'text-slate-500' : 'text-emerald-400'
+                }`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Instructor</p>
+                <p className="font-semibold truncate">{schedule.instructor_name}</p>
+              </div>
             </div>
           )}
         </div>
+        
+        {/* Notes Section */}
         {schedule.notes && (
           <>
-            <Separator className="my-3 bg-slate-700" />
-            <div className={`flex items-start gap-2 text-sm transition-colors duration-300 ${
+            <Separator className="my-4 bg-slate-700/50" />
+            <div className={`flex items-start gap-3 p-3 rounded-lg bg-slate-700/10 border border-slate-700/20 transition-colors duration-300 ${
               !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
             }`}>
-              <FileText className={`h-4 w-4 mt-0.5 transition-colors duration-300 ${
+              <FileText className={`h-4 w-4 mt-0.5 flex-shrink-0 transition-colors duration-300 ${
                 !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
               }`} />
-              <span className={`transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-              }`}>{schedule.notes}</span>
+              <div className="flex-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Notes</p>
+                <p className={`text-sm leading-relaxed transition-colors duration-300 ${
+                  !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
+                }`}>
+                  {schedule.notes}
+                </p>
+              </div>
             </div>
           </>
         )}
-        <div className="mt-3 text-xs text-muted-foreground">
-          Duration: {schedule.duration_minutes} minutes
+        
+        {/* Duration Badge */}
+        <div className="mt-4 flex justify-end">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700/30 border border-slate-700/40 text-xs font-medium text-slate-400">
+            <Clock className="h-3 w-3" />
+            Duration: {schedule.duration_minutes} minutes
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -906,44 +1160,39 @@ export default ScheduleManagement;
 // Skeleton Loading Component
 const ScheduleCardSkeleton: React.FC = () => {
   return (
-    <Card className="animate-pulse bg-slate-800 border-slate-600">
-      <CardHeader className="pb-3">
-        <div className="flex justify-between items-start">
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-6 bg-slate-700 rounded w-48"></div>
-              <div className="h-5 bg-slate-700 rounded w-16"></div>
-              <div className="h-5 bg-slate-700 rounded w-20"></div>
+    <Card className="animate-pulse bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+          <div className="flex-1 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="h-7 bg-slate-700/50 rounded-lg w-48"></div>
+              <div className="h-6 bg-slate-700/50 rounded-full w-16"></div>
+              <div className="h-6 bg-slate-700/50 rounded-full w-20"></div>
             </div>
-            <div className="h-4 bg-slate-700 rounded w-64"></div>
+            <div className="h-4 bg-slate-700/50 rounded w-64"></div>
           </div>
           <div className="flex gap-2">
-            <div className="h-8 w-16 bg-slate-700 rounded"></div>
-            <div className="h-8 w-8 bg-slate-700 rounded"></div>
-            <div className="h-8 w-8 bg-slate-700 rounded"></div>
+            <div className="h-10 w-20 bg-slate-700/50 rounded-lg"></div>
+            <div className="h-10 w-10 bg-slate-700/50 rounded-lg"></div>
+            <div className="h-10 w-10 bg-slate-700/50 rounded-lg"></div>
           </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4">
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 bg-slate-700 rounded"></div>
-            <div className="h-4 bg-slate-700 rounded w-16"></div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 bg-slate-700 rounded"></div>
-            <div className="h-4 bg-slate-700 rounded w-24"></div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 bg-slate-700 rounded"></div>
-            <div className="h-4 bg-slate-700 rounded w-20"></div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 bg-slate-700 rounded"></div>
-            <div className="h-4 bg-slate-700 rounded w-28"></div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30">
+              <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex-shrink-0"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-3 bg-slate-700/50 rounded w-12"></div>
+                <div className="h-4 bg-slate-700/50 rounded w-20"></div>
+              </div>
+            </div>
+          ))}
         </div>
-        <div className="h-3 bg-slate-700 rounded w-32"></div>
+        <div className="flex justify-end">
+          <div className="h-7 bg-slate-700/50 rounded-full w-40"></div>
+        </div>
       </CardContent>
     </Card>
   );

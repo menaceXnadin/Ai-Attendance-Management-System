@@ -29,6 +29,7 @@ class AttendanceStatus(enum.Enum):
     ABSENT = "absent"
     PENDING = "pending"
     STARTS_SOON = "starts_soon"
+    CANCELLED = "cancelled"
 
 class AcademicEvent(Base):
     """
@@ -228,30 +229,40 @@ class AcademicYear(Base):
 
 class SemesterConfiguration(Base):
     """
-    Dynamic configuration for semester dates and academic calendar
-    Replaces hardcoded semester dates throughout the system
+    University-Wide Academic Period Configuration
+    
+    Defines time periods (e.g., Fall 2025, Spring 2026) that apply to the ENTIRE university.
+    All students across ALL semesters (1-8) and ALL faculties use the same date range.
+    
+    The semester_number field is OPTIONAL and used only for:
+    - Administrative reference (e.g., "This is typically when 3rd-year students study")
+    - Sorting and organizing periods
+    - NOT for filtering attendance or restricting access
+    
+    Each student's attendance is filtered by their individual semester and faculty,
+    not by this configuration's semester_number.
     """
     __tablename__ = "semester_configurations"
     
     id = Column(Integer, primary_key=True, index=True)
     
-    # Semester identification
-    semester_number = Column(Integer, nullable=False)  # 1-8 for 4-year program
-    academic_year = Column(Integer, nullable=False)    # e.g., 2025
-    semester_name = Column(String(100), nullable=False)  # e.g., "Fall 2025", "Spring 2026"
+    # Period identification
+    semester_number = Column(Integer, nullable=True)   # Optional: Reference semester (e.g., 5 for "typical 3rd year Fall")
+    academic_year = Column(Integer, nullable=False)    # Academic year (e.g., 2025)
+    semester_name = Column(String(100), nullable=False)  # Period name (e.g., "Fall 2025 Academic Period")
     
-    # Semester dates
-    start_date = Column(Date, nullable=False)
-    end_date = Column(Date, nullable=False)
+    # University-wide period dates (applies to ALL students and faculties)
+    start_date = Column(Date, nullable=False)      # Period start (all students use this)
+    end_date = Column(Date, nullable=False)        # Period end (all students use this)
     
     # Academic metrics
-    total_weeks = Column(Integer, nullable=True)  # e.g., 16 weeks
-    exam_week_start = Column(Date, nullable=True)
-    exam_week_end = Column(Date, nullable=True)
+    total_weeks = Column(Integer, nullable=True)   # Duration in weeks (e.g., 16)
+    exam_week_start = Column(Date, nullable=True)  # Exam period start
+    exam_week_end = Column(Date, nullable=True)    # Exam period end
     
     # Status flags
-    is_current = Column(Boolean, default=False)    # Only one semester can be current
-    is_active = Column(Boolean, default=True)      # For soft delete
+    is_current = Column(Boolean, default=False)    # Only ONE period can be current at a time
+    is_active = Column(Boolean, default=True)      # Soft delete flag
     
     # Administrative fields
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -267,6 +278,74 @@ class SemesterConfiguration(Base):
         CheckConstraint("semester_number BETWEEN 1 AND 8", name="valid_semester_number"),
         # End date after start date
         CheckConstraint("end_date > start_date", name="valid_date_range"),
+    )
+
+
+class AcademicCalendarConfig(Base):
+    """
+    Academic Calendar Date Override Configuration
+    
+    Allows admin to override the default semester boundary dates for emergency scenarios
+    (e.g., COVID-19, natural disasters, institutional policy changes).
+    
+    When an active override exists, AutomaticSemesterService uses these dates instead of
+    the hardcoded defaults. Only one override can be active at a time.
+    
+    Default boundaries (when no override active):
+    - Fall: August 1 - December 15
+    - Spring: January 15 - May 30
+    """
+    __tablename__ = "academic_calendar_config"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Date Boundaries (month, day tuples stored as separate columns)
+    fall_start_month = Column(Integer, nullable=False)
+    fall_start_day = Column(Integer, nullable=False)
+    fall_end_month = Column(Integer, nullable=False)
+    fall_end_day = Column(Integer, nullable=False)
+    
+    spring_start_month = Column(Integer, nullable=False)
+    spring_start_day = Column(Integer, nullable=False)
+    spring_end_month = Column(Integer, nullable=False)
+    spring_end_day = Column(Integer, nullable=False)
+    
+    # Override Control
+    is_override_active = Column(Boolean, nullable=False, default=False, index=True)
+    
+    # Metadata
+    reason = Column(Text, nullable=True)  # e.g., "COVID-19 pandemic adjustment"
+    effective_from = Column(Date, nullable=False)
+    effective_until = Column(Date, nullable=True)  # NULL = indefinite
+    
+    # Audit Trail
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Emergency Flag
+    is_emergency_override = Column(Boolean, default=False)
+    emergency_contact_email = Column(String(255), nullable=True)
+    
+    # Relationships
+    creator = relationship("User", foreign_keys=[created_by])
+    updater = relationship("User", foreign_keys=[updated_by])
+    
+    # Constraints
+    __table_args__ = (
+        # Month values must be valid (1-12)
+        CheckConstraint("fall_start_month BETWEEN 1 AND 12", name="valid_fall_start_month"),
+        CheckConstraint("fall_end_month BETWEEN 1 AND 12", name="valid_fall_end_month"),
+        CheckConstraint("spring_start_month BETWEEN 1 AND 12", name="valid_spring_start_month"),
+        CheckConstraint("spring_end_month BETWEEN 1 AND 12", name="valid_spring_end_month"),
+        # Day values must be valid (1-31)
+        CheckConstraint("fall_start_day BETWEEN 1 AND 31", name="valid_fall_start_day"),
+        CheckConstraint("fall_end_day BETWEEN 1 AND 31", name="valid_fall_end_day"),
+        CheckConstraint("spring_start_day BETWEEN 1 AND 31", name="valid_spring_start_day"),
+        CheckConstraint("spring_end_day BETWEEN 1 AND 31", name="valid_spring_end_day"),
+        # Effective from before effective until
+        CheckConstraint("effective_until IS NULL OR effective_until >= effective_from", name="valid_effective_range"),
     )
 
 class ClassScheduleTemplate(Base):

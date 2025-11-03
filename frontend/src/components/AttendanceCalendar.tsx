@@ -21,6 +21,19 @@ interface AttendanceDay {
   }>;
 }
 
+type AttendanceRecordStatus = 'present' | 'absent' | 'late' | 'excused';
+
+interface AttendanceRecord {
+  date: string;
+  subject_name: string;
+  status: AttendanceRecordStatus;
+  confidence_score?: number;
+}
+
+interface AttendanceResponse {
+  records?: AttendanceRecord[];
+}
+
 interface AttendanceCalendarProps {
   studentId?: number;
   onDateSelect?: (date: string, dayData: AttendanceDay) => void;
@@ -37,7 +50,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   const currentYear = currentDate.getFullYear();
 
   // Fetch attendance data for the current month
-  const { data: attendanceData, isLoading } = useQuery({
+  const { data: attendanceData, isLoading } = useQuery<AttendanceResponse | undefined>({
     queryKey: ['attendance-calendar', currentYear, currentMonth, studentId],
     queryFn: async () => {
       const startDate = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
@@ -59,8 +72,9 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
     const processedData: Record<string, AttendanceDay> = {};
 
     // Group records by date
-    attendanceData.records.forEach((record: any) => {
+    attendanceData.records.forEach((record) => {
       const date = record.date;
+      const normalizedStatus = record.status === 'excused' ? 'absent' : record.status;
       
       if (!processedData[date]) {
         processedData[date] = {
@@ -72,7 +86,7 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
       processedData[date].subjects.push({
         name: record.subject_name,
-        status: record.status,
+        status: normalizedStatus,
         confidence: record.confidence_score
       });
     });
@@ -233,36 +247,41 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
           {/* Calendar Days */}
           <div className="grid grid-cols-7 gap-2">
-            {calendarGrid.map(({ date, dateStr, isCurrentMonth, isToday, attendanceDay }) => (
-              <button
-                key={dateStr}
-                onClick={() => handleDateClick(dateStr, attendanceDay)}
-                className={`
-                  relative h-12 rounded-lg border transition-all duration-200
-                  ${isCurrentMonth ? 'text-white' : 'text-slate-600'}
-                  ${isToday ? 'ring-2 ring-blue-400' : ''}
-                  ${selectedDate === dateStr ? 'ring-2 ring-white' : ''}
-                  ${attendanceDay ? getStatusColor(attendanceDay.status) : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50'}
-                  ${!attendanceDay && isCurrentMonth ? 'hover:bg-slate-700/50' : ''}
-                `}
-              >
-                <div className="flex flex-col items-center justify-center h-full">
-                  <span className="text-sm font-medium">
-                    {date.getDate()}
-                  </span>
-                  {attendanceDay && (
-                    <span className="text-xs">
-                      {getStatusIcon(attendanceDay.status)}
+            {calendarGrid.map(({ date, dateStr, isCurrentMonth, isToday, attendanceDay }) => {
+              const presentCount = attendanceDay?.subjects.filter(s => s.status === 'present').length || 0;
+              return (
+                <button
+                  key={dateStr}
+                  onClick={() => handleDateClick(dateStr, attendanceDay)}
+                  className={`
+                    relative h-12 rounded-lg border transition-all duration-200
+                    ${isCurrentMonth ? 'text-white' : 'text-slate-600'}
+                    ${isToday ? 'ring-2 ring-blue-400' : ''}
+                    ${selectedDate === dateStr ? 'ring-2 ring-white' : ''}
+                    ${attendanceDay ? getStatusColor(attendanceDay.status) : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50'}
+                    ${!attendanceDay && isCurrentMonth ? 'hover:bg-slate-700/50' : ''}
+                  `}
+                >
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <span className="text-sm font-medium">
+                      {date.getDate()}
                     </span>
+                    {attendanceDay && attendanceDay.subjects.length > 0 && (
+                      <span className="text-xs">
+                        {getStatusIcon(attendanceDay.status)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Show present count for days with attendance */}
+                  {presentCount > 0 && (
+                    <div className="absolute top-1 right-1 text-[9px] font-bold bg-green-500/80 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                      {presentCount}
+                    </div>
                   )}
-                </div>
-                
-                {/* Indicator for multiple subjects */}
-                {attendanceDay && attendanceDay.subjects.length > 1 && (
-                  <div className="absolute top-1 right-1 w-2 h-2 bg-blue-400 rounded-full"></div>
-                )}
-              </button>
-            ))}
+                </button>
+              );
+            })}
           </div>
         </div>
 

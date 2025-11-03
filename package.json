@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "AI-powered attendance management system with facial recognition",
   "private": true,
-  "workspaces": [
-    "frontend"
-  ],
   "scripts": {
     "dev:frontend": "cd frontend && npm run dev",
     "build:frontend": "cd frontend && npm run build",

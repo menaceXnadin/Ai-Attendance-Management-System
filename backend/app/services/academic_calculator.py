@@ -4,7 +4,7 @@ Academic Days and Periods Calculator Service
 Provides dynamic calculation of total academic days and periods based on:
 1. academic_events table (CLASS events with attendance_required=TRUE)
 2. class_schedules table (subjects scheduled for each day)
-3. semester_configurations table (dynamic semester dates)
+3. Automatic semester detection (Fall/Spring based on calendar dates)
 
 This replaces static counting with dynamic, schedule-aware calculations.
 """
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import AcademicEvent, EventType, ClassSchedule, DayOfWeek, Subject, SemesterConfiguration
+from app.services.automatic_semester import AutomaticSemesterService
 
 
 class SemesterService:
@@ -351,65 +352,43 @@ async def get_semester_academic_metrics(
 
 async def get_current_semester_metrics(db: AsyncSession) -> Dict:
     """
-    Get metrics for current semester using dynamic semester configuration.
+    Get metrics for current semester using automatic semester detection.
     
     Returns:
         Dict with academic metrics, semester info, and dates
     """
-    semester_service = SemesterService(db)
-    current_semester = await semester_service.get_current_semester()
+    # Load override configuration from database (respects 5-min cache)
+    await AutomaticSemesterService.load_override_from_db(db)
     
-    if not current_semester:
-        # Fallback to hardcoded values if no current semester is configured
-        # This maintains backward compatibility
-        fallback_start = date(2025, 8, 1)
-        fallback_end = date(2025, 12, 15)
-        
-        calculator = AcademicCalculatorService(db)
-        academic_metrics = await calculator.calculate_academic_metrics(
-            fallback_start, fallback_end, semester=5, academic_year=2025
-        )
-        
-        return {
-            **academic_metrics,
-            "semester_info": {
-                "id": None,
-                "name": "Fall 2025 (Fallback)",
-                "semester_number": 5,
-                "academic_year": 2025,
-                "is_current": True
-            },
-            "semester_start_date": fallback_start.strftime("%Y-%m-%d"),
-            "semester_end_date": fallback_end.strftime("%Y-%m-%d")
-        }
+    # Use automatic semester detection (now respects any active override)
+    period = AutomaticSemesterService.get_current_period()
     
-    # Use dynamic semester configuration
     calculator = AcademicCalculatorService(db)
     academic_metrics = await calculator.calculate_academic_metrics(
-        current_semester.start_date, 
-        current_semester.end_date,
-        semester=current_semester.semester_number,
-        academic_year=current_semester.academic_year
+        period.start_date, 
+        period.end_date,
+        semester=None,  # Not semester-specific, applies to all students
+        academic_year=period.academic_year
     )
     
     return {
         **academic_metrics,
         "semester_info": {
-            "id": current_semester.id,
-            "name": current_semester.semester_name,
-            "semester_number": current_semester.semester_number,
-            "academic_year": current_semester.academic_year,
-            "is_current": current_semester.is_current
+            "id": None,  # No database ID (automatic detection)
+            "name": period.semester_name,
+            "semester_number": None,  # Not specific to one semester
+            "academic_year": period.academic_year,
+            "is_current": True
         },
-        "semester_start_date": current_semester.start_date.strftime("%Y-%m-%d"),
-        "semester_end_date": current_semester.end_date.strftime("%Y-%m-%d")
+        "semester_start_date": period.start_date.strftime("%Y-%m-%d"),
+        "semester_end_date": period.end_date.strftime("%Y-%m-%d")
     }
 
 
 async def get_student_specific_semester_metrics(db: AsyncSession, student_semester: int) -> Dict:
     """
     Get metrics for a specific student using their individual semester number.
-    Uses current time period dates but filters by the student's actual semester.
+    Uses automatic time period dates but filters by the student's actual semester.
     
     This fixes the issue where all students were seeing the same semester data
     regardless of their individual academic progress.
@@ -421,50 +400,30 @@ async def get_student_specific_semester_metrics(db: AsyncSession, student_semest
     Returns:
         Dict with academic metrics for the student's specific semester
     """
-    semester_service = SemesterService(db)
-    current_time_period = await semester_service.get_current_semester()
+    # Load override configuration from database (respects 5-min cache)
+    await AutomaticSemesterService.load_override_from_db(db)
     
-    if not current_time_period:
-        # Fallback to hardcoded values if no current time period is configured
-        fallback_start = date(2025, 8, 1)
-        fallback_end = date(2025, 12, 15)
-        
-        calculator = AcademicCalculatorService(db)
-        academic_metrics = await calculator.calculate_academic_metrics(
-            fallback_start, fallback_end, semester=student_semester, academic_year=2025
-        )
-        
-        return {
-            **academic_metrics,
-            "semester_info": {
-                "id": None,
-                "name": f"Semester {student_semester} - Fall 2025 (Fallback)",
-                "semester_number": student_semester,
-                "academic_year": 2025,
-                "is_current": True
-            },
-            "semester_start_date": fallback_start.strftime("%Y-%m-%d"),
-            "semester_end_date": fallback_end.strftime("%Y-%m-%d")
-        }
+    # Use automatic semester detection for time period (now respects any active override)
+    period = AutomaticSemesterService.get_current_period()
     
     # Use current time period dates but student's individual semester for filtering
     calculator = AcademicCalculatorService(db)
     academic_metrics = await calculator.calculate_academic_metrics(
-        current_time_period.start_date, 
-        current_time_period.end_date,
+        period.start_date, 
+        period.end_date,
         semester=student_semester,  # Use student's individual semester, not global config
-        academic_year=current_time_period.academic_year
+        academic_year=period.academic_year
     )
     
     return {
         **academic_metrics,
         "semester_info": {
-            "id": current_time_period.id,
-            "name": f"Semester {student_semester} - {current_time_period.semester_name}",
+            "id": None,  # No database ID (automatic detection)
+            "name": f"Semester {student_semester} - {period.semester_name}",
             "semester_number": student_semester,
-            "academic_year": current_time_period.academic_year,
-            "is_current": current_time_period.is_current
+            "academic_year": period.academic_year,
+            "is_current": True
         },
-        "semester_start_date": current_time_period.start_date.strftime("%Y-%m-%d"),
-        "semester_end_date": current_time_period.end_date.strftime("%Y-%m-%d")
+        "semester_start_date": period.start_date.strftime("%Y-%m-%d"),
+        "semester_end_date": period.end_date.strftime("%Y-%m-%d")
     }

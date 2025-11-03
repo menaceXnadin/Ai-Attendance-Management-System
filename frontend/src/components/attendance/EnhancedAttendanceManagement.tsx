@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Users, BookOpen, GraduationCap, Calendar, CheckCircle, XCircle, Clock, Save, UserCheck, UserX, Search, X, User, Hash, Mail } from 'lucide-react';
+import { Loader2, Users, BookOpen, GraduationCap, CheckCircle, XCircle, Clock, Save, UserCheck, UserX, Search, X, User, Hash, Mail, Ban } from 'lucide-react';
 import { api } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -36,15 +36,117 @@ interface StudentWithAttendance {
   hasChanges?: boolean; // Track if attendance was manually changed
 }
 
+type AttendanceStatus = 'present' | 'absent' | 'late' | 'system_inactive' | 'no_data' | 'cancelled';
+
+interface SubjectWithAttendance extends Subject {
+  todayStatus?: AttendanceStatus;
+  hasChanges?: boolean;
+  cancellation_reason?: string;  // Reason for cancellation if class was cancelled
+}
+
+interface AttendanceRecord {
+  createdAt?: string;
+  created_at?: string;
+  date: string;
+  subjectId?: string | number;
+  status: AttendanceStatus;
+}
+
+interface StudentSubjectBreakdown {
+  subjectId: number;
+  subjectName: string;
+  status: AttendanceStatus;
+}
+
+interface StudentApi {
+  id: number | string;
+  full_name?: string;
+  name?: string;
+  student_id?: string;
+  studentId?: string;
+  email?: string;
+  faculty?: string;
+  faculty_id?: number | string;
+  semester?: number | string;
+}
+
+const toAttendanceStatus = (value: unknown): AttendanceStatus => {
+  switch (value) {
+    case 'present':
+    case 'late':
+    case 'absent':
+    case 'cancelled':
+    case 'system_inactive':
+    case 'no_data':
+      return value;
+    default:
+      return 'absent';
+  }
+};
+
+const normalizeAttendanceRecord = (record: unknown, fallbackDate: string): AttendanceRecord | null => {
+  if (!record || typeof record !== 'object') {
+    return null;
+  }
+
+  const data = record as Record<string, unknown>;
+  const rawSubjectId = data.subjectId;
+  const subjectId =
+    typeof rawSubjectId === 'string' || typeof rawSubjectId === 'number'
+      ? rawSubjectId
+      : undefined;
+  const status = toAttendanceStatus(data.status);
+  const date = typeof data.date === 'string' ? data.date : fallbackDate;
+
+  return {
+    createdAt: typeof data.createdAt === 'string' ? data.createdAt : undefined,
+    created_at: typeof data.created_at === 'string' ? data.created_at : undefined,
+    date,
+    subjectId,
+    status,
+  };
+};
+
+const isStudentApi = (student: unknown): student is StudentApi => {
+  if (!student || typeof student !== 'object') {
+    return false;
+  }
+  const data = student as Record<string, unknown>;
+  return 'id' in data;
+};
+
+const toStudentWithAttendance = (student: StudentApi): StudentWithAttendance => {
+  const idValue = typeof student.id === 'string' ? parseInt(student.id, 10) : student.id;
+  const parsedIdRaw = Number(idValue);
+  const parsedId = Number.isFinite(parsedIdRaw) ? parsedIdRaw : 0;
+  const facultyIdValue =
+    typeof student.faculty_id === 'string' ? parseInt(student.faculty_id, 10) : student.faculty_id;
+  const parsedFacultyIdRaw = Number(facultyIdValue);
+  const parsedFacultyId = Number.isFinite(parsedFacultyIdRaw) ? parsedFacultyIdRaw : 0;
+  const semesterValue =
+    typeof student.semester === 'string' ? parseInt(student.semester, 10) : student.semester;
+  const parsedSemesterRaw = Number(semesterValue);
+  const parsedSemester = Number.isFinite(parsedSemesterRaw) ? parsedSemesterRaw : 1;
+  return {
+    id: parsedId,
+    student_id: student.student_id || student.studentId || 'Unknown ID',
+    name: student.full_name || student.name || 'Unknown Name',
+    email: student.email || 'unknown@example.com',
+    semester: parsedSemester,
+    status: 'absent',
+    faculty_id: parsedFacultyId,
+  };
+};
+
 const EnhancedAttendanceManagement = () => {
   const { toast } = useToast();
   
   // State management
   const [faculties, setFaculties] = useState<Faculty[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<SubjectWithAttendance[]>([]);
   const [students, setStudents] = useState<StudentWithAttendance[]>([]);
   const [allStudents, setAllStudents] = useState<StudentWithAttendance[]>([]);
-  const [studentSubjectBreakdown, setStudentSubjectBreakdown] = useState<any[]>([]);
+  const [studentSubjectBreakdown, setStudentSubjectBreakdown] = useState<StudentSubjectBreakdown[]>([]);
   
   const [selectedFaculty, setSelectedFaculty] = useState<string>('');
   const [selectedSemester, setSelectedSemester] = useState<string>('');
@@ -98,7 +200,7 @@ const EnhancedAttendanceManagement = () => {
       // Retry once on failure
       if (retryCount < 1) {
         console.log('Retrying faculties fetch...');
-        setTimeout(() => fetchFaculties(retryCount + 1), 1000);
+        setTimeout(() => { void fetchFaculties(retryCount + 1); }, 1000);
         return;
       }
       
@@ -126,7 +228,10 @@ const EnhancedAttendanceManagement = () => {
         selectedSemester ? parseInt(selectedSemester) : undefined
       );
       console.log('Subjects response:', response);
-      setSubjects(response || []);
+      const typedResponse = Array.isArray(response)
+        ? (response as SubjectWithAttendance[])
+        : [];
+      setSubjects(typedResponse);
     } catch (error) {
       console.error('Error fetching subjects:', error);
       setSubjects([]);
@@ -151,7 +256,10 @@ const EnhancedAttendanceManagement = () => {
         parseInt(selectedSubject),
         selectedDate
       );
-      setStudents(response.students || []);
+      const studentsData = Array.isArray(response?.students)
+        ? (response.students as StudentWithAttendance[])
+        : [];
+      setStudents(studentsData);
     } catch (error) {
       console.error('Error fetching students:', error);
       toast({
@@ -165,13 +273,13 @@ const EnhancedAttendanceManagement = () => {
   }, [selectedFaculty, selectedSemester, selectedSubject, selectedDate, toast]);
 
   useEffect(() => {
-    fetchFaculties();
+    void fetchFaculties();
   }, [fetchFaculties, refreshCounter]);
 
   // Fetch subjects when faculty or semester changes
   useEffect(() => {
     if (selectedFaculty) {
-      fetchSubjects();
+      void fetchSubjects();
     } else {
       setSubjects([]);
       setSelectedSubject('');
@@ -190,20 +298,25 @@ const EnhancedAttendanceManagement = () => {
     try {
       const response = await api.students.getAll();
       console.log('All students response:', response);
-      const filteredStudents = response.filter(student => 
-        student.faculty_id === parseInt(selectedFaculty) && 
-        student.semester === parseInt(selectedSemester)
-      );
+      const apiStudents = Array.isArray(response)
+        ? response.filter(isStudentApi)
+        : [];
+      const targetFaculty = parseInt(selectedFaculty, 10);
+      const targetSemester = parseInt(selectedSemester, 10);
+      const filteredStudents = apiStudents.filter(student => {
+        const facultyIdValue =
+          typeof student.faculty_id === 'string' ? parseInt(student.faculty_id, 10) : student.faculty_id;
+        const semesterValue =
+          typeof student.semester === 'string' ? parseInt(student.semester, 10) : student.semester;
+        return facultyIdValue === targetFaculty && semesterValue === targetSemester;
+      });
       console.log('Filtered students:', filteredStudents);
-      setAllStudents(filteredStudents.map(student => ({
-        id: parseInt(student.id),
-        student_id: student.studentId,
-        name: student.name,
-        email: student.email,
-        semester: student.semester,
-        status: 'absent' as const,
-        faculty_id: student.faculty_id
-      })));
+      setAllStudents(
+        filteredStudents.map(student => ({
+          ...toStudentWithAttendance(student),
+          status: 'absent' as const,
+        }))
+      );
     } catch (error) {
       console.error('Error fetching all students:', error);
       setAllStudents([]);
@@ -224,16 +337,24 @@ const EnhancedAttendanceManagement = () => {
     setLoading(prev => ({ ...prev, subjects: true }));
     try {
       // Get all subjects for this faculty/semester
-      const subjectsResponse = await api.subjects.getByFacultySemester(
+      const subjectsResponseRaw = await api.subjects.getByFacultySemester(
         parseInt(selectedFaculty),
         parseInt(selectedSemester)
       );
+      const subjectsResponse = Array.isArray(subjectsResponseRaw)
+        ? (subjectsResponseRaw as SubjectWithAttendance[])
+        : [];
       
       // Get attendance for this student across all subjects for selected date
-      const attendanceResponse = await api.attendance.getAll({
+      const attendanceResponseRaw = await api.attendance.getAll({
         studentId: selectedStudent,
         date: selectedDate
       });
+      const attendanceResponse = Array.isArray(attendanceResponseRaw?.records)
+        ? attendanceResponseRaw.records
+            .map(record => normalizeAttendanceRecord(record, selectedDate))
+            .filter((record): record is AttendanceRecord => record !== null)
+        : [];
       
       // Check if system was active on the selected date
       // by checking if ANY attendance record was created on the same day
@@ -242,7 +363,7 @@ const EnhancedAttendanceManagement = () => {
       today.setHours(0, 0, 0, 0);
       targetDate.setHours(0, 0, 0, 0);
       
-      const systemWasActive = attendanceResponse.some((record: any) => {
+      const systemWasActive = attendanceResponse.some((record) => {
         const createdDate = new Date(record.createdAt || record.created_at);
         const recordDate = new Date(record.date);
         createdDate.setHours(0, 0, 0, 0);
@@ -251,27 +372,51 @@ const EnhancedAttendanceManagement = () => {
       });
       
       // Determine default status for subjects with no records
-      let defaultStatus = 'absent';
+      // IMPORTANT: Default should be 'no_data' or 'system_inactive', NOT 'absent'
+      // 'absent' should ONLY come from actual database records
+      let defaultStatus: AttendanceStatus = 'no_data';
       if (targetDate > today) {
+        // Future dates should show no_data
         defaultStatus = 'no_data';
       } else if (targetDate.getTime() === today.getTime()) {
+        // Today should show no_data (not marked yet)
         defaultStatus = 'no_data';
       } else if (!systemWasActive && attendanceResponse.length === 0) {
+        // Past dates with no system activity should show system_inactive
         defaultStatus = 'system_inactive';
+      } else if (systemWasActive && attendanceResponse.length > 0) {
+        // System was active, but this specific subject has no record
+        // This means the student was likely absent (but should be explicitly marked)
+        defaultStatus = 'no_data';
       }
       
-      // Create attendance map
-      const attendanceMap = attendanceResponse.reduce((acc: any, record: any) => {
-        acc[record.subjectId] = record.status;
+      // Create attendance map with cancellation information
+      // Since backend now creates actual attendance records with status='cancelled',
+      // we don't need special handling for missing records
+      const attendanceMap = attendanceResponse.reduce<Record<string, { status: AttendanceStatus; cancellation_reason?: string }>>((acc, record) => {
+        if (record.subjectId !== undefined) {
+          acc[String(record.subjectId)] = {
+            status: record.status as AttendanceStatus,
+            cancellation_reason: (record as any).cancellation_reason || (record as any).notes
+          };
+          // Debug log removed
+        }
         return acc;
       }, {});
       
       // Combine subjects with attendance status
-      const subjectsWithAttendance = subjectsResponse.map((subject: any) => ({
-        ...subject,
-        todayStatus: attendanceMap[subject.id.toString()] || defaultStatus,
-        hasChanges: false
-      }));
+      const subjectsWithAttendance = subjectsResponse.map((subject) => {
+        const attendanceInfo = attendanceMap[subject.id.toString()];
+        
+        console.log(`[FRONTEND DEBUG] Subject ${subject.code} (ID: ${subject.id}): attendanceInfo=`, attendanceInfo, `defaultStatus=${defaultStatus}`);
+        
+        return {
+          ...subject,
+          todayStatus: attendanceInfo?.status || defaultStatus,
+          cancellation_reason: attendanceInfo?.cancellation_reason,
+          hasChanges: false
+        };
+      });
       
       setSubjects(subjectsWithAttendance);
     } catch (error) {
@@ -303,24 +448,22 @@ const EnhancedAttendanceManagement = () => {
       
       // Filter based on search query
       const searchTerm = query.toLowerCase().trim();
-      const filtered = response.filter((student: any) => 
-        student.full_name?.toLowerCase().includes(searchTerm) ||
-        student.name?.toLowerCase().includes(searchTerm) ||
-        student.student_id?.toLowerCase().includes(searchTerm) ||
-        student.studentId?.toLowerCase().includes(searchTerm) ||
-        student.email?.toLowerCase().includes(searchTerm) ||
-        student.faculty?.toLowerCase().includes(searchTerm)
-      ).slice(0, 50); // Limit to 50 results
+      const filtered = Array.isArray(response)
+        ? response.filter(isStudentApi).filter((student) => {
+            const nameMatch = (student.full_name || student.name || '').toLowerCase().includes(searchTerm);
+            const idMatch = (student.student_id || student.studentId || '').toLowerCase().includes(searchTerm);
+            const emailMatch = (student.email || '').toLowerCase().includes(searchTerm);
+            const facultyMatch = (student.faculty || '').toLowerCase().includes(searchTerm);
+            return nameMatch || idMatch || emailMatch || facultyMatch;
+          })
+        : [];
       
-      setQuickSearchResults(filtered.map((s: any) => ({
-        id: s.id,
-        student_id: s.student_id || s.studentId,
-        name: s.full_name || s.name,
-        email: s.email,
-        semester: s.semester,
-        status: 'absent' as const,
-        faculty_id: s.faculty_id
-      })));
+      setQuickSearchResults(
+        filtered.slice(0, 50).map(student => ({
+          ...toStudentWithAttendance(student),
+          status: 'absent' as const,
+        }))
+      );
     } catch (error) {
       console.error('Error performing quick search:', error);
       toast({
@@ -337,20 +480,20 @@ const EnhancedAttendanceManagement = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchQuery) {
-        performQuickSearch(searchQuery);
+        void performQuickSearch(searchQuery);
       } else {
         setQuickSearchResults([]);
         setShowQuickSearch(false);
       }
     }, 300);
     
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); };
   }, [searchQuery, performQuickSearch]);
 
   // Fetch students when subject changes (for subject view)
   useEffect(() => {
     if (viewMode === 'subject' && selectedFaculty && selectedSemester && selectedSubject) {
-      fetchStudents();
+      void fetchStudents();
     } else {
       setStudents([]);
     }
@@ -359,7 +502,7 @@ const EnhancedAttendanceManagement = () => {
   // Fetch all students when faculty/semester changes (for student view)
   useEffect(() => {
     if (viewMode === 'student' && selectedFaculty && selectedSemester) {
-      fetchAllStudents();
+      void fetchAllStudents();
     } else {
       setAllStudents([]);
     }
@@ -368,13 +511,13 @@ const EnhancedAttendanceManagement = () => {
   // Fetch student subjects when student or date is selected
   useEffect(() => {
     if (viewMode === 'student' && selectedStudent && selectedDate) {
-      fetchStudentSubjects();
+      void fetchStudentSubjects();
     } else {
       setSubjects([]);
     }
-  }, [viewMode, selectedStudent, selectedDate, fetchStudentSubjects]);
+  }, [viewMode, selectedStudent, selectedDate, fetchStudentSubjects, refreshCounter]);
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: AttendanceStatus) => {
     switch (status) {
       case 'present':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
@@ -382,24 +525,36 @@ const EnhancedAttendanceManagement = () => {
         return <Clock className="h-4 w-4 text-yellow-500" />;
       case 'system_inactive':
         return <Clock className="h-4 w-4 text-purple-500" />;
+      case 'no_data':
+        return <Clock className="h-4 w-4 text-slate-400" />;
+      case 'cancelled':
+        return <Ban className="h-4 w-4 text-gray-400" />;
       case 'absent':
       default:
         return <XCircle className="h-4 w-4 text-red-500" />;
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const variants = {
+  const getStatusBadge = (status: AttendanceStatus) => {
+    const variants: Record<AttendanceStatus, string> = {
       present: 'bg-green-500/20 text-green-300 border-green-400/30',
       late: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30',
       absent: 'bg-red-500/20 text-red-300 border-red-400/30',
-      system_inactive: 'bg-purple-900/30 text-purple-300 border-purple-600/50 border-2 border-dashed'
+      system_inactive: 'bg-purple-900/30 text-purple-300 border-purple-600/50 border-2 border-dashed',
+      no_data: 'bg-slate-500/20 text-slate-300 border-slate-400/30',
+      cancelled: 'bg-gray-600/30 text-gray-400 border-gray-500/30',
     };
     
-    const statusLabel = status === 'system_inactive' ? 'System Inactive' : status;
+    const statusLabel = status === 'system_inactive'
+      ? 'System Inactive'
+      : status === 'no_data'
+        ? 'No Data'
+        : status === 'cancelled'
+          ? 'Cancelled'
+          : status;
     
     return (
-      <Badge variant="outline" className={variants[status as keyof typeof variants] || variants.absent}>
+      <Badge variant="outline" className={variants[status]}>
         {getStatusIcon(status)}
         <span className="ml-1 capitalize">{statusLabel}</span>
       </Badge>
@@ -525,6 +680,9 @@ const EnhancedAttendanceManagement = () => {
   };
 
   const markAllSubjects = (status: 'present' | 'absent' | 'late') => {
+    console.log(`\n📋 Mark All Subjects: ${status.toUpperCase()}`);
+    console.log(`   Before: ${subjects.filter(s => s.hasChanges).length} subjects with changes`);
+    
     setSubjects(prevSubjects => 
       prevSubjects.map(subject => ({ 
         ...subject, 
@@ -532,10 +690,20 @@ const EnhancedAttendanceManagement = () => {
         hasChanges: true 
       }))
     );
+    
+    console.log(`   After: All ${subjects.length} subjects marked as ${status} with hasChanges=true\n`);
   };
 
   const saveStudentAttendanceChanges = async () => {
     const changedSubjects = subjects.filter(subject => subject.hasChanges);
+    
+    console.log('='.repeat(80));
+    console.log('SAVE STUDENT ATTENDANCE CHANGES');
+    console.log('='.repeat(80));
+    console.log('Total subjects loaded:', subjects.length);
+    console.log('Subjects with changes:', changedSubjects.length);
+    console.log('Changed subjects:', changedSubjects.map(s => ({ id: s.id, name: s.name, status: s.todayStatus })));
+    console.log('='.repeat(80));
     
     if (changedSubjects.length === 0) {
       toast({
@@ -550,6 +718,7 @@ const EnhancedAttendanceManagement = () => {
     
     try {
       // Save attendance for each subject separately
+      let successCount = 0;
       for (const subject of changedSubjects) {
         const attendanceData = {
           subject_id: subject.id,
@@ -560,8 +729,16 @@ const EnhancedAttendanceManagement = () => {
           }]
         };
 
+        console.log(`\nSending request for subject: ${subject.name} (ID: ${subject.id})`);
+        console.log('Request payload:', JSON.stringify(attendanceData, null, 2));
+        
         await api.attendance.markBulk(attendanceData);
+        successCount++;
+        console.log(`✓ Successfully saved (${successCount}/${changedSubjects.length})`);
       }
+      
+      console.log(`\n✓ All ${successCount} requests completed successfully\n`);
+      console.log('='.repeat(80));
       
       // Clear the hasChanges flag after successful save
       setSubjects(prevSubjects => 
@@ -1175,6 +1352,11 @@ const EnhancedAttendanceManagement = () => {
                     <Badge className="bg-red-500/20 text-red-300">
                       Absent: {subjects.filter(s => s.todayStatus === 'absent').length}
                     </Badge>
+                    {subjects.some(s => s.todayStatus === 'cancelled') && (
+                      <Badge className="bg-gray-600/30 text-gray-400 border-gray-500/30">
+                        Cancelled: {subjects.filter(s => s.todayStatus === 'cancelled').length}
+                      </Badge>
+                    )}
                     {subjects.some(s => s.todayStatus === 'system_inactive') && (
                       <Badge className="bg-purple-900/30 text-purple-300 border-purple-600/50">
                         System Inactive: {subjects.filter(s => s.todayStatus === 'system_inactive').length}
@@ -1284,6 +1466,11 @@ const EnhancedAttendanceManagement = () => {
                               Modified
                             </Badge>
                           )}
+                          {subject.todayStatus === 'cancelled' && subject.cancellation_reason && (
+                            <div className="text-xs text-gray-400 mt-1">
+                              Reason: {subject.cancellation_reason}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-slate-300">
                           {subject.credits || 3}
@@ -1297,9 +1484,9 @@ const EnhancedAttendanceManagement = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => markSubjectAttendance(subject.id, 'present')}
-                              disabled={subject.todayStatus === 'present'}
+                              disabled={subject.todayStatus === 'present' || subject.todayStatus === 'cancelled'}
                               className="text-green-400 border-green-400/30 hover:bg-green-500/10 h-8 w-8 p-0"
-                              title="Mark Present"
+                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Present'}
                             >
                               <CheckCircle className="h-3 w-3" />
                             </Button>
@@ -1307,9 +1494,9 @@ const EnhancedAttendanceManagement = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => markSubjectAttendance(subject.id, 'late')}
-                              disabled={subject.todayStatus === 'late'}
+                              disabled={subject.todayStatus === 'late' || subject.todayStatus === 'cancelled'}
                               className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10 h-8 w-8 p-0"
-                              title="Mark Late"
+                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Late'}
                             >
                               <Clock className="h-3 w-3" />
                             </Button>
@@ -1317,9 +1504,9 @@ const EnhancedAttendanceManagement = () => {
                               variant="outline"
                               size="sm"
                               onClick={() => markSubjectAttendance(subject.id, 'absent')}
-                              disabled={subject.todayStatus === 'absent'}
+                              disabled={subject.todayStatus === 'absent' || subject.todayStatus === 'cancelled'}
                               className="text-red-400 border-red-400/30 hover:bg-red-500/10 h-8 w-8 p-0"
-                              title="Mark Absent"
+                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Absent'}
                             >
                               <XCircle className="h-3 w-3" />
                             </Button>

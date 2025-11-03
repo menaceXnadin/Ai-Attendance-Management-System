@@ -66,7 +66,7 @@ const StudentProfile = () => {
       return await api.students.update(user.id, updateData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['student-profile', user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ['student-profile', user?.id] });
       toast({
         title: "Profile Updated",
         description: "Your profile changes have been saved successfully.",
@@ -145,7 +145,7 @@ const StudentProfile = () => {
                 <Input 
                   id="fullName" 
                   value={formData.name} 
-                  onChange={(e) => handleInputChange('name', e.target.value)}
+                  onChange={(e) => { handleInputChange('name', e.target.value); }}
                 />
               </div>
               <div className="space-y-2">
@@ -158,7 +158,7 @@ const StudentProfile = () => {
                   id="email" 
                   value={formData.email} 
                   type="email" 
-                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  onChange={(e) => { handleInputChange('email', e.target.value); }}
                 />
               </div>
               <div className="space-y-2">
@@ -166,7 +166,7 @@ const StudentProfile = () => {
                 <Input 
                   id="phone" 
                   value={formData.phone} 
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
+                  onChange={(e) => { handleInputChange('phone', e.target.value); }}
                 />
               </div>
               <div className="space-y-2 md:col-span-2">
@@ -174,7 +174,7 @@ const StudentProfile = () => {
                 <Input 
                   id="address" 
                   value={formData.address} 
-                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  onChange={(e) => { handleInputChange('address', e.target.value); }}
                 />
               </div>
               <div className="space-y-2">

@@ -52,10 +52,11 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data }) => {
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 7); // Last 7 days
         
-        return await api.attendance.getAll({
+        const response = await api.attendance.getAll({
           startDate: startDate.toISOString().split('T')[0],
           endDate: endDate.toISOString().split('T')[0]
         });
+        return response.records || [];
       } catch (error) {
         console.error('Error fetching recent attendance:', error);
         return [];
@@ -77,9 +78,9 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data }) => {
   });
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { color: 'text-green-400', status: 'Excellent', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { color: 'text-yellow-400', status: 'Good', bgColor: 'bg-yellow-500/20' };
-    if (rate >= 60) return { color: 'text-orange-400', status: 'Needs Improvement', bgColor: 'bg-orange-500/20' };
+    if (rate >= 90) return { color: 'text-blue-400', status: 'Excellent', bgColor: 'bg-blue-500/20' };
+    if (rate >= 85) return { color: 'text-green-400', status: 'Good', bgColor: 'bg-green-500/20' };
+    if (rate >= 75) return { color: 'text-yellow-400', status: 'Warning', bgColor: 'bg-yellow-500/20' };
     return { color: 'text-red-400', status: 'Critical', bgColor: 'bg-red-500/20' };
   };
 

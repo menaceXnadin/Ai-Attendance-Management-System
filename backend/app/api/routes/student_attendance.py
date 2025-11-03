@@ -18,7 +18,7 @@ from app.models.schedule import ClassSchedule
 from app.models.calendar import AcademicEvent
 from app.services.academic_calculator import get_current_semester_metrics, get_student_specific_semester_metrics
 from app.services.session_metrics_service import SessionMetricsService
-from app.models import SemesterConfiguration
+from app.services.automatic_semester import AutomaticSemesterService
 
 router = APIRouter(prefix="/student-attendance", tags=["student-attendance"])
 
@@ -318,22 +318,9 @@ async def get_student_attendance_analytics(
     elif period == "month":
         start_date = end_date - timedelta(days=30)
     elif period == "semester":
-        # Use dynamic semester configuration
-        semester_query = select(SemesterConfiguration).where(
-            and_(
-                SemesterConfiguration.start_date <= end_date,
-                SemesterConfiguration.end_date >= end_date,
-                SemesterConfiguration.is_active == True
-            )
-        )
-        semester_result = await db.execute(semester_query)
-        current_semester = semester_result.scalar_one_or_none()
-        
-        if current_semester:
-            start_date = current_semester.start_date
-        else:
-            # Fallback if no semester configuration found
-            start_date = datetime(end_date.year, 8, 1).date()
+        # Use automatic semester detection
+        period_info = AutomaticSemesterService.get_current_period()
+        start_date = period_info.start_date
     else:  # year
         start_date = datetime(end_date.year, 1, 1).date()
     

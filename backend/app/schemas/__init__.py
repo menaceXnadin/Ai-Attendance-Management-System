@@ -8,6 +8,9 @@ from enum import Enum
 class UserRole(str, Enum):
     ADMIN = "admin"
     STUDENT = "student"
+    # Align with DB enum which stores teacher role as 'faculty'
+    TEACHER = "faculty"
+    FACULTY = "faculty"  # alias for clarity/compatibility
 
 class AttendanceStatus(str, Enum):
     PRESENT = "present"
@@ -62,7 +65,7 @@ class User(UserBase):
 
 # Student schemas
 class StudentBase(BaseModel):
-    student_id: str
+    student_id: Optional[str] = None  # Make optional - will be auto-generated if not provided
     faculty_id: int  # Make faculty_id required
     semester: int = 1  # Current semester (1-8)
     year: int = 1  # Current academic year (1-4)
@@ -113,6 +116,62 @@ class Admin(AdminBase):
     
     class Config:
         from_attributes = True
+
+# Teacher schemas
+class TeacherBase(BaseModel):
+    # Optional on input; server will auto-generate when creating
+    teacher_id: Optional[str] = None
+    name: str
+    faculty_id: Optional[int] = None
+    department: Optional[str] = None
+    phone_number: Optional[str] = None
+    office_location: Optional[str] = None
+
+class TeacherCreate(TeacherBase):
+    user: UserCreate
+
+class TeacherUpdate(BaseModel):
+    faculty_id: Optional[int] = None
+    department: Optional[str] = None
+    phone_number: Optional[str] = None
+    office_location: Optional[str] = None
+
+class Teacher(TeacherBase):
+    # In responses, teacher_id is always present
+    teacher_id: str
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+    user: User
+    
+    class Config:
+        from_attributes = True
+
+# Teacher Assignment schemas
+class TeacherAssignmentResponse(BaseModel):
+    """Response model for teacher's subject assignments"""
+    id: int  # ClassSchedule ID
+    subject_id: int
+    subject_name: str
+    subject_code: str
+    faculty_id: int
+    faculty_name: str
+    semester: int
+    day_of_week: str
+    start_time: str
+    end_time: str
+    classroom: Optional[str]
+    academic_year: int
+    student_count: Optional[int] = 0
+    time_slot_display: str
+    
+    class Config:
+        from_attributes = True
+
+class TeacherAssignmentCreate(BaseModel):
+    """Create a teacher assignment by assigning them to a ClassSchedule"""
+    schedule_id: int  # Existing ClassSchedule ID
 
 # Subject schemas
 class SubjectBase(BaseModel):
@@ -247,10 +306,13 @@ class AIInsight(AIInsightBase):
 # Faculty schemas
 class FacultyBase(BaseModel):
     name: str
+    code: Optional[str] = None
     description: Optional[str] = None
 
-class FacultyCreate(FacultyBase):
-    pass
+class FacultyCreate(BaseModel):
+    name: str
+    code: str  # Required for creation
+    description: Optional[str] = None
 
 class FacultyOut(FacultyBase):
     id: int

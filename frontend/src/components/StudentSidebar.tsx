@@ -8,13 +8,12 @@ import {
   HomeIcon, 
   LogOutIcon, 
   UserIcon, 
-  BarChart3Icon, 
-  GraduationCapIcon,
   CameraIcon,
   ClockIcon,
   MenuIcon,
   XIcon,
-  CheckCircle
+  CheckCircle,
+  Bell
 } from 'lucide-react';
 import ProfileDropdown from '@/components/ProfileDropdown';
 import logo from '@/assets/main.png';
@@ -56,8 +55,10 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
     if (path === '/student' || path === '/student/dashboard') return 'Dashboard';
     if (path.includes('/student/attendance')) return 'My Attendance';
     if (path.includes('/student/calendar')) return 'Academic Calendar';
-    if (path.includes('/student/marks')) return 'My Marks';
+    // Removed My Marks page
     if (path.includes('/student/profile')) return 'My Profile';
+
+    if (path.includes('/student/notifications')) return 'Notifications';
     if (path.includes('/student/face-registration') || path === '/face-registration') return 'Face Registration';
     return 'Student Portal';
   };
@@ -110,22 +111,6 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
               </NavLink>
 
               <NavLink
-                to="/student/attendance/mark"
-                end
-                className={({ isActive }) =>
-                  `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-gradient-to-r from-blue-500/20 to-teal-400/20 text-white border border-blue-400/30'
-                      : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
-                  }`
-                }
-                title={isCollapsed ? "Mark Attendance" : ""}
-              >
-                <CameraIcon className="w-6 h-6" />
-                {!isCollapsed && "Mark Attendance"}
-              </NavLink>
-
-              <NavLink
                 to="/student/attendance"
                 end
                 className={({ isActive }) =>
@@ -156,8 +141,10 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                 {!isCollapsed && "Academic Calendar"}
               </NavLink>
 
+              {/* My Marks navigation removed */}
+
               <NavLink
-                to="/student/marks"
+                to="/student/notifications"
                 className={({ isActive }) =>
                   `flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     isActive
@@ -165,10 +152,10 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
                   }`
                 }
-                title={isCollapsed ? "My Marks" : ""}
+                title={isCollapsed ? "Notifications" : ""}
               >
-                <BarChart3Icon className="w-6 h-6" />
-                {!isCollapsed && "My Marks"}
+                <Bell className="w-6 h-6" />
+                {!isCollapsed && "Notifications"}
               </NavLink>
 
               <NavLink

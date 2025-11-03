@@ -13,6 +13,9 @@ from .calendar import AcademicEvent, EventAttendance, CalendarSetting, AcademicY
 # Import schedule models
 from .schedule import ClassSchedule, DayOfWeek
 
+# Import system settings models
+from .system_settings import SystemSetting, AttendanceThreshold
+
 # Enums matching PostgreSQL ENUM types
 class UserRole(enum.Enum):
     student = "student"
@@ -23,6 +26,7 @@ class AttendanceStatus(enum.Enum):
     present = "present"
     absent = "absent"
     late = "late"
+    cancelled = "cancelled"
 
 class AttendanceMethod(enum.Enum):
     manual = "manual"
@@ -45,9 +49,10 @@ class User(Base):
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
-    # Relationships - User can be either student or admin
+    # Relationships - User can be student, admin, or teacher
     student_profile = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")
     admin_profile = relationship("Admin", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    teacher_profile = relationship("Teacher", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
     # User can mark attendance and create notifications
     attendance_marked = relationship("AttendanceRecord", foreign_keys="AttendanceRecord.marked_by", back_populates="marked_by_user")
@@ -59,6 +64,7 @@ class Faculty(Base):
     __tablename__ = "faculties"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
+    code = Column(String(50), unique=True, nullable=True)  # Faculty code for student IDs (e.g., CSCI, ITEC)
     description = Column(Text)
     created_at = Column(DateTime, server_default=func.now())
     # Relationships
@@ -106,6 +112,25 @@ class Admin(Base):
     
     # Relationships
     user = relationship("User", back_populates="admin_profile")
+
+class Teacher(Base):
+    __tablename__ = "teachers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    teacher_id = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    faculty_id = Column(Integer, ForeignKey("faculties.id"), nullable=True)
+    department = Column(String)
+    phone_number = Column(String)
+    office_location = Column(String)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Relationships
+    user = relationship("User", back_populates="teacher_profile")
+    faculty_rel = relationship("Faculty", backref="teachers")
+    schedules = relationship("ClassSchedule", back_populates="teacher")
 
 class Subject(Base):
     __tablename__ = "subjects"

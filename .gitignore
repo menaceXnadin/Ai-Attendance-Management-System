@@ -79,12 +79,24 @@ HISTORICAL_DATA_BACKFILL_ANALYSIS.md
 PLANNED_VS_ACTUAL_CLASSES_IMPLEMENTATION.md   
 QUICK_START_DYNAMIC_CALENDAR.md
 SMART_DETECTION_IMPLEMENTATION.md
+SCHEDULE_PAGINATION_IMPLEMENTATION.md
+MEDIAPIPE_INSIGHTFACE_INTEGRATION.md
+FACE_RECOGNITION_SIMPLIFIED.md
+FACE_RECOGNITION_ARCHITECTURE.md
+
 # HTML/JS debug files
 debug-*.html
 debug*.html
 debug*.js
 
+# Backend test and utility scripts
+backend/*.py
+!backend/app/**/*.py
+!backend/alembic/**/*.py
 
-#Ignore insiders AI rules
-.github\instructions\codacy.instructions.md
-codacy-fixes.txt
+# Reserved for optional local tooling rules
+# (intentionally left blank after removing Codacy-specific entries)
+
+# Ignore all .md files except README.md
+*.md
+!README.md

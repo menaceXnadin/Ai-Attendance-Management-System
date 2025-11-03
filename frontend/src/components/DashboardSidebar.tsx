@@ -13,9 +13,16 @@ import {
   SidebarTrigger,
   SidebarProvider,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import {
   CalendarIcon, 
   HomeIcon, 
@@ -26,11 +33,12 @@ import {
   BarChart3,
   Bell,
   Camera,
-  Shield,
   Zap,
   Activity,
-  Target,
-  Globe
+  Globe,
+  GripVertical,
+  GraduationCap,
+  Users2
 } from 'lucide-react';
 import logo from '@/assets/main.png';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -46,40 +54,221 @@ interface SidebarNavItemProps {
   isNew?: boolean;
 }
 
-const SidebarNavItem = ({ icon, label, to, onClick, badge, isNew }: SidebarNavItemProps) => (
-  <SidebarMenuItem>
-    <SidebarMenuButton asChild>
-      <NavLink
-        to={to}
-        onClick={onClick}
-        className={({ isActive }) =>
-          `flex items-center justify-between w-full px-3 py-2 rounded-lg transition-all duration-200 hover:bg-sidebar-accent/50 ${
-            isActive ? 'bg-sidebar-accent text-sidebar-accent-foreground shadow-lg' : ''
-          }`
-        }
-      >
-        <div className="flex items-center gap-3">
+const SidebarNavItem = ({ icon, label, to, onClick, badge, isNew }: SidebarNavItemProps) => {
+  const { state } = useSidebar();
+  const location = useLocation();
+  const isCollapsed = state === "collapsed";
+
+  const navContent = (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        `group flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} w-full ${isCollapsed ? 'px-0 py-4' : 'px-3 py-2.5'} rounded-lg transition-all duration-300 ease-in-out ${
+          isActive 
+            ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white border-l-4 border-blue-300' 
+            : 'text-slate-400 hover:text-white hover:bg-slate-800'
+        }`
+      }
+      data-sidebar="menu-button"
+      data-active={location.pathname === to ? "true" : "false"}
+    >
+      <div className={`flex items-center ${isCollapsed ? 'justify-center w-full' : 'gap-3'}`}>
+        <div className={`flex items-center justify-center transition-all duration-300 ${isCollapsed ? 'w-8 h-8' : ''}`}>
           {icon}
-          <span>{label}</span>
-          {isNew && (
-            <Badge className="sidebar-new-badge bg-green-500/20 text-green-300 text-xs px-1 py-0 border border-green-500/30">
-              NEW
-            </Badge>
-          )}
         </div>
-        {badge && (
-          <Badge variant="outline" className="badge bg-blue-500/20 text-blue-300 border-blue-400/30">
-            {badge}
-          </Badge>
+        {!isCollapsed && (
+          <>
+            <span className="text-sm">{label}</span>
+            {isNew && (
+              <Badge className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0 border border-green-500/30">
+                NEW
+              </Badge>
+            )}
+          </>
         )}
-      </NavLink>
-    </SidebarMenuButton>
-  </SidebarMenuItem>
-);
+      </div>
+      {!isCollapsed && badge && (
+        <Badge variant="outline" className="text-xs bg-slate-700 text-slate-300 border-slate-600">
+          {badge}
+        </Badge>
+      )}
+    </NavLink>
+  );
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild>
+        {isCollapsed ? (
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {navContent}
+              </TooltipTrigger>
+              <TooltipContent 
+                side="right" 
+                className="flex items-center gap-2 bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
+                sideOffset={12}
+              >
+                <span className="font-medium">{label}</span>
+                {isNew && <Badge className="bg-green-500/20 text-green-400 text-[10px] px-1.5 py-0 border border-green-500/30">NEW</Badge>}
+                {badge && <Badge variant="outline" className="text-xs border-slate-600 bg-slate-700/50">{badge}</Badge>}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          navContent
+        )}
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+};
 
 interface DashboardSidebarProps {
   children: React.ReactNode;
 }
+
+// Internal component that uses useSidebar hook
+const SidebarHeaderContent = () => {
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  return (
+    <SidebarHeaderComponent className={`flex h-16 items-center border-b border-slate-800 transition-all duration-300 ${isCollapsed ? 'px-0 justify-center' : 'px-4'}`}>
+      <div className={`flex items-center ${isCollapsed ? 'justify-center w-full' : 'gap-3'}`}>
+        <img 
+          src={logo} 
+          alt="AttendAI" 
+          className={`object-contain transition-all duration-300 hover:scale-110 hover:rotate-6 cursor-pointer ${isCollapsed ? 'h-10 w-10' : 'h-8 w-8'}`}
+        />
+        {!isCollapsed && (
+          <div>
+            <span className="text-lg font-semibold text-white">
+              AttendAI
+            </span>
+            <p className="text-xs text-slate-500">Smart Attendance</p>
+          </div>
+        )}
+      </div>
+    </SidebarHeaderComponent>
+  );
+};
+
+// Footer component with collapse support
+const SidebarFooterContent = ({ systemHealth, user, signOut }: { systemHealth: any; user: any; signOut: () => void }) => {
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  if (isCollapsed) {
+    return (
+      <SidebarFooter className="px-0 py-5 border-t border-slate-800">
+        <div className="space-y-5 flex flex-col items-center w-full">
+          {/* System Status - Just indicator */}
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-800/50 hover:bg-slate-700 hover:scale-105 hover:shadow-lg hover:shadow-green-500/20 transition-all duration-300 cursor-pointer mx-auto group">
+                  <div className="h-3.5 w-3.5 bg-green-500 rounded-full animate-pulse group-hover:scale-125 transition-transform"></div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent 
+                side="right" 
+                className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
+                sideOffset={12}
+              >
+                <p className="font-medium">System Online</p>
+                <p className="text-xs text-green-400 mt-0.5">{systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '99.9%'} uptime</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* User Avatar */}
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center hover:from-blue-500 hover:to-blue-400 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/50 hover:rotate-6 transition-all duration-300 cursor-pointer">
+                  <span className="text-lg font-bold text-white">
+                    {user?.name?.charAt(0) || 'A'}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent 
+                side="right" 
+                className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
+                sideOffset={12}
+              >
+                <p className="font-semibold">{user?.name || 'Admin'}</p>
+                <p className="text-xs text-blue-400 mt-0.5">Administrator</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Logout Icon Button */}
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  onClick={signOut}
+                  className="w-12 h-12 p-0 border-slate-700 text-slate-400 hover:bg-red-900/30 hover:text-red-400 hover:border-red-600 hover:scale-110 hover:rotate-6 hover:shadow-lg hover:shadow-red-500/30 transition-all duration-300"
+                >
+                  <LogOutIcon className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent 
+                side="right" 
+                className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
+                sideOffset={12}
+              >
+                <p className="font-medium text-red-400">Sign Out</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </SidebarFooter>
+    );
+  }
+
+  return (
+    <SidebarFooter className="px-3 py-3 border-t border-slate-800">
+      <div className="space-y-2">
+        {/* System Status */}
+        <div className="flex items-center justify-between p-2 rounded-lg bg-slate-800">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 bg-green-500 rounded-full"></div>
+            <span className="text-xs text-slate-400">Online</span>
+          </div>
+          <Badge className="bg-slate-700 text-slate-300 text-xs">
+            {systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '99.9%'}
+          </Badge>
+        </div>
+
+        {/* User Info */}
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-800">
+          <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
+            <span className="text-xs font-semibold text-white">
+              {user?.name?.charAt(0) || 'A'}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-white truncate">{user?.name || 'Admin'}</p>
+            <p className="text-[10px] text-slate-500">Administrator</p>
+          </div>
+        </div>
+
+        {/* Logout Button */}
+        <Button
+          variant="outline"
+          onClick={signOut}
+          className="w-full border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-white text-sm"
+        >
+          <LogOutIcon className="w-4 h-4 mr-2" />
+          Sign Out
+        </Button>
+      </div>
+    </SidebarFooter>
+  );
+};
 
 
 import { useQuery } from '@tanstack/react-query';
@@ -88,6 +277,49 @@ import { api } from '@/integrations/api/client';
 const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
   const location = useLocation();
   const { signOut, user } = useAuth();
+  const [sidebarWidth, setSidebarWidth] = React.useState(() => {
+    const saved = localStorage.getItem('sidebarWidth');
+    return saved ? parseInt(saved) : 280;
+  });
+  const [isResizing, setIsResizing] = React.useState(false);
+
+  // Handle mouse down on resize handle
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  // Handle mouse move for resizing
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = e.clientX;
+      // Min width 200px, max width 400px
+      if (newWidth >= 200 && newWidth <= 400) {
+        setSidebarWidth(newWidth);
+        localStorage.setItem('sidebarWidth', newWidth.toString());
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   // Fetch students for real count
   const { data: students = [] } = useQuery({
@@ -116,11 +348,13 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     const path = location.pathname;
     if (path === '/app') return { title: 'Dashboard', description: 'Comprehensive overview and analytics' };
     if (path.includes('/app/students')) return { title: 'Students', description: 'Manage student records and profiles' };
+    if (path.includes('/app/teachers')) return { title: 'Teachers', description: 'Manage teacher accounts and assignments' };
     if (path.includes('/app/calendar')) return { title: 'Academic Calendar', description: 'Manage events, schedules, and academic calendar' };
     if (path.includes('/app/attendance')) return { title: 'Attendance', description: 'Track and analyze attendance data' };
     if (path.includes('/app/faculties')) return { title: 'Faculties', description: 'Manage faculties, semesters, and classes' };
     if (path.includes('/app/analytics')) return { title: 'Analytics', description: 'System-wide analytics and reporting' };
-    if (path.includes('/app/monitoring')) return { title: 'Live Monitoring', description: 'Real-time system monitoring and alerts' };
+    if (path.includes('/app/monitoring')) return { title: 'System Monitor', description: 'Real-time monitoring, alerts, and system status' };
+    if (path.includes('/app/auto-absent')) return { title: 'Auto-Absent Control', description: 'Manage automatic absent marking system' };
     if (path.includes('/app/notifications')) return { title: 'Notifications', description: 'System notifications and alerts management' };
     if (path.includes('/app/settings')) return { title: 'Settings', description: 'System configuration and preferences' };
     return { title: 'Dashboard', description: 'Welcome to AttendAI' };
@@ -128,27 +362,81 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
 
   const pageInfo = getPageInfo();
 
-  return (
-    <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950">
-        <Sidebar className="border-r border-slate-700/50 bg-slate-900/60 backdrop-blur-md">
-          <SidebarHeaderComponent className="flex h-20 items-center px-6 border-b border-slate-700/50">
-            <div className="flex items-center gap-3">
-                {/* Plain logo image — imported so bundler fingerprints it */}
-                <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
-              <div>
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-                  AttendAI
-                </span>
-                <p className="text-xs text-slate-400">Smart Attendance System</p>
+  // Inner content component that has access to sidebar state
+  const MainContentArea = () => {
+    const { state } = useSidebar();
+    const isCollapsed = state === "collapsed";
+
+    return (
+      <>
+        {/* Resize Handle - only show when NOT collapsed */}
+        {!isCollapsed && (
+          <div
+            className={`fixed inset-y-0 z-50 hidden w-2 cursor-col-resize group transition-colors md:block ${
+              isResizing ? 'bg-blue-500/40' : 'bg-transparent hover:bg-slate-600/30'
+            }`}
+            style={{ left: 'var(--sidebar-width)' }}
+            onMouseDown={handleMouseDown}
+            onDoubleClick={() => {
+              const reset = 280
+              setSidebarWidth(reset)
+              localStorage.setItem('sidebarWidth', reset.toString())
+            }}
+          >
+            <div
+              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-opacity ${
+                isResizing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+              }`}
+            >
+              <div className="bg-slate-700 rounded-full p-1 shadow-lg">
+                <GripVertical className="h-4 w-4 text-slate-300" />
               </div>
             </div>
-          </SidebarHeaderComponent>
+          </div>
+        )}
+
+        <div className="flex-1">
+          {/* Header */}
+          <div className="flex items-center justify-between h-16 px-6 border-b border-slate-800 bg-slate-900">
+            <div className="flex items-center gap-4">
+              <SidebarTrigger className="text-slate-400 hover:text-white" />
+              <div>
+                <h1 className="text-xl font-semibold text-white">
+                  {pageInfo.title}
+                </h1>
+                <p className="text-xs text-slate-500">{pageInfo.description}</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {/* Notifications */}
+              <NotificationCenter />
+              
+              {/* Theme Toggle */}
+              <ThemeToggle />
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <main className="w-full">{children}</main>
+        </div>
+      </>
+    );
+  };
+
+  return (
+    <SidebarProvider
+      style={{ ["--sidebar-width" as any]: `${sidebarWidth}px` }}
+    >
+      <div className="relative flex min-h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 overflow-hidden">
+        {/* Background decoration elements removed site-wide per user feedback (glow animation was distracting). */}
+        <Sidebar collapsible="icon" className="border-r border-slate-800 bg-slate-900">
+            <SidebarHeaderContent />
           
-          <SidebarContent className="px-4 py-6">
+          <SidebarContent className="px-2 py-4">
             <SidebarGroup>
-              <SidebarGroupLabel className="text-slate-400 font-medium mb-4">
-                Main Navigation
+              <SidebarGroupLabel className="px-3 mb-2 text-xs font-medium text-slate-500 uppercase">
+                Navigation
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
@@ -164,6 +452,12 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                     badge={students.length > 0 ? students.length.toString() : undefined}
                   />
                   <SidebarNavItem 
+                    icon={<Users2 className="w-5 h-5 transition-transform duration-300" />} 
+                    label="Teachers" 
+                    to="/app/teachers"
+                    isNew={true}
+                  />
+                  <SidebarNavItem 
                     icon={<CalendarIcon className="w-5 h-5 transition-transform duration-300" />} 
                     label="Academic Calendar" 
                     to="/app/calendar"
@@ -175,7 +469,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                     to="/app/attendance" 
                   />
                   <SidebarNavItem 
-                    icon={<Shield className="w-5 h-5 transition-transform duration-300" />} 
+                    icon={<GraduationCap className="w-5 h-5 transition-transform duration-300" />} 
                     label="Faculties" 
                     to="/app/faculties"
                     badge={classes.length > 0 ? classes.length.toString() : undefined}
@@ -189,9 +483,9 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarGroup className="mt-8">
-              <SidebarGroupLabel className="text-slate-400 font-medium mb-4">
-                Analytics & Reports
+            <SidebarGroup className="mt-6">
+              <SidebarGroupLabel className="px-3 mb-2 text-xs font-medium text-slate-500 uppercase">
+                Analytics
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
@@ -203,29 +497,30 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                   />
                   <SidebarNavItem 
                     icon={<Activity className="w-5 h-5 transition-transform duration-300" />} 
-                    label="Live Monitoring" 
+                    label="System Monitor" 
                     to="/app/monitoring"
                     isNew={true}
-                  />
-                  <SidebarNavItem 
-                    icon={<Target className="w-5 h-5 transition-transform duration-300" />} 
-                    label="Performance" 
-                    to="/app/performance"
                   />
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
 
-            <SidebarGroup className="mt-8">
-              <SidebarGroupLabel className="text-slate-400 font-medium mb-4">
+            <SidebarGroup className="mt-6">
+              <SidebarGroupLabel className="px-3 mb-2 text-xs font-medium text-slate-500 uppercase">
                 System
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu className="space-y-2">
                   <SidebarNavItem 
                     icon={<CalendarIcon className="w-5 h-5 transition-transform duration-300" />} 
-                    label="Semester Config" 
+                    label="Semester Setup" 
                     to="/app/admin/semester-configuration"
+                    isNew={true}
+                  />
+                  <SidebarNavItem 
+                    icon={<Zap className="w-5 h-5 transition-transform duration-300" />} 
+                    label="Auto-Absent Control" 
+                    to="/app/auto-absent"
                     isNew={true}
                   />
                   <SidebarNavItem 
@@ -239,90 +534,15 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                     label="Settings" 
                     to="/app/settings" 
                   />
-                  <SidebarNavItem 
-                    icon={<Shield className="w-5 h-5 transition-transform duration-300" />} 
-                    label="Security" 
-                    to="/app/security"
-                  />
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
           
-          <SidebarFooter className="px-4 py-4 border-t border-slate-700/50">
-            <div className="space-y-4">
-              {/* System Status */}
-              <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span className="text-sm text-slate-300">System Online</span>
-                </div>
-                <Badge className="bg-green-500/20 text-green-300 text-xs">
-                  {systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '99.9%'}
-                </Badge>
-              </div>
-
-              {/* User Info */}
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                  <span className="text-sm font-bold text-white">
-                    {user?.name?.charAt(0) || 'A'}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-white">{user?.name || 'Admin'}</p>
-                  <p className="text-xs text-slate-400">Administrator</p>
-                </div>
-              </div>
-
-              {/* Logout Button */}
-              <Button
-                variant="outline"
-                onClick={signOut}
-                className="w-full border-red-600/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50"
-              >
-                <LogOutIcon className="w-4 h-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
-          </SidebarFooter>
+          <SidebarFooterContent systemHealth={systemHealth} user={user} signOut={signOut} />
         </Sidebar>
-        
-        <div className="flex-1">
-          {/* Enhanced Header */}
-          <div className="relative z-50 flex items-center justify-between h-20 px-6 border-b border-slate-700/50 bg-slate-900/60 backdrop-blur-md">
-            <div className="flex items-center gap-4">
-              <SidebarTrigger className="text-slate-300 hover:text-white" />
-              <div>
-                <h1 className="text-2xl font-bold text-white">{pageInfo.title}</h1>
-                <p className="text-sm text-slate-400">{pageInfo.description}</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              {/* Quick Stats */}
-              <div className="hidden md:flex items-center gap-4">
-                <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800/50">
-                  <Zap className="h-4 w-4 text-yellow-400" />
-                  <span className="text-sm text-slate-300">Fast Processing</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800/50">
-                  <Globe className="h-4 w-4 text-blue-400" />
-                  <span className="text-sm text-slate-300">Cloud Sync</span>
-                </div>
-              </div>
-              
-              {/* Notifications */}
-              <NotificationCenter />
-              
-              {/* Theme Toggle */}
-              <ThemeToggle />
-            </div>
-          </div>
 
-          {/* Main Content */}
-          <main className="p-6">{children}</main>
-        </div>
+        <MainContentArea />
       </div>
     </SidebarProvider>
   );

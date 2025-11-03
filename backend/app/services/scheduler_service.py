@@ -16,6 +16,7 @@ from typing import Optional
 from contextlib import asynccontextmanager
 
 from app.core.database import AsyncSessionLocal
+from app.core.config import settings
 from app.services.auto_absent_service import auto_absent_service
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,9 @@ class SchedulerService:
         self.task: Optional[asyncio.Task] = None
         self.running = False
         
-        # Check if scheduler is enabled (default: disabled for development)
-        self.enabled = os.getenv("ENABLE_AUTO_ABSENT_SCHEDULER", "false").lower() == "true"
+        # Check if scheduler is enabled (source of truth: app settings / .env)
+        # Default is enabled; set ENABLE_AUTO_ABSENT_SCHEDULER=false in backend/.env to disable for dev
+        self.enabled = bool(settings.enable_auto_absent_scheduler)
         
         # Configure when to run auto-absent (during typical class hours)
         self.start_time = time(7, 0)   # 7:00 AM
@@ -38,7 +40,9 @@ class SchedulerService:
     async def start(self):
         """Start the background scheduler"""
         if not self.enabled:
-            logger.info("⏸️  Auto-absent scheduler is DISABLED (set ENABLE_AUTO_ABSENT_SCHEDULER=true to enable)")
+            logger.info(
+                "⏸️  Auto-absent scheduler is DISABLED (set ENABLE_AUTO_ABSENT_SCHEDULER=true in .env to enable)"
+            )
             return
             
         if self.running:

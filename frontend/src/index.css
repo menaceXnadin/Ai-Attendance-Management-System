@@ -180,8 +180,20 @@
   opacity: 0;
 }
 
+/* Keep the generic pulse for soft opacity breathing (no glow) */
 .animate-pulse {
   animation: pulse 6s infinite;
+}
+
+/* Dedicated skeleton pulse without any glow or box-shadow */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}
+
+.animate-skeleton {
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+  box-shadow: none !important;
 }
 
 /* 3D Transform Utilities */
@@ -278,6 +290,44 @@ input[type="button"], input[type="submit"], input[type="reset"],
 }
 
 /* ============================================
+   CUSTOM SCROLLBAR FOR DIALOG/MODAL
+   ============================================ */
+
+/* Custom scrollbar class for dialogs */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.5) 0%, rgba(139, 92, 246, 0.5) 100%);
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.3);
+  transition: all 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.8) 0%, rgba(139, 92, 246, 0.8) 100%);
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.5);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:active {
+  background: linear-gradient(180deg, rgba(99, 102, 241, 1) 0%, rgba(139, 92, 246, 1) 100%);
+}
+
+/* Firefox support for custom scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(99, 102, 241, 0.5) rgba(15, 23, 42, 0.4);
+  scroll-behavior: smooth;
+}
+
+/* ============================================
    SIDEBAR MICRO-INTERACTIONS
    ============================================ */
 
@@ -327,17 +377,16 @@ input[type="button"], input[type="submit"], input[type="reset"],
   box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
 }
 
-/* Icon animations */
+/* Icon animations - only affect the specific hovered item */
 [data-sidebar="menu-button"] svg {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-[data-sidebar="menu-button"]:hover svg {
+[data-sidebar="menu-button"]:hover > div > div > svg {
   transform: scale(1.1) rotate(3deg);
-  filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.5));
 }
 
-[data-sidebar="menu-button"][data-active="true"] svg {
+[data-sidebar="menu-button"][data-active="true"] > div > div > svg {
   transform: scale(1.05);
   color: rgba(56, 189, 248, 1);
 }
@@ -405,8 +454,8 @@ input[type="button"], input[type="submit"], input[type="reset"],
   box-shadow: 0 4px 12px rgba(56, 189, 248, 0.1);
 }
 
-/* System status indicator animation */
-.animate-pulse {
+/* System status indicator animation - scope to explicit class to avoid affecting skeletons */
+.animate-status-pulse {
   animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
@@ -554,26 +603,7 @@ button {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-button:not(.no-ripple):active::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  animation: ripple 0.6s ease-out;
-}
-
-@keyframes ripple {
-  to {
-    width: 300px;
-    height: 300px;
-    opacity: 0;
-  }
-}
+/* Ripple effect removed */
 
 /* Input field animations */
 input[type="text"],

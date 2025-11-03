@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/useAuth';
 interface LoginFormData {
   email: string;
   password: string;
-  userType?: 'student' | 'admin';
+  userType?: 'student' | 'admin' | 'teacher';
 }
 
 const LoginPage = () => {
@@ -24,6 +24,9 @@ const LoginPage = () => {
   });
   const { register: registerAdmin, handleSubmit: handleAdminSubmit, formState: { errors: adminErrors } } = useForm<LoginFormData>({
     defaultValues: { userType: 'admin' }
+  });
+  const { register: registerTeacher, handleSubmit: handleTeacherSubmit, formState: { errors: teacherErrors } } = useForm<LoginFormData>({
+    defaultValues: { userType: 'teacher' }
   });
   
   const { toast } = useToast();
@@ -40,10 +43,24 @@ const LoginPage = () => {
     await handleLogin(data, 'admin');
   };
 
-  const handleLogin = async (data: LoginFormData, userType: 'student' | 'admin') => {
+  const onTeacherSubmit = async (data: LoginFormData) => {
+    await handleLogin(data, 'teacher');
+  };
+
+  const handleLogin = async (data: LoginFormData, userType: 'student' | 'admin' | 'teacher') => {
     const { error, user: signedInUser } = await signIn(data.email, data.password);
+    const getErrorMessage = (err: unknown): string => {
+      if (!err) return 'Login failed';
+      if (typeof err === 'string') return err;
+      if (typeof err === 'object' && err !== null) {
+        const obj = err as Record<string, unknown>;
+        if (typeof obj.message === 'string') return obj.message;
+      }
+      return 'Login failed';
+    };
+
     if (error) {
-      const errorMsg = error?.message || "Login failed";
+      const errorMsg = getErrorMessage(error);
       setLoginError(errorMsg);
       setShowError(true);
       toast({
@@ -51,8 +68,8 @@ const LoginPage = () => {
         description: errorMsg,
         variant: "destructive",
       });
-      setTimeout(() => setShowError(false), 2500); // Hide after 2.5s
-      setTimeout(() => setLoginError(null), 3000); // Remove from DOM after animation
+      setTimeout(() => { setShowError(false); }, 2500); // Hide after 2.5s
+      setTimeout(() => { setLoginError(null); }, 3000); // Remove from DOM after animation
     } else {
       setLoginError(null);
       setShowError(false);
@@ -65,10 +82,17 @@ const LoginPage = () => {
           variant: "destructive",
         });
         return;
-      } else if (userType === 'student' && signedInUser?.role === 'admin') {
+      } else if (userType === 'teacher' && signedInUser?.role !== 'faculty' && signedInUser?.role !== 'teacher') {
+        toast({
+          title: "Access denied",
+          description: "This account does not have teacher privileges.",
+          variant: "destructive",
+        });
+        return;
+      } else if (userType === 'student' && (signedInUser?.role === 'admin' || signedInUser?.role === 'faculty')) {
         toast({
           title: "Wrong login portal",
-          description: "Please use the admin login for your account.",
+          description: "Please use the appropriate login for your account.",
           variant: "destructive",
         });
         return;
@@ -80,14 +104,19 @@ const LoginPage = () => {
           title: "Admin login successful",
           description: "Welcome to the admin dashboard.",
         });
-        navigate("/app"); // Navigate to admin dashboard
+        navigate("/app");
+      } else if (signedInUser?.role === 'faculty' || signedInUser?.role === 'teacher') {
+        toast({
+          title: "Teacher login successful",
+          description: "Welcome to your teacher dashboard.",
+        });
+        navigate("/teacher");
       } else {
-        // Default to student for any other role or if role is undefined
         toast({
           title: "Student login successful",
           description: "Welcome to your student dashboard.",
         });
-        navigate("/student"); // Navigate to student dashboard
+        navigate("/student");
       }
     }
   };
@@ -149,9 +178,11 @@ const LoginPage = () => {
           </CardHeader>
 
           <CardContent>
-            <Tabs defaultValue="student" className="w-full">            <TabsList className="grid w-full grid-cols-2 mb-4 bg-slate-800/50">
-              <TabsTrigger value="student" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-teal-400 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Student Login</TabsTrigger>
-              <TabsTrigger value="admin" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Admin Login</TabsTrigger>
+            <Tabs defaultValue="student" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-4 bg-slate-800/50">
+                <TabsTrigger value="student" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-teal-400 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Student</TabsTrigger>
+                <TabsTrigger value="teacher" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-indigo-500 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Teacher</TabsTrigger>
+                <TabsTrigger value="admin" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-red-500 data-[state=active]:to-red-600 data-[state=active]:text-white data-[state=inactive]:text-blue-300">Admin</TabsTrigger>
               </TabsList>
               
               {/* Student Login Tab */}
@@ -214,6 +245,70 @@ const LoginPage = () => {
 
                   <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white transition-all duration-300">
                     Student Sign in
+                  </Button>
+                </form>
+              </TabsContent>
+              
+              {/* Teacher Login Tab */}
+              <TabsContent value="teacher">
+                <div className="mb-4 p-3 bg-purple-950/50 border border-purple-700/30 rounded-md">
+                  <p className="text-sm text-purple-300">
+                    Teachers, use your credentials provided by the administrator.
+                  </p>
+                </div>
+                <form onSubmit={handleTeacherSubmit(onTeacherSubmit)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="teacher-email" className="text-blue-200">Teacher Email</Label>
+                    <Input
+                      id="teacher-email"
+                      type="email"
+                      placeholder="Enter your email"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100 placeholder:text-blue-400/50"
+                      {...registerTeacher("email", {
+                        required: "Email is required",
+                        pattern: {
+                          value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                          message: "Invalid email address",
+                        },
+                      })}
+                    />
+                    {teacherErrors.email && (
+                      <p className="text-sm text-red-500">{teacherErrors.email.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="teacher-password" className="text-blue-200">Password</Label>
+                    <PasswordInput
+                      id="teacher-password"
+                      className="bg-slate-800/70 border-slate-700 text-blue-100"
+                      {...registerTeacher("password", { required: "Password is required" })}
+                    />
+                    {teacherErrors.password && (
+                      <p className="text-sm text-red-500">{teacherErrors.password.message}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <input
+                        id="teacher-remember-me"
+                        name="remember-me"
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-gray-300 text-brand-500 focus:ring-brand-500"
+                      />
+                      <label htmlFor="teacher-remember-me" className="ml-2 block text-sm text-blue-300">
+                        Remember me
+                      </label>
+                    </div>
+                    <div className="text-sm">
+                      <Link to="/" className="font-medium text-teal-400 hover:text-teal-300 transition-colors">
+                        Forgot password?
+                      </Link>
+                    </div>
+                  </div>
+
+                  <Button type="submit" className="w-full bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white transition-all duration-300">
+                    Teacher Sign in
                   </Button>
                 </form>
               </TabsContent>

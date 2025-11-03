@@ -1,20 +1,4 @@
-{/* Unified Anaimport HomePage from "./pages/HomePage";
-import AboutPage from "./pages/AboutPage";
-import BlogPage from "./pages/BlogPage";
-import LoginPage from "./pages/LoginPage";
-import StudentDashboard from "./pages/StudentDashboard";
-import DashboardLayout from "./pages/DashboardLayout";
-import Dashboard from "./pages/Dashboard";
-import StudentsPage from "./pages/StudentsPage";
-import AttendancePage from "./pages/AttendancePage";
-import FacultiesPage from "./pages/FacultiesPage";
-import SettingsPage from "./pages/SettingsPage";
-import FaceIntegrationTest from "./pages/FaceIntegrationTest";
-import AdvancedAnalyticsDemo from "./pages/AdvancedAnalyticsDemo";
-import AttendanceAnalyticsDemo from "./pages/AttendanceAnalyticsDemo";
-import ScheduleManagement from "./components/ScheduleManagement";
-import NotFound from "./pages/NotFound";ne Demo */}
-
+import React, { useContext } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,7 +9,6 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AdminRoute from "@/components/AdminRoute";
 import RoleRedirect from "@/components/RoleRedirect";
 import ApiErrorBoundary from "@/components/ApiErrorBoundary";
-import { useContext } from 'react';
 import { AuthContext } from './contexts/AuthContext';
 
 import HomePage from "./pages/HomePage";
@@ -50,6 +33,7 @@ import MergedAnalyticsDemo from "./pages/MergedAnalyticsDemo";
 
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SemesterConfigurationPage from "./pages/SemesterConfigurationPage";
+import AcademicCalendarSettings from "./pages/AcademicCalendarSettings";
 
 import AnalyticsShowcase from "./pages/AnalyticsShowcase";
 import SystemStatusPage from "./pages/SystemStatusPage";
@@ -60,7 +44,8 @@ import LiveMonitoringPage from "./pages/LiveMonitoringPage";
 import StudentAttendancePage from "./pages/StudentAttendancePage";
 import StudentMarkAttendancePage from "./pages/StudentMarkAttendancePage";
 import StudentFaceRegistrationPage from "./pages/StudentFaceRegistrationPage";
-import MarksPage from "./pages/MarksPage";
+
+import StudentNotificationsPage from "./pages/StudentNotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
 import FaceRegistrationDemoPage from "./pages/FaceRegistrationDemoPage";
 import FaceRegistrationDebugPage from "./pages/FaceRegistrationDebugPage";
@@ -68,6 +53,16 @@ import FaceTestingPage from "./components/FaceTestingPage";
 import AcademicCalendar from "./pages/AcademicCalendar";
 import StudentCalendar from "./pages/StudentCalendar";
 import StudentAttendanceCalendar from "./pages/StudentAttendanceCalendar";
+import AutoAbsentManagementPage from "./pages/AutoAbsentManagementPage";
+import AttendanceThresholdSettings from "./pages/AttendanceThresholdSettings";
+import TeacherDashboard from "./pages/TeacherDashboard";
+import TeacherSubjectStudents from "./pages/TeacherSubjectStudents";
+import TeacherSubjectAnalytics from "./pages/TeacherSubjectAnalytics";
+import TeacherAttendancePage from "./pages/TeacherAttendancePage";
+import TeacherNotificationsPage from "./pages/TeacherNotificationsPage";
+import TeacherSchedulePage from "./pages/TeacherSchedulePage";
+import TeacherProfilePage from "./pages/TeacherProfilePage";
+import TeachersPage from "./pages/TeachersPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +75,8 @@ const queryClient = new QueryClient({
         return failureCount < 2;
       },
       staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false, // Disable auto-refetch when switching tabs
+      refetchOnReconnect: false, // Disable auto-refetch on internet reconnect
     },
   },
 });
@@ -130,13 +127,7 @@ const App = () => {
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />
-              <Route path="/student/marks" element={
-                <ProtectedRoute>
-                  <ApiErrorBoundary>
-                    <MarksPage />
-                  </ApiErrorBoundary>
-                </ProtectedRoute>
-              } />
+              {/* My Marks route removed */}
               <Route path="/student/profile" element={
                 <ProtectedRoute>
                   <ApiErrorBoundary>
@@ -165,10 +156,68 @@ const App = () => {
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />
+              <Route path="/student/notifications" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <StudentNotificationsPage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
               <Route path="/face-registration" element={
                 <ProtectedRoute>
                   <ApiErrorBoundary>
                     <StudentFaceRegistrationPage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              
+              {/* Teacher Routes - Protected */}
+              <Route path="/teacher" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherDashboard />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/subjects/:subjectId/students" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherSubjectStudents />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/subjects/:subjectId/analytics" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherSubjectAnalytics />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/attendance" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherAttendancePage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/notifications" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherNotificationsPage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/schedule" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherSchedulePage />
+                  </ApiErrorBoundary>
+                </ProtectedRoute>
+              } />
+              <Route path="/teacher/profile" element={
+                <ProtectedRoute>
+                  <ApiErrorBoundary>
+                    <TeacherProfilePage />
                   </ApiErrorBoundary>
                 </ProtectedRoute>
               } />
@@ -186,13 +235,16 @@ const App = () => {
                 <Route index element={<Dashboard />} />
                 <Route path="students" element={<StudentsPage />} />
                 <Route path="students/:studentId/calendar" element={<StudentAttendanceCalendar />} />
-                <Route path="calendar" element={<AcademicCalendar />} />
+                <Route path="teachers" element={<TeachersPage />} />
+                <Route path="calendar" element={<AcademicCalendar embedded />} />
                 <Route path="attendance" element={<AttendancePage />} />
                 <Route path="faculties" element={<FacultiesPage />} />
                 <Route path="schedules" element={<ScheduleManagement />} />
                 <Route path="settings" element={<SettingsPage />} />
+                <Route path="settings/attendance-thresholds" element={<AttendanceThresholdSettings />} />
                 <Route path="notifications" element={<AdminNotificationsPage />} />
                 <Route path="monitoring" element={<LiveMonitoringPage />} />
+                <Route path="auto-absent" element={<AutoAbsentManagementPage />} />
                 <Route path="analytics" element={<ApiErrorBoundary><AnalyticsPage /></ApiErrorBoundary>} />
                 <Route path="admin/semester-configuration" element={<SemesterConfigurationPage />} />
               </Route>

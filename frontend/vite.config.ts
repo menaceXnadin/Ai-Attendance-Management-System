@@ -26,7 +26,12 @@ export default defineConfig(({ mode }: { mode: string }) => ({
       },
     },
   },
-  plugins: [react()],
+  plugins: [
+    react({
+      tsDecorators: true,
+      jsxImportSource: 'react',
+    })
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

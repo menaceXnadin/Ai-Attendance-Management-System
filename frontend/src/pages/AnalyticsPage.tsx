@@ -1,10 +1,10 @@
 import React from 'react';
-import UnifiedAnalytics from '@/components/UnifiedAnalytics';
+import AdvancedAnalyticsDashboard from '@/components/AdvancedAnalyticsDashboard';
 
 const AnalyticsPage: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 p-8">
-      <UnifiedAnalytics />
+    <div className="p-6 md:p-8">
+      <AdvancedAnalyticsDashboard />
     </div>
   );
 };

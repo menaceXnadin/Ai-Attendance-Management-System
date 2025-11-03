@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import App from './App.tsx'
+import App from './App'
 import './index.css'
 import React from 'react'
 import { AuthProvider } from './contexts/AuthProvider'
@@ -49,15 +49,13 @@ try {
   } else {
     const root = createRoot(rootElement);
     root.render(
-      <React.StrictMode>
-        <ErrorBoundary>
-          <AuthProvider>
-            <ThemeProvider defaultTheme="dark" storageKey="attendai-theme">
-              <App />
-            </ThemeProvider>
-          </AuthProvider>
-        </ErrorBoundary>
-      </React.StrictMode>
+      <ErrorBoundary>
+        <AuthProvider>
+          <ThemeProvider defaultTheme="dark" storageKey="attendai-theme">
+            <App />
+          </ThemeProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     );
   }
 } catch (error) {

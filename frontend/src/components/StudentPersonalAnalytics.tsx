@@ -48,11 +48,12 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - 30); // Last 30 days
         
-        return await api.attendance.getAll({
+        const response = await api.attendance.getAll({
           studentId: user.id,
           startDate: startDate.toISOString().split('T')[0],
           endDate: endDate.toISOString().split('T')[0]
         });
+        return response?.records ?? [];
       } catch (error) {
         console.error('Error fetching attendance records:', error);
         return [];
@@ -151,10 +152,10 @@ const StudentPersonalAnalytics: React.FC<StudentPersonalAnalyticsProps> = ({ cla
   const weeklyTrend = currentWeekRate - previousWeekRate;
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Good', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 60) return { status: 'Fair', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Needs Improvement', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
+    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
+    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
+    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
   };
 
   const attendanceStatus = getAttendanceStatus(data.attendanceRate);
