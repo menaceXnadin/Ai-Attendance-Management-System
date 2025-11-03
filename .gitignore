@@ -100,3 +100,6 @@ backend/*.py
 # Ignore all .md files except README.md
 *.md
 !README.md
+
+# Ignore PowerShell scripts
+*.ps1
