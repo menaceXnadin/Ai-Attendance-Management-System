@@ -22,14 +22,8 @@ python-multipart==0.0.6
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# AI/ML for Face Recognition - Using InsightFace (better than face_recognition)
-opencv-python==4.8.1.78
-insightface==0.7.3
-onnxruntime==1.20.0  # Required for InsightFace
-numpy==1.24.3
-pillow==10.1.0
-scikit-learn==1.3.2
-# face-recognition==1.3.0  # Replaced with InsightFace
+# AI/ML dependencies moved to `requirements-ml.txt` to avoid heavy builds on Heroku
+# See `requirements-ml.txt` for the full list and install on ML-capable hosts if needed
 
 # Utilities
 python-dotenv==1.0.0
