@@ -126,6 +126,62 @@ class NotificationService {
       throw new Error(error.detail || 'Failed to delete notification');
     }
   }
+
+  // Inbox endpoints (per-user)
+  async getInbox(onlyUnread: boolean = true, skip: number = 0, limit: number = 20): Promise<Notification[]> {
+    const params = new URLSearchParams({
+      only_unread: String(onlyUnread),
+      skip: String(skip),
+      limit: String(limit),
+    });
+    const response = await fetch(`${API_BASE_URL}/notifications/inbox?${params}`, {
+      method: 'GET',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to fetch inbox');
+    }
+
+    return response.json();
+  }
+
+  async markNotificationRead(notificationId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/mark-read`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to mark as read');
+    }
+  }
+
+  async dismissNotification(notificationId: number): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/notifications/${notificationId}/dismiss`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to dismiss notification');
+    }
+  }
+
+  async dismissAllNotifications(): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/notifications/dismiss-all`, {
+      method: 'POST',
+      headers: this.getAuthHeaders()
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Failed to dismiss all notifications');
+    }
+  }
 }
 
 export const notificationService = new NotificationService();

@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import select, and_, or_, func, update, desc, text
 from typing import List
 from datetime import datetime
 from sqlalchemy.orm import selectinload
@@ -332,3 +332,307 @@ async def delete_notification(
         await db.rollback()
         print(f"[ERROR] Failed to delete notification: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete notification: {str(e)}")
+
+
+# ============================================================================
+# INBOX ENDPOINTS (per-user read/clear without deletion)
+# ============================================================================
+
+@router.get("/inbox")
+async def get_inbox(
+    only_unread: bool = Query(True, description="Return only unread (not dismissed) notifications"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Inbox for the current user (student/admin). Returns notifications relevant to this user
+    (global, faculty-specific to their faculty, or individual) excluding dismissed.
+    """
+    
+    # Check if user is a student or admin
+    result = await db.execute(select(Student).filter(Student.user_id == current_user.id))
+    student = result.scalar_one_or_none()
+    result = await db.execute(select(Admin).filter(Admin.user_id == current_user.id))
+    admin = result.scalar_one_or_none()
+    
+    if not student and not admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Build relevance conditions
+    if admin:
+        relevance = or_(
+            EnhancedNotification.scope == NotificationScope.global_scope,
+            EnhancedNotification.target_user_id == current_user.id,
+        )
+    elif student:
+        relevance = or_(
+            EnhancedNotification.scope == NotificationScope.global_scope,
+            and_(
+                EnhancedNotification.scope == NotificationScope.faculty_specific,
+                EnhancedNotification.target_faculty_id == student.faculty_id,
+            ),
+            EnhancedNotification.target_user_id == current_user.id,
+        )
+    
+    # LEFT JOIN receipts for this user to evaluate read/dismiss state
+    receipts_subq = (
+        select(NotificationReadReceipt)
+        .where(NotificationReadReceipt.user_id == current_user.id)
+        .subquery()
+    )
+    
+    # Base query
+    query = (
+        select(EnhancedNotification, receipts_subq.c.read_at, receipts_subq.c.dismissed_at)
+        .outerjoin(receipts_subq, receipts_subq.c.notification_id == EnhancedNotification.id)
+        .where(and_(EnhancedNotification.is_active == True, relevance))
+    )
+    
+    # Exclude dismissed always
+    query = query.where(or_(receipts_subq.c.dismissed_at.is_(None)))
+    
+    # Filter only unread if requested
+    if only_unread:
+        query = query.where(or_(receipts_subq.c.read_at.is_(None)))
+    
+    query = query.order_by(desc(EnhancedNotification.created_at), desc(EnhancedNotification.id)).offset(skip).limit(limit)
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    def serialize_row(notif, read_at, dismissed_at):
+        safe_payload = getattr(notif, "payload", None) if isinstance(getattr(notif, "payload", None), dict) else None
+        return {
+            "id": notif.id,
+            "title": notif.title,
+            "message": notif.message,
+            "type": notif.type.value,
+            "priority": notif.priority.value,
+            "scope": notif.scope.value,
+            "sender_name": notif.sender_name,
+            "created_at": notif.created_at.isoformat(),
+            "payload": safe_payload,
+            "is_read": read_at is not None,
+        }
+    
+    return [serialize_row(n, r, d) for (n, r, d) in rows]
+
+
+@router.post("/{notification_id}/mark-read")
+async def mark_notification_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mark a notification as read for the current user (idempotent).
+    """
+    # Verify notification is relevant
+    notif_result = await db.execute(
+        select(EnhancedNotification).where(EnhancedNotification.id == notification_id)
+    )
+    notif = notif_result.scalar_one_or_none()
+    if not notif or not notif.is_active:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    # Check user access
+    result = await db.execute(select(Student).filter(Student.user_id == current_user.id))
+    student = result.scalar_one_or_none()
+    result = await db.execute(select(Admin).filter(Admin.user_id == current_user.id))
+    admin = result.scalar_one_or_none()
+    
+    if admin:
+        is_relevant = (
+            notif.scope == NotificationScope.global_scope or
+            notif.target_user_id == current_user.id
+        )
+    elif student:
+        is_relevant = (
+            notif.scope == NotificationScope.global_scope or
+            (notif.scope == NotificationScope.faculty_specific and notif.target_faculty_id == student.faculty_id) or
+            notif.target_user_id == current_user.id
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not is_relevant:
+        raise HTTPException(status_code=403, detail="Not authorized for this notification")
+    
+    # Upsert receipt
+    receipt_result = await db.execute(
+        select(NotificationReadReceipt).where(
+            and_(
+                NotificationReadReceipt.notification_id == notification_id,
+                NotificationReadReceipt.user_id == current_user.id,
+            )
+        )
+    )
+    receipt = receipt_result.scalar_one_or_none()
+    now = datetime.now()
+    if receipt:
+        if receipt.read_at is None:
+            receipt.read_at = now
+    else:
+        new_receipt = NotificationReadReceipt(
+            notification_id=notification_id,
+            user_id=current_user.id,
+            read_at=now,
+            dismissed_at=None,
+        )
+        db.add(new_receipt)
+    
+    await db.commit()
+    return {"success": True}
+
+
+@router.post("/{notification_id}/dismiss")
+async def dismiss_notification_for_user(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dismiss a single notification for the current user (idempotent).
+    """
+    notif_result = await db.execute(
+        select(EnhancedNotification).where(EnhancedNotification.id == notification_id)
+    )
+    notif = notif_result.scalar_one_or_none()
+    if not notif or not notif.is_active:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    
+    # Check user access
+    result = await db.execute(select(Student).filter(Student.user_id == current_user.id))
+    student = result.scalar_one_or_none()
+    result = await db.execute(select(Admin).filter(Admin.user_id == current_user.id))
+    admin = result.scalar_one_or_none()
+    
+    if admin:
+        is_relevant = (
+            notif.scope == NotificationScope.global_scope or
+            notif.target_user_id == current_user.id
+        )
+    elif student:
+        is_relevant = (
+            notif.scope == NotificationScope.global_scope or
+            (notif.scope == NotificationScope.faculty_specific and notif.target_faculty_id == student.faculty_id) or
+            notif.target_user_id == current_user.id
+        )
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if not is_relevant:
+        raise HTTPException(status_code=403, detail="Not authorized for this notification")
+    
+    receipt_result = await db.execute(
+        select(NotificationReadReceipt).where(
+            and_(
+                NotificationReadReceipt.notification_id == notification_id,
+                NotificationReadReceipt.user_id == current_user.id,
+            )
+        )
+    )
+    receipt = receipt_result.scalar_one_or_none()
+    now = datetime.now()
+    if receipt:
+        receipt.dismissed_at = receipt.dismissed_at or now
+        if receipt.read_at is None:
+            receipt.read_at = now
+    else:
+        new_receipt = NotificationReadReceipt(
+            notification_id=notification_id,
+            user_id=current_user.id,
+            read_at=now,
+            dismissed_at=now,
+        )
+        db.add(new_receipt)
+    
+    await db.commit()
+    return {"success": True}
+
+
+@router.post("/dismiss-all")
+async def dismiss_all_notifications_for_user(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dismiss all relevant notifications for current user.
+    Performs an INSERT ... SELECT for missing receipts and an UPDATE for existing ones.
+    """
+    # Check user type
+    result = await db.execute(select(Student).filter(Student.user_id == current_user.id))
+    student = result.scalar_one_or_none()
+    result = await db.execute(select(Admin).filter(Admin.user_id == current_user.id))
+    admin = result.scalar_one_or_none()
+    
+    if not student and not admin:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # INSERT missing receipts as dismissed in a single SQL statement
+    if admin:
+        insert_sql = text(
+            """
+            INSERT INTO notification_read_receipts (notification_id, user_id, read_at, dismissed_at)
+            SELECT n.id, :uid, NOW(), NOW()
+            FROM enhanced_notifications n
+            LEFT JOIN notification_read_receipts r
+              ON r.notification_id = n.id AND r.user_id = :uid
+            WHERE n.is_active = TRUE
+              AND (
+                    n.scope = :global
+                 OR n.target_user_id = :uid
+              )
+              AND r.id IS NULL
+            """
+        )
+        await db.execute(
+            insert_sql,
+            {
+                "uid": current_user.id,
+                "global": "global_scope",
+            },
+        )
+    elif student:
+        insert_sql = text(
+            """
+            INSERT INTO notification_read_receipts (notification_id, user_id, read_at, dismissed_at)
+            SELECT n.id, :uid, NOW(), NOW()
+            FROM enhanced_notifications n
+            LEFT JOIN notification_read_receipts r
+              ON r.notification_id = n.id AND r.user_id = :uid
+            WHERE n.is_active = TRUE
+              AND (
+                    n.scope = :global
+                 OR (n.scope = :faculty AND n.target_faculty_id = :fid)
+                 OR n.target_user_id = :uid
+              )
+              AND r.id IS NULL
+            """
+        )
+        await db.execute(
+            insert_sql,
+            {
+                "uid": current_user.id,
+                "fid": student.faculty_id,
+                "global": "global_scope",
+                "faculty": "faculty_specific",
+            },
+        )
+    
+    # UPDATE existing receipts to set dismissed_at where not already dismissed
+    await db.execute(
+        update(NotificationReadReceipt)
+        .where(
+            and_(
+                NotificationReadReceipt.user_id == current_user.id,
+                NotificationReadReceipt.dismissed_at.is_(None),
+            )
+        )
+        .values(dismissed_at=datetime.now(), read_at=func.coalesce(NotificationReadReceipt.read_at, datetime.now()))
+    )
+    
+    await db.commit()
+    return {"success": True}

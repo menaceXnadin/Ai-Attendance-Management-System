@@ -215,7 +215,12 @@ async def get_student_attendance_calendar(
             date_obj = record.date.date() if hasattr(record.date, 'date') else record.date
             
             # Check if record was created on the same day (real-time system activity)
-            if record.created_at.date() == date_obj:
+            # FACULTY+SEMESTER SCOPED: Only treat as activity for THIS student's cohort
+            if (
+                record.created_at.date() == date_obj and
+                record_faculty_id == student.faculty_id and
+                record_semester == student.semester
+            ):
                 dates_with_system_activity.add(date_obj)
             
             # Check if this is manual attendance for THIS faculty+semester
@@ -527,22 +532,161 @@ async def get_student_attendance_calendar(
                 'attendance_rate': subject_rate
             })
         
-        # Calculate attendance streak (consecutive days present)
-        current_streak = 0
-        longest_streak = 0
+        # Calculate ALL‑TIME streaks (month‑invariant, anchored to today)
+        # POLICY: Full-day 'present' extends streak; 'absent'/'partial'/'late' break; holidays/system_inactive/no_data are skipped
+        window_end = date.today()
+        window_start = window_end - timedelta(days=180)
+
+        # Fetch student records for the window
+        window_records_query = (
+            select(AttendanceRecord)
+            .where(
+                and_(
+                    AttendanceRecord.student_id == student_id,
+                    func.date(AttendanceRecord.date) >= window_start,
+                    func.date(AttendanceRecord.date) <= window_end,
+                )
+            )
+            .order_by(AttendanceRecord.date)
+        )
+        window_result = await db.execute(window_records_query)
+        window_records = window_result.scalars().all()
+
+        # Global activity in the window (scoped to same faculty+semester)
+        window_global_query = (
+            select(
+                AttendanceRecord,
+                Student.faculty_id.label('student_faculty_id'),
+                Student.semester.label('student_semester')
+            )
+            .join(Student, AttendanceRecord.student_id == Student.id)
+            .where(
+                and_(
+                    func.date(AttendanceRecord.date) >= window_start,
+                    func.date(AttendanceRecord.date) <= window_end,
+                )
+            )
+            .order_by(AttendanceRecord.date)
+        )
+        window_global_result = await db.execute(window_global_query)
+        window_global_rows = window_global_result.all()
+
+        window_dates_with_system_activity = set()
+        window_dates_with_manual_attendance = set()
+        for row in window_global_rows:
+            rec = row[0]
+            fac = row[1]
+            sem = row[2]
+            d = rec.date.date() if hasattr(rec.date, 'date') else rec.date
+            if rec.created_at.date() == d and fac == student.faculty_id and sem == student.semester:
+                window_dates_with_system_activity.add(d)
+            method = rec.method.value if hasattr(rec.method, 'value') else str(rec.method) if rec.method else None
+            if method and method.lower() == 'manual' and fac == student.faculty_id and sem == student.semester:
+                window_dates_with_manual_attendance.add(d)
+
+        window_dates_with_classes_held = window_dates_with_system_activity.union(window_dates_with_manual_attendance)
+
+        # Academic events in the window (faculty or global)
+        window_events_query = select(AcademicEvent).where(
+            and_(
+                AcademicEvent.start_date >= window_start,
+                AcademicEvent.start_date <= window_end,
+                or_(AcademicEvent.faculty_id == student.faculty_id, AcademicEvent.faculty_id == None),
+            )
+        )
+        window_events_result = await db.execute(window_events_query)
+        window_events = window_events_result.scalars().all()
+        window_daily_events = defaultdict(list)
+        for e in window_events:
+            window_daily_events[e.start_date.strftime("%Y-%m-%d")].append(e)
+
+        # Group and deduplicate window records by date/subject
+        window_daily = defaultdict(list)
+        for r in window_records:
+            d = r.date.date() if hasattr(r.date, 'date') else r.date
+            ds = d.strftime("%Y-%m-%d")
+            status = r.status.value if hasattr(r.status, 'value') else str(r.status)
+            window_daily[ds].append({
+                'id': r.id,
+                'status': status,
+                'subject_id': r.subject_id,
+                'location': r.location,
+            })
+        # dedupe by subject keeping latest and preferring non-auto-absent
+        for ds, recs in list(window_daily.items()):
+            subj_map = {}
+            for rec in recs:
+                sid = rec['subject_id']
+                if sid not in subj_map:
+                    subj_map[sid] = rec
+                else:
+                    existing = subj_map[sid]
+                    if existing['location'] == 'AUTO_ABSENT_SYSTEM' and rec['location'] != 'AUTO_ABSENT_SYSTEM':
+                        subj_map[sid] = rec
+                    elif rec['id'] > existing['id']:
+                        subj_map[sid] = rec
+            window_daily[ds] = list(subj_map.values())
+
+        # Expected subjects (active) for cohort
+        expected_subjects_query2 = select(func.count(func.distinct(ClassSchedule.subject_id))).where(
+            and_(
+                ClassSchedule.faculty_id == student.faculty_id,
+                ClassSchedule.semester == student.semester,
+                ClassSchedule.is_active == True,
+            )
+        )
+        expected_res2 = await db.execute(expected_subjects_query2)
+        expected_subjects_count = expected_res2.scalar() or 0
+
+        # Build statuses across the window and compute streaks
         temp_streak = 0
-        
-        sorted_days = sorted(calendar_days, key=lambda x: x['date'])
-        
-        for day in sorted_days:
-            if day['status'] == 'present':
+        longest_streak = 0
+        current_streak = 0
+        cur = window_start
+        while cur <= window_end:
+            ds = cur.strftime("%Y-%m-%d")
+            recs = window_daily.get(ds, [])
+            evs = window_daily_events.get(ds, [])
+            is_holiday = any(e.event_type == EventType.HOLIDAY for e in evs)
+            has_class_event = any(e.event_type == EventType.CLASS for e in evs)
+            classes_held = cur in window_dates_with_classes_held
+
+            status = 'no_data'
+            if is_holiday:
+                status = 'holiday'
+            elif has_class_event:
+                if len(recs) == 0:
+                    status = 'absent' if classes_held else 'system_inactive'
+                else:
+                    present = sum(1 for r in recs if r['status'] == 'present')
+                    late = sum(1 for r in recs if r['status'] == 'late')
+                    absent = sum(1 for r in recs if r['status'] == 'absent')
+                    total = len(recs)
+                    if absent > 0 and (present > 0 or late > 0):
+                        status = 'partial'
+                    elif absent > 0 and present == 0 and late == 0:
+                        status = 'absent'
+                    elif total < expected_subjects_count:
+                        status = 'partial'
+                    elif late > 0 and present == 0 and absent == 0:
+                        status = 'late'
+                    elif (present > 0 or late > 0) and absent == 0 and total >= expected_subjects_count:
+                        status = 'present'
+                    else:
+                        status = 'partial' if (present > 0 or late > 0) else 'absent'
+
+            # Update streak counters according to policy
+            if status == 'present':
                 temp_streak += 1
                 longest_streak = max(longest_streak, temp_streak)
-            elif day['status'] in ['absent', 'partial', 'late']:
+            elif status in ['absent', 'partial', 'late']:
                 temp_streak = 0
-        
-        if sorted_days and sorted_days[-1]['status'] == 'present':
-            current_streak = temp_streak
+            # skip others
+
+            cur += timedelta(days=1)
+
+        # Current streak refers to the run ending at the last relevant day (today)
+        current_streak = temp_streak if temp_streak > 0 else 0
         
         print(f"[DEBUG] Successfully built calendar with {len(calendar_days)} days, {len(subject_breakdown)} subjects")
         

@@ -7,17 +7,25 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import TeacherSidebar from '@/components/TeacherSidebar';
 import { 
   Send, 
   Bell, 
+  BellRing,
   AlertCircle, 
   Info, 
   CheckCircle, 
   XCircle,
   Users,
-  BookOpen
+  BookOpen,
+  Clock,
+  User,
+  AlertTriangle,
+  Megaphone,
+  X,
+  Trash2
 } from 'lucide-react';
 import { api } from '@/integrations/api/client';
 
@@ -31,22 +39,35 @@ interface TeacherClass {
   student_count: number;
 }
 
-interface Notification {
+interface SentNotification {
   id: number;
   title: string;
   message: string;
   type: string;
   priority: string;
   created_at: string;
-  metadata?: {
+  payload?: {
     subject_id?: number;
     semester?: number;
   };
 }
 
+interface InboxNotification {
+  id: number;
+  title: string;
+  message: string;
+  type: string;
+  priority: string;
+  scope: string;
+  created_at: string;
+  payload?: Record<string, unknown> | null;
+  is_read: boolean;
+}
+
 const TeacherNotificationsPage: React.FC = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [onlyUnread, setOnlyUnread] = useState<boolean>(false);
 
   // Form state
   const [selectedClass, setSelectedClass] = useState<TeacherClass | null>(null);
@@ -69,8 +90,21 @@ const TeacherNotificationsPage: React.FC = () => {
     queryKey: ['teacher-notifications'],
     queryFn: async () => {
       const response = await api.teacher.getNotifications();
-      return response as Notification[];
-    }
+      return response as SentNotification[];
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
+  });
+
+  // Fetch inbox notifications for current teacher
+  const { data: inbox = [], isLoading: inboxLoading } = useQuery({
+    queryKey: ['teacher-inbox', { onlyUnread }],
+    queryFn: async () => {
+      const response = await api.teacher.getInbox(onlyUnread, 0, 20);
+      return response as InboxNotification[];
+    },
+    refetchOnMount: true,
+    refetchOnWindowFocus: false,
   });
 
   // Send notification mutation
@@ -89,6 +123,7 @@ const TeacherNotificationsPage: React.FC = () => {
       toast({
         title: 'Success',
         description: 'Notification sent successfully',
+        variant: 'success',
       });
       // Reset form
       setTitle('');
@@ -136,6 +171,38 @@ const TeacherNotificationsPage: React.FC = () => {
       type: notificationType
     });
   };
+
+  // Mutations for inbox actions
+  const markReadMutation = useMutation({
+    mutationFn: async (id: number) => api.teacher.markRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher-inbox'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error?.message || 'Failed to mark as read', variant: 'destructive' });
+    },
+  });
+
+  const clearOneMutation = useMutation({
+    mutationFn: async (id: number) => api.teacher.clearOne(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['teacher-inbox'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error?.message || 'Failed to dismiss', variant: 'destructive' });
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: async () => api.teacher.clearAll(),
+    onSuccess: () => {
+      toast({ title: 'Cleared', description: 'All notifications dismissed', variant: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['teacher-inbox'] });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error?.message || 'Failed to clear all', variant: 'destructive' });
+    },
+  });
 
   const getPriorityIcon = (priority: string) => {
     switch (priority) {
@@ -197,9 +264,15 @@ const TeacherNotificationsPage: React.FC = () => {
               <div className="space-y-2">
                 <Label className="text-slate-300">Select Class</Label>
                 <Select
-                  value={selectedClass?.subject_id.toString() || ''}
+                  // Use composite value to uniquely identify class by subject and semester
+                  value={selectedClass ? `${selectedClass.subject_id}:${selectedClass.semester}` : ''}
                   onValueChange={(value) => {
-                    const cls = classes.find(c => c.subject_id.toString() === value);
+                    const [sid, sem] = value.split(":");
+                    const sidNum = Number(sid);
+                    const semNum = Number(sem);
+                    const cls = classes.find(
+                      (c) => c.subject_id === sidNum && c.semester === semNum
+                    );
                     setSelectedClass(cls || null);
                   }}
                 >
@@ -213,7 +286,10 @@ const TeacherNotificationsPage: React.FC = () => {
                       <SelectItem value="empty" disabled>No classes found</SelectItem>
                     ) : (
                       classes.map((cls) => (
-                        <SelectItem key={`${cls.subject_id}-${cls.semester}`} value={cls.subject_id.toString()}>
+                        <SelectItem
+                          key={`${cls.subject_id}-${cls.semester}`}
+                          value={`${cls.subject_id}:${cls.semester}`}
+                        >
                           {cls.subject_name} ({cls.subject_code}) - Semester {cls.semester}
                         </SelectItem>
                       ))
@@ -296,7 +372,170 @@ const TeacherNotificationsPage: React.FC = () => {
             </CardContent>
           </Card>
 
-          {/* Notification History */}
+          {/* Inbox */}
+          <Card className="bg-slate-900/70 border-slate-700/80">
+            <CardHeader className="border-b border-slate-800/50">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-3 text-white text-xl mb-2">
+                      <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600">
+                        <BellRing className="w-5 h-5 text-white" />
+                      </div>
+                      Inbox
+                    </CardTitle>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800/50 border border-slate-700">
+                        <div className="w-2 h-2 rounded-full bg-slate-400"></div>
+                        <span className="text-slate-300 font-medium">{Array.isArray(inbox) ? inbox.length : 0}</span>
+                        <span className="text-slate-500">Total</span>
+                      </span>
+                      <span className="flex items-center gap-2 px-3 py-1 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                        <span className="text-blue-400 font-medium">{Array.isArray(inbox) ? inbox.filter(n => !n.is_read).length : 0}</span>
+                        <span className="text-blue-300/70">Unread</span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  {/* Modern Toggle Button */}
+                  <button
+                    onClick={() => setOnlyUnread(!onlyUnread)}
+                    className={`
+                      group relative flex items-center gap-2.5 px-4 py-2 rounded-xl font-medium text-sm
+                      transition-all duration-300 ease-out overflow-hidden
+                      ${onlyUnread 
+                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/50' 
+                        : 'bg-slate-800/80 text-slate-300 border border-slate-700 hover:border-slate-600 hover:bg-slate-800'
+                      }
+                      hover:scale-105 active:scale-95
+                    `}
+                  >
+                    <div className={`
+                      flex items-center justify-center w-4 h-4 rounded-lg transition-all duration-300
+                      ${onlyUnread ? 'bg-white/20 shadow-inner' : 'bg-slate-700/50'}
+                    `}>
+                      <Bell className={`h-3 w-3 transition-all duration-300 ${onlyUnread ? 'text-white animate-pulse' : 'text-slate-400'}`} />
+                    </div>
+                    <span className="relative z-10">{onlyUnread ? "Unread Only" : "Show All"}</span>
+                    {onlyUnread && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-400/0 via-white/10 to-blue-400/0 animate-shimmer"></div>
+                    )}
+                  </button>
+
+                  {/* Modern Clear All Button */}
+                  <button
+                    onClick={() => clearAllMutation.mutate()}
+                    disabled={clearAllMutation.isPending || (Array.isArray(inbox) && inbox.length === 0)}
+                    className={`
+                      group flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm
+                      transition-all duration-300 ease-out
+                      ${clearAllMutation.isPending || (Array.isArray(inbox) && inbox.length === 0)
+                        ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed opacity-50'
+                        : 'bg-gradient-to-r from-red-500/10 to-pink-500/10 text-red-400 border border-red-500/30 hover:border-red-500/50 hover:bg-gradient-to-r hover:from-red-500/20 hover:to-pink-500/20 hover:scale-105 hover:shadow-lg hover:shadow-red-500/20 active:scale-95'
+                      }
+                    `}
+                  >
+                    <Trash2 className={`h-4 w-4 transition-transform duration-300 ${!(clearAllMutation.isPending || (Array.isArray(inbox) && inbox.length === 0)) ? 'group-hover:rotate-12' : ''}`} />
+                    Clear All
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              {inboxLoading ? (
+                <div className="text-center py-8 text-slate-400">
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <p>Loading notifications...</p>
+                  </div>
+                </div>
+              ) : Array.isArray(inbox) && inbox.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <Bell className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <div className="space-y-3">
+                    <p className="text-slate-300 font-medium">No notifications to display</p>
+                    {onlyUnread && (
+                      <div className="flex items-center justify-center">
+                        <button
+                          onClick={() => setOnlyUnread(false)}
+                          className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800/70 border border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600 transition-all hover:scale-105"
+                        >
+                          Show All Notifications
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
+                  {inbox.map((n) => (
+                    <div key={n.id} className={`relative p-4 rounded-lg border transition-all hover:border-slate-600/50 ${
+                      n.is_read 
+                        ? 'bg-slate-800/30 border-slate-700/30' 
+                        : 'bg-slate-800/60 border-slate-700/70 border-l-4 border-l-blue-500'
+                    }`}>
+                      {/* Unread indicator */}
+                      {!n.is_read && (
+                        <div className="absolute top-3 right-3 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      )}
+
+                      {/* Header */}
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {getTypeIcon(n.type)}
+                          <h4 className={`font-semibold ${n.is_read ? 'text-slate-300' : 'text-white'}`}>{n.title}</h4>
+                        </div>
+                        <Badge variant="outline" className={`text-xs ${getPriorityBadgeColor(n.priority)}`}>
+                          {n.priority.toUpperCase()}
+                        </Badge>
+                      </div>
+
+                      {/* Message */}
+                      <p className={`text-sm mb-3 ${n.is_read ? 'text-slate-400' : 'text-slate-200'}`}>{n.message}</p>
+
+                      {/* Footer */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 text-xs text-slate-500">
+                          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-900/30">
+                            <Clock className="h-3 w-3" />
+                            <span>{new Date(n.created_at).toLocaleString()}</span>
+                          </div>
+                          <div className="px-2 py-1 rounded-md bg-slate-900/30 capitalize">
+                            {n.scope.replace('_', ' ')}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {!n.is_read && (
+                            <button
+                              className="group p-2 rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 hover:border-green-500/50 transition-all duration-200 hover:scale-110 active:scale-95"
+                              onClick={() => markReadMutation.mutate(n.id)}
+                              disabled={markReadMutation.isPending}
+                              title="Mark as read"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5 group-hover:rotate-12 transition-transform duration-200" />
+                            </button>
+                          )}
+                          <button
+                            className="group p-2 rounded-lg bg-slate-700/30 text-slate-400 border border-slate-600/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all duration-200 hover:scale-110 active:scale-95"
+                            onClick={() => clearOneMutation.mutate(n.id)}
+                            disabled={clearOneMutation.isPending}
+                            title="Dismiss"
+                          >
+                            <X className="h-3.5 w-3.5 group-hover:rotate-90 transition-transform duration-200" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Notification History (Sent) */}
           <Card className="bg-slate-900/70 border-slate-700/80">
             <CardHeader className="border-b border-slate-800/50">
               <CardTitle className="flex items-center gap-2 text-white">
@@ -338,12 +577,12 @@ const TeacherNotificationsPage: React.FC = () => {
                         </div>
                       </div>
                       <p className="text-sm text-slate-400 mb-3">{notification.message}</p>
-                      {notification.metadata && (
+                      {notification.payload && (
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <BookOpen className="w-3 h-3" />
-                          <span>Subject ID: {notification.metadata.subject_id}</span>
-                          {notification.metadata.semester && (
-                            <span>• Semester {notification.metadata.semester}</span>
+                          <span>Subject ID: {notification.payload.subject_id as any}</span>
+                          {notification.payload.semester && (
+                            <span>• Semester {notification.payload.semester as any}</span>
                           )}
                         </div>
                       )}

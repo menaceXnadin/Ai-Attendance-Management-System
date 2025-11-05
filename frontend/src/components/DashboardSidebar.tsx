@@ -155,55 +155,34 @@ const SidebarHeaderContent = () => {
 };
 
 // Footer component with collapse support
-const SidebarFooterContent = ({ systemHealth, user, signOut }: { systemHealth: any; user: any; signOut: () => void }) => {
+const SidebarFooterContent = ({ user, signOut }: { user: any; signOut: () => void }) => {
   const { state } = useSidebar();
   const isCollapsed = state === "collapsed";
 
   if (isCollapsed) {
     return (
-      <SidebarFooter className="px-0 py-5 border-t border-slate-800">
-        <div className="space-y-5 flex flex-col items-center w-full">
-          {/* System Status - Just indicator */}
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-slate-800/50 hover:bg-slate-700 hover:scale-105 hover:shadow-lg hover:shadow-green-500/20 transition-all duration-300 cursor-pointer mx-auto group">
-                  <div className="h-3.5 w-3.5 bg-green-500 rounded-full animate-pulse group-hover:scale-125 transition-transform"></div>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent 
-                side="right" 
-                className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
-                sideOffset={12}
-              >
-                <p className="font-medium">System Online</p>
-                <p className="text-xs text-green-400 mt-0.5">{systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '99.9%'} uptime</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* User Avatar */}
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center hover:from-blue-500 hover:to-blue-400 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/50 hover:rotate-6 transition-all duration-300 cursor-pointer">
-                  <span className="text-lg font-bold text-white">
-                    {user?.name?.charAt(0) || 'A'}
-                  </span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent 
-                side="right" 
-                className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
-                sideOffset={12}
-              >
-                <p className="font-semibold">{user?.name || 'Admin'}</p>
-                <p className="text-xs text-blue-400 mt-0.5">Administrator</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-
-          {/* Logout Icon Button */}
+    <SidebarFooter className="px-0 py-5 border-t border-slate-800">
+      <div className="space-y-5 flex flex-col items-center w-full">
+        {/* User Avatar */}
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-600 to-blue-500 flex items-center justify-center hover:from-blue-500 hover:to-blue-400 hover:scale-110 hover:shadow-lg hover:shadow-blue-500/50 hover:rotate-6 transition-all duration-300 cursor-pointer">
+                <span className="text-lg font-bold text-white">
+                  {user?.name?.charAt(0) || 'A'}
+                </span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent 
+              side="right" 
+              className="bg-slate-800 border-slate-700 text-white shadow-xl px-4 py-2.5 rounded-lg"
+              sideOffset={12}
+            >
+              <p className="font-semibold">{user?.name || 'Admin'}</p>
+              <p className="text-xs text-blue-400 mt-0.5">Administrator</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>          {/* Logout Icon Button */}
           <TooltipProvider delayDuration={200}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -232,17 +211,6 @@ const SidebarFooterContent = ({ systemHealth, user, signOut }: { systemHealth: a
   return (
     <SidebarFooter className="px-3 py-3 border-t border-slate-800">
       <div className="space-y-2">
-        {/* System Status */}
-        <div className="flex items-center justify-between p-2 rounded-lg bg-slate-800">
-          <div className="flex items-center gap-2">
-            <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-            <span className="text-xs text-slate-400">Online</span>
-          </div>
-          <Badge className="bg-slate-700 text-slate-300 text-xs">
-            {systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '99.9%'}
-          </Badge>
-        </div>
-
         {/* User Info */}
         <div className="flex items-center gap-2 p-2 rounded-lg bg-slate-800">
           <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
@@ -333,14 +301,6 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     queryKey: ['sidebar-classes'],
     queryFn: () => api.classes.getAll(),
     staleTime: 5 * 60 * 1000, // 5 minutes
-  });
-
-  // Fetch system health for sidebar stats
-  const { data: systemHealth } = useQuery({
-    queryKey: ['sidebar-system-health'],
-    queryFn: () => api.dashboard.getSystemHealth(),
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // Refresh every minute
   });
 
   // Map route to title and description
@@ -539,7 +499,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
             </SidebarGroup>
           </SidebarContent>
           
-          <SidebarFooterContent systemHealth={systemHealth} user={user} signOut={signOut} />
+          <SidebarFooterContent user={user} signOut={signOut} />
         </Sidebar>
 
         <MainContentArea />

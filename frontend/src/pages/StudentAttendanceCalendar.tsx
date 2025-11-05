@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Calendar, 
@@ -99,7 +99,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
   const month = currentDate.getMonth() + 1;
 
   // Fetch calendar data
-  const { data: calendarData, isLoading, error, isFetching } = useQuery<StudentCalendarData>({
+  const { data: calendarData, isLoading, error, isFetching } = useQuery<StudentCalendarData, Error, StudentCalendarData>({
     queryKey: ['student-calendar', studentId, year, month, propStudentId ? 'admin' : 'student'],
     queryFn: async () => {
       // If studentId is passed as prop (student view), use /me endpoint
@@ -119,12 +119,14 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
         throw new Error('Failed to fetch calendar data');
       }
       
-      return response.json();
+      const data: StudentCalendarData = await response.json();
+      return data;
     },
     enabled: !!studentId,
     retry: 1,
     staleTime: 30000, // Keep data fresh for 30 seconds
-    keepPreviousData: true // Keep showing old data while fetching new data
+    // In React Query v5, use placeholderData: keepPreviousData() to retain previous data during transitions
+    placeholderData: keepPreviousData
   });
 
   // Navigate to previous month
@@ -225,6 +227,68 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
     return grid;
   }, [calendarData, year, month]);
 
+  // Compute streaks locally using updated policy:
+  // - A day counts toward streak only if ALL held classes are present (no late/partial/absent)
+  // - Cancelled classes are excluded from evaluation
+  // - Days with no held classes (after excluding cancelled) neither break nor extend the streak
+  const { computedCurrentStreak, computedLongestStreak, serverMismatch } = useMemo(() => {
+    if (!calendarData) return { computedCurrentStreak: 0, computedLongestStreak: 0, serverMismatch: false };
+
+    // Helper: classify a day
+    const classify = (d: CalendarDay): 'skip' | 'streak' | 'break' => {
+      const records = Array.isArray(d.records) ? d.records : [];
+      // Exclude cancelled classes (backend recently added)
+      const included = records.filter(r => (r?.status || '').toLowerCase() !== 'cancelled');
+
+      // If the system marks inactive/no classes, treat as skip
+      if (d.status === 'system_inactive') return 'skip';
+
+      // No held classes after excluding cancelled => skip
+      if (included.length === 0) return 'skip';
+
+      // Require ALL included classes to be present
+      const allPresent = included.every(r => (r?.status || '').toLowerCase() === 'present');
+      return allPresent ? 'streak' : 'break';
+    };
+
+    // Sort days by date just in case
+    const days = [...calendarData.calendar_days].sort((a, b) => a.date.localeCompare(b.date));
+
+    // Today in local YYYY-MM-DD
+    const t = new Date();
+    const todayStr = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+
+    // Find last index at or before today
+    let lastIdx = days.findIndex(d => d.date > todayStr) - 1;
+    if (lastIdx < 0) lastIdx = days.length - 1; // if none greater than today, use last of month
+
+    // Compute current streak scanning backward
+    let current = 0;
+    for (let i = lastIdx; i >= 0; i--) {
+      const cls = classify(days[i]);
+      if (cls === 'skip') continue; // neither break nor extend
+      if (cls === 'streak') { current += 1; continue; }
+      if (cls === 'break') break;
+    }
+
+    // Compute longest streak within the month using same rule
+    let longest = 0;
+    let running = 0;
+    for (const d of days) {
+      const cls = classify(d);
+      if (cls === 'skip') continue;
+      if (cls === 'streak') { running += 1; longest = Math.max(longest, running); }
+      else { running = 0; }
+    }
+
+    const mismatch = !!(calendarData.statistics && (
+      (typeof calendarData.statistics.current_streak === 'number' && calendarData.statistics.current_streak !== current) ||
+      (typeof calendarData.statistics.longest_streak === 'number' && calendarData.statistics.longest_streak !== longest)
+    ));
+
+    return { computedCurrentStreak: current, computedLongestStreak: longest, serverMismatch: mismatch };
+  }, [calendarData]);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 flex items-center justify-center">
@@ -263,6 +327,32 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
 
   const stats = calendarData.statistics;
 
+  // Reusable streak card component to show streak blocks separately
+  const StreakCard: React.FC<{
+    title: string;
+    current: number;
+    longest: number;
+    gradientFrom: string;
+    gradientTo: string;
+  }> = ({ title, current, longest, gradientFrom, gradientTo }) => (
+    <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden relative">
+      <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}></div>
+      <CardHeader className="pb-2 pt-3">
+        <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
+          <Award className="h-3 w-3" />
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pb-3">
+        <div className="text-2xl font-bold text-white mb-1">
+          {current}
+          <span className="text-sm text-slate-400 ml-1">days</span>
+        </div>
+        <p className="text-xs text-slate-400">Longest: {longest} days</p>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 p-4">
       <div className="max-w-7xl mx-auto space-y-4">
@@ -293,7 +383,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
           <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
             <CardHeader className="pb-2 pt-3">
@@ -318,7 +408,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
             <CardHeader className="pb-2 pt-3">
               <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
                 <BookOpen className="h-3 w-3" />
-                Total Classes
+                Total Classes Held
               </CardTitle>
             </CardHeader>
             <CardContent className="pb-3">
@@ -333,24 +423,13 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
-            <CardHeader className="pb-2 pt-3">
-              <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
-                <Award className="h-3 w-3" />
-                Current Streak
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pb-3">
-              <div className="text-2xl font-bold text-white mb-1">
-                {stats.current_streak}
-                <span className="text-sm text-slate-400 ml-1">days</span>
-              </div>
-              <p className="text-xs text-slate-400">
-                Longest: {stats.longest_streak} days
-              </p>
-            </CardContent>
-          </Card>
+          <StreakCard
+            title="All‑time Streak"
+            current={stats.current_streak}
+            longest={stats.longest_streak}
+            gradientFrom="from-purple-500"
+            gradientTo="to-pink-500"
+          />
 
           <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-500"></div>
@@ -369,6 +448,14 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
               </p>
             </CardContent>
           </Card>
+
+          <StreakCard
+            title="This Month Streak"
+            current={computedCurrentStreak}
+            longest={computedLongestStreak}
+            gradientFrom="from-blue-500"
+            gradientTo="to-cyan-500"
+          />
         </div>
 
         {/* Calendar View */}

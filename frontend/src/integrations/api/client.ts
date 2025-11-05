@@ -1259,6 +1259,34 @@ export const api = {
       return apiRequest(`/teacher/notifications?${params}`);
     },
 
+    // Inbox endpoints (per-user)
+    getInbox: async (onlyUnread: boolean = true, skip: number = 0, limit: number = 20) => {
+      const params = new URLSearchParams({
+        only_unread: String(onlyUnread),
+        skip: String(skip),
+        limit: String(limit),
+      });
+      return apiRequest(`/teacher/notifications/inbox?${params}`);
+    },
+
+    markRead: async (notificationId: number) => {
+      return apiRequest(`/teacher/notifications/${notificationId}/read`, {
+        method: 'POST',
+      });
+    },
+
+    clearOne: async (notificationId: number) => {
+      return apiRequest(`/teacher/notifications/${notificationId}/clear`, {
+        method: 'POST',
+      });
+    },
+
+    clearAll: async () => {
+      return apiRequest(`/teacher/notifications/clear`, {
+        method: 'POST',
+      });
+    },
+
     // Class cancellation
     cancelClass: async (data: {
       schedule_id: number;

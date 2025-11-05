@@ -1326,13 +1326,6 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 </button>
               )}
 
-              {/* Debug: Show if not admin */}
-              {!isAdmin && (
-                <div className="flex items-center gap-2 bg-orange-500/20 text-orange-300 px-3 py-2 rounded-xl border border-orange-500/30">
-                  <span className="text-sm">Student View - No Create Access</span>
-                </div>
-              )}
-
               <button
                 onClick={() => setShowSettingsModal(true)}
                 className="p-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl hover:bg-slate-700/60 transition-all duration-200"

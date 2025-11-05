@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -46,6 +47,9 @@ class EnhancedNotification(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Optional structured payload for clients (JSONB). Use this instead of using attribute name 'metadata'
+    payload = Column(JSONB, nullable=True)
     
     # Relationships
     sender = relationship("User", foreign_keys=[sender_id])
@@ -60,7 +64,13 @@ class NotificationReadReceipt(Base):
     notification_id = Column(Integer, ForeignKey("enhanced_notifications.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     read_at = Column(DateTime, server_default=func.now())
+    dismissed_at = Column(DateTime, nullable=True)
     
     # Relationships
     notification = relationship("EnhancedNotification", back_populates="read_receipts")
     user = relationship("User")
+
+    # Ensure idempotency per (notification, user)
+    __table_args__ = (
+        UniqueConstraint('notification_id', 'user_id', name='uq_notification_receipt_user'),
+    )

@@ -12,7 +12,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const checkAuthStatus = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('authToken');
+        // Check both localStorage and sessionStorage for auth token
+        const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
         if (token) {
           // Check if token is expired
           const parts = token.split('.');
@@ -76,11 +77,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Authentication methods using only our backend API
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, rememberMe: boolean = true) => {
     try {
       // Authenticate with backend API
       const authResponse = await api.auth.login(email, password);
-      localStorage.setItem('authToken', authResponse.token);
+      
+      // Store token based on remember me preference
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('authToken', authResponse.token);
+      
       setUser(authResponse.user);
       return { error: null, user: authResponse.user };
     } catch (error) {
@@ -98,7 +103,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOutUser = async () => {
     // Sign out from our backend
     await api.auth.logout();
+    // Clear tokens from both storages
     localStorage.removeItem('authToken');
+    sessionStorage.removeItem('authToken');
     setUser(null);
   };
 

@@ -6,7 +6,6 @@ import { FileText, Users, UserCheck } from 'lucide-react';
 import { useAttendanceData } from '@/hooks/useAttendanceData';
 import AttendanceFilters from '@/components/attendance/AttendanceFilters';
 import AttendanceTable from '@/components/attendance/AttendanceTable';
-import AttendanceSummary from '@/components/attendance/AttendanceSummary';
 import EnhancedAttendanceManagement from '@/components/attendance/EnhancedAttendanceManagement';
 import IndividualStudentAnalysis from '@/components/attendance/IndividualStudentAnalysis';
 
@@ -107,7 +106,7 @@ const AttendancePage = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50">
+        <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border border-slate-700/50">
           <TabsTrigger 
             value="admin-workflow"
             className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500"
@@ -121,13 +120,6 @@ const AttendancePage = () => {
           >
             <Users className="h-4 w-4 mr-2" />
             Daily Report
-          </TabsTrigger>
-          <TabsTrigger 
-            value="summary-report"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            Summary Report
           </TabsTrigger>
           <TabsTrigger 
             value="individual-analysis"
@@ -182,22 +174,6 @@ const AttendancePage = () => {
                   onPageSizeChange={setPageSize}
                 />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="summary-report" className="mt-6">
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-            <CardHeader>
-              <CardTitle className="text-white">Attendance Summary Report</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AttendanceSummary 
-                selectedClass={selectedClass}
-                // For summary view, let's use the past 30 days as the default range
-                startDate={new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]}
-                endDate={new Date().toISOString().split('T')[0]}
-              />
             </CardContent>
           </Card>
         </TabsContent>

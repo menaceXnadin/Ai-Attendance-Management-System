@@ -5,7 +5,7 @@ Implements subject-based teacher assignment with proper authorization.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, desc, distinct
+from sqlalchemy import select, func, and_, or_, desc, distinct, update, text
 from sqlalchemy.orm import selectinload, joinedload
 from typing import List, Dict, Any, Optional
 from datetime import datetime, date, timedelta
@@ -1050,7 +1050,7 @@ async def send_teacher_notification(
         sender_id=current_user.id,
         sender_name=current_teacher.name,
         is_active=True,
-        metadata={
+        payload={
             "subject_id": notification_data.subject_id,
             "semester": notification_data.semester,
             "sent_by_teacher": True,
@@ -1219,7 +1219,7 @@ async def cancel_class(
                 sender_id=current_user.id,
                 sender_name=current_teacher.name,
                 is_active=True,
-                metadata={
+                payload={
                     "subject_id": schedule.subject_id,
                     "semester": schedule.semester,
                     "class_cancelled": True,
@@ -1257,26 +1257,25 @@ async def get_teacher_notifications(
     """
     Get notifications sent by this teacher or relevant to them.
     """
-    from app.models.notifications import EnhancedNotification, NotificationReadReceipt
+    from app.models.notifications import EnhancedNotification, NotificationReadReceipt    
     
-    # Get notifications sent by this teacher or global notifications
+    # Get notifications SENT BY THIS TEACHER only (teacher-specific "Sent Notifications")
     notifications_result = await db.execute(
         select(EnhancedNotification).options(
             selectinload(EnhancedNotification.read_receipts)
         ).where(
             and_(
                 EnhancedNotification.is_active == True,
-                or_(
-                    EnhancedNotification.sender_id == current_user.id,
-                    EnhancedNotification.target_user_id == current_user.id
-                )
+                EnhancedNotification.sender_id == current_user.id,
             )
         ).order_by(desc(EnhancedNotification.created_at)).offset(skip).limit(limit)
     )
     notifications = notifications_result.scalars().all()
-    
-    return [
-        {
+
+    def serialize_notification(notif):
+        # Safe payload; avoid Base.metadata name collision
+        safe_payload = getattr(notif, "payload", None) if isinstance(getattr(notif, "payload", None), dict) else None
+        return {
             "id": notif.id,
             "title": notif.title,
             "message": notif.message,
@@ -1284,8 +1283,250 @@ async def get_teacher_notifications(
             "priority": notif.priority.value,
             "scope": notif.scope.value,
             "created_at": notif.created_at.isoformat(),
-            "metadata": notif.metadata,
-            "is_read": any(r.user_id == current_user.id for r in notif.read_receipts)
+            "payload": safe_payload,
+            "is_read": any(r.user_id == current_user.id for r in notif.read_receipts),
         }
-        for notif in notifications
-    ]
+
+    return [serialize_notification(notif) for notif in notifications]
+
+
+# ============================================================================
+# NOTIFICATION INBOX (per-user read/clear without deletion)
+# ============================================================================
+
+@router.get("/notifications/inbox")
+async def get_teacher_notifications_inbox(
+    only_unread: bool = Query(True, description="Return only unread (not dismissed) notifications"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    current_teacher: Teacher = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Inbox for the current teacher (user). Returns notifications relevant to this user
+    (global, faculty-specific to their faculty, or individual) excluding dismissed.
+    """
+    from app.models.notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope
+
+    # Relevance conditions
+    relevance = or_(
+        EnhancedNotification.scope == NotificationScope.global_scope,
+        and_(
+            EnhancedNotification.scope == NotificationScope.faculty_specific,
+            EnhancedNotification.target_faculty_id == current_teacher.faculty_id,
+        ),
+        and_(
+            EnhancedNotification.scope == NotificationScope.individual,
+            EnhancedNotification.target_user_id == current_user.id,
+        ),
+    )
+
+    # LEFT JOIN receipts for this user to evaluate read/dismiss state without excluding missing rows
+    receipts_subq = (
+        select(NotificationReadReceipt)
+        .where(NotificationReadReceipt.user_id == current_user.id)
+        .subquery()
+    )
+
+    # Base query
+    query = (
+        select(EnhancedNotification, receipts_subq.c.read_at, receipts_subq.c.dismissed_at)
+        .outerjoin(receipts_subq, receipts_subq.c.notification_id == EnhancedNotification.id)
+        .where(and_(EnhancedNotification.is_active == True, relevance))
+    )
+
+    # Exclude dismissed always
+    query = query.where(or_(receipts_subq.c.dismissed_at.is_(None)))
+
+    # Filter only unread if requested (no read_at)
+    if only_unread:
+        query = query.where(or_(receipts_subq.c.read_at.is_(None)))
+
+    query = query.order_by(desc(EnhancedNotification.created_at), desc(EnhancedNotification.id)).offset(skip).limit(limit)
+
+    result = await db.execute(query)
+    rows = result.all()
+
+    def serialize_row(notif, read_at, dismissed_at):
+        safe_payload = getattr(notif, "payload", None) if isinstance(getattr(notif, "payload", None), dict) else None
+        return {
+            "id": notif.id,
+            "title": notif.title,
+            "message": notif.message,
+            "type": notif.type.value,
+            "priority": notif.priority.value,
+            "scope": notif.scope.value,
+            "created_at": notif.created_at.isoformat(),
+            "payload": safe_payload,
+            "is_read": read_at is not None,
+        }
+
+    return [serialize_row(n, r, d) for (n, r, d) in rows]
+
+
+@router.post("/notifications/{notification_id}/read")
+async def mark_notification_read(
+    notification_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Mark a notification as read for the current user (idempotent).
+    """
+    from app.models.notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope
+
+    # Verify notification is relevant
+    notif_result = await db.execute(
+        select(EnhancedNotification).where(EnhancedNotification.id == notification_id)
+    )
+    notif = notif_result.scalar_one_or_none()
+    if not notif or not notif.is_active:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    is_relevant = (
+        notif.scope == NotificationScope.global_scope or
+        (notif.scope == NotificationScope.faculty_specific and notif.target_faculty_id == current_teacher.faculty_id) or
+        (notif.scope == NotificationScope.individual and notif.target_user_id == current_user.id)
+    )
+    if not is_relevant:
+        raise HTTPException(status_code=403, detail="Not authorized for this notification")
+
+    # Upsert receipt
+    receipt_result = await db.execute(
+        select(NotificationReadReceipt).where(
+            and_(
+                NotificationReadReceipt.notification_id == notification_id,
+                NotificationReadReceipt.user_id == current_user.id,
+            )
+        )
+    )
+    receipt = receipt_result.scalar_one_or_none()
+    now = datetime.now()
+    if receipt:
+        if receipt.read_at is None:
+            receipt.read_at = now
+        # don't change dismissed_at here
+    else:
+        new_receipt = NotificationReadReceipt(
+            notification_id=notification_id,
+            user_id=current_user.id,
+            read_at=now,
+            dismissed_at=None,
+        )
+        db.add(new_receipt)
+
+    await db.commit()
+    return {"success": True}
+
+
+@router.post("/notifications/{notification_id}/clear")
+async def clear_notification_for_user(
+    notification_id: int,
+    current_teacher: Teacher = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dismiss a single notification for the current user (idempotent).
+    """
+    from app.models.notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope
+
+    notif_result = await db.execute(
+        select(EnhancedNotification).where(EnhancedNotification.id == notification_id)
+    )
+    notif = notif_result.scalar_one_or_none()
+    if not notif or not notif.is_active:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    is_relevant = (
+        notif.scope == NotificationScope.global_scope or
+        (notif.scope == NotificationScope.faculty_specific and notif.target_faculty_id == current_teacher.faculty_id) or
+        (notif.scope == NotificationScope.individual and notif.target_user_id == current_user.id)
+    )
+    if not is_relevant:
+        raise HTTPException(status_code=403, detail="Not authorized for this notification")
+
+    receipt_result = await db.execute(
+        select(NotificationReadReceipt).where(
+            and_(
+                NotificationReadReceipt.notification_id == notification_id,
+                NotificationReadReceipt.user_id == current_user.id,
+            )
+        )
+    )
+    receipt = receipt_result.scalar_one_or_none()
+    now = datetime.now()
+    if receipt:
+        receipt.dismissed_at = receipt.dismissed_at or now
+        if receipt.read_at is None:
+            receipt.read_at = now
+    else:
+        new_receipt = NotificationReadReceipt(
+            notification_id=notification_id,
+            user_id=current_user.id,
+            read_at=now,
+            dismissed_at=now,
+        )
+        db.add(new_receipt)
+
+    await db.commit()
+    return {"success": True}
+
+
+@router.post("/notifications/clear")
+async def clear_all_notifications_for_user(
+    current_teacher: Teacher = Depends(get_current_teacher),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Dismiss all relevant notifications for current user.
+    Performs an INSERT ... SELECT for missing receipts and an UPDATE for existing ones.
+    """
+    from app.models.notifications import EnhancedNotification, NotificationReadReceipt, NotificationScope
+
+    # INSERT missing receipts as dismissed in a single SQL statement (PostgreSQL)
+    insert_sql = text(
+        """
+        INSERT INTO notification_read_receipts (notification_id, user_id, read_at, dismissed_at)
+        SELECT n.id, :uid, NOW(), NOW()
+        FROM enhanced_notifications n
+        LEFT JOIN notification_read_receipts r
+          ON r.notification_id = n.id AND r.user_id = :uid
+        WHERE n.is_active = TRUE
+          AND (
+                n.scope = :global
+             OR (n.scope = :faculty AND n.target_faculty_id = :fid)
+             OR (n.scope = :individual AND n.target_user_id = :uid)
+          )
+          AND r.id IS NULL
+        """
+    )
+
+    await db.execute(
+        insert_sql,
+        {
+            "uid": current_user.id,
+            "fid": current_teacher.faculty_id,
+            "global": "global_scope",
+            "faculty": "faculty_specific",
+            "individual": "individual",
+        },
+    )
+
+    # UPDATE existing receipts to set dismissed_at where not already dismissed
+    await db.execute(
+        update(NotificationReadReceipt)
+        .where(
+            and_(
+                NotificationReadReceipt.user_id == current_user.id,
+                NotificationReadReceipt.dismissed_at.is_(None),
+            )
+        )
+        .values(dismissed_at=datetime.now(), read_at=func.coalesce(NotificationReadReceipt.read_at, datetime.now()))
+    )
+
+    await db.commit()
+    return {"success": True}
