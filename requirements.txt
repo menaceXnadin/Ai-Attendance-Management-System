@@ -23,7 +23,7 @@ pydantic-settings==2.1.0
 # AI/ML for Face Recognition - Using InsightFace (better than face_recognition)
 opencv-python==4.8.1.78
 insightface==0.7.3
-onnxruntime==1.16.3  # Required for InsightFace
+onnxruntime==1.20.0  # Required for InsightFace
 numpy==1.24.3
 pillow==10.1.0
 scikit-learn==1.3.2
