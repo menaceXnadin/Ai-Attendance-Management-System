@@ -65,14 +65,21 @@ async def lifespan(app: FastAPI):
 
     # Start the background scheduler for auto-absent processing
     logger.info("Starting background scheduler...")
-    await scheduler_service.start()
+    try:
+        await scheduler_service.start()
+    except Exception as e:
+        # Don't let scheduler failures bring down the whole app; log and continue.
+        logger.exception(f"Failed to start scheduler (continuing without it): {e}")
 
     # Hand control to application runtime
     yield
 
     # Shutdown
     logger.info("Stopping background scheduler...")
-    await scheduler_service.stop()
+    try:
+        await scheduler_service.stop()
+    except Exception as e:
+        logger.exception(f"Error stopping scheduler: {e}")
 
 # Create FastAPI app with lifespan handler
 app = FastAPI(
