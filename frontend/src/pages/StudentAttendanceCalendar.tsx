@@ -354,28 +354,28 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 p-4">
-      <div className="max-w-7xl mx-auto space-y-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 p-2 sm:p-3 md:p-4">
+      <div className="max-w-7xl mx-auto space-y-3 sm:space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
             {!hideBackButton && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => navigate('/app/students')}
-                className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                className="border-slate-600 text-slate-300 hover:bg-slate-800 text-xs sm:text-sm px-2 sm:px-3"
               >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back
+                <ArrowLeft className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                <span className="hidden sm:inline">Back</span>
               </Button>
             )}
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-                <Calendar className="h-6 w-6 text-blue-400" />
-                Attendance Calendar
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+                <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
+                <span className="truncate">Attendance Calendar</span>
               </h1>
-              <p className="text-blue-200/80 text-sm">
+              <p className="text-blue-200/80 text-xs sm:text-sm truncate">
                 {calendarData.student_name} ({calendarData.student_number})
               </p>
             </div>
@@ -383,17 +383,17 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
         </div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
           <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
-            <CardHeader className="pb-2 pt-3">
-              <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
-                <CheckCircle className="h-3 w-3" />
-                Attendance Rate
+            <CardHeader className="pb-1.5 sm:pb-2 pt-2 sm:pt-3 px-2 sm:px-4">
+              <CardTitle className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1">
+                <CheckCircle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+                <span className="hidden sm:inline">Attendance </span>Rate
               </CardTitle>
             </CardHeader>
-            <CardContent className="pb-3">
-              <div className="text-2xl font-bold text-white mb-1">
+            <CardContent className="pb-2 sm:pb-3 px-2 sm:px-4">
+              <div className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-1">
                 {stats.attendance_rate.toFixed(1)}%
               </div>
               <Progress value={stats.attendance_rate} className="h-1.5 mb-1" />
@@ -496,19 +496,20 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
           </CardHeader>
           <CardContent className="pb-4">
             {/* Day headers */}
-            <div className="grid grid-cols-7 gap-1.5 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="text-center text-xs font-semibold text-slate-400 py-1.5">
-                  {day}
+            <div className="grid grid-cols-7 gap-0.5 sm:gap-1 md:gap-1.5 mb-1 sm:mb-2">
+              {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, idx) => (
+                <div key={idx} className="text-center text-[10px] sm:text-xs font-semibold text-slate-400 py-1 sm:py-1.5">
+                  <span className="sm:hidden">{day}</span>
+                  <span className="hidden sm:inline">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][idx]}</span>
                 </div>
               ))}
             </div>
 
             {/* Calendar grid */}
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-0.5 sm:gap-1 md:gap-1.5">
               {calendarGrid.map((day, index) => {
                 if (!day) {
-                  return <div key={`empty-${index}`} className="h-14" />;
+                  return <div key={`empty-${index}`} className="h-12 sm:h-14" />;
                 }
 
                 // Get today's date in local timezone
@@ -521,20 +522,21 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
                     key={day.date}
                     onClick={() => handleDayClick(day)}
                     className={`
-                      h-14 border rounded-lg p-2 transition-all cursor-pointer hover:scale-105 hover:shadow-lg
+                      h-12 sm:h-14 border rounded-md sm:rounded-lg p-1 sm:p-2 transition-all cursor-pointer active:scale-95 sm:hover:scale-105 hover:shadow-lg
                       ${getStatusColor(day.status)}
-                      ${isToday ? 'ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900' : ''}
+                      ${isToday ? 'ring-1 sm:ring-2 ring-blue-400 ring-offset-1 sm:ring-offset-2 ring-offset-slate-900' : ''}
                     `}
                     title={`Click to view details for ${day.weekday}, ${day.date}`}
                   >
                     <div className="flex flex-col h-full justify-between">
                       <div className="flex items-center justify-between">
-                        <span className="text-base font-bold">{day.day}</span>
-                        {getStatusIcon(day.status)}
+                        <span className="text-xs sm:text-sm md:text-base font-bold">{day.day}</span>
+                        <span className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5">{getStatusIcon(day.status)}</span>
                       </div>
                       {day.present > 0 && (
-                        <div className="text-[10px] text-center font-semibold opacity-80">
-                          {day.present} {day.present === 1 ? 'present' : 'present'}
+                        <div className="text-[8px] sm:text-[10px] text-center font-semibold opacity-80">
+                          <span className="hidden sm:inline">{day.present} present</span>
+                          <span className="sm:hidden">{day.present}</span>
                         </div>
                       )}
                     </div>
@@ -575,24 +577,24 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
 
         {/* Day Details Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="max-w-lg max-h-[75vh] bg-slate-900 border-slate-700 p-0 gap-0 overflow-hidden">
+          <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] sm:max-h-[75vh] bg-slate-900 border-slate-700 p-0 gap-0 overflow-hidden">
             {selectedDay && (
               <>
-                <DialogHeader className="px-5 pt-5 pb-3 border-b border-slate-700/50">
-                  <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
-                    <Calendar className="h-5 w-5 text-blue-400" />
-                    {selectedDay.weekday}, {new Date(selectedDay.date).toLocaleDateString('en-US', { 
+                <DialogHeader className="px-3 sm:px-5 pt-3 sm:pt-5 pb-2 sm:pb-3 border-b border-slate-700/50">
+                  <DialogTitle className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                    <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
+                    <span className="truncate">{selectedDay.weekday}, {new Date(selectedDay.date).toLocaleDateString('en-US', { 
                       month: 'short', 
                       day: 'numeric', 
                       year: 'numeric' 
-                    })}
+                    })}</span>
                   </DialogTitle>
-                  <DialogDescription className="text-xs text-slate-400">
+                  <DialogDescription className="text-[10px] sm:text-xs text-slate-400">
                     Attendance details
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-3 px-5 py-4 overflow-y-auto max-h-[calc(75vh-8rem)] custom-scrollbar">
+                <div className="space-y-2 sm:space-y-3 px-3 sm:px-5 py-3 sm:py-4 overflow-y-auto max-h-[calc(85vh-7rem)] sm:max-h-[calc(75vh-8rem)] custom-scrollbar">
                   {/* Day Summary Card */}
                   <Card className="bg-slate-800/50 border-slate-700">
                     <CardHeader className="pb-2 pt-3 px-3">

@@ -26,6 +26,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
   const location = useLocation();
   const { signOut, user } = useAuth();
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   
   // Check face registration status
   const { data: studentData } = useQuery({
@@ -65,9 +66,19 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 overflow-hidden">
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      
       {/* Fixed Sidebar */}
       <div
-        className={`fixed top-0 left-0 h-screen z-40 bg-slate-900/70 backdrop-blur-md border-r border-slate-700/50 flex flex-col transition-all duration-300 ease-in-out ${isCollapsed ? 'w-20' : 'w-64'}`}
+        className={`fixed top-0 left-0 h-screen z-40 bg-slate-900/70 backdrop-blur-md border-r border-slate-700/50 flex flex-col transition-all duration-300 ease-in-out ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'}`}
       >
         {/* Sidebar Header */}
         <div className="flex h-16 items-center justify-center px-4 border-b border-slate-700/50 relative flex-shrink-0">
@@ -75,12 +86,21 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
             <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
             <span className="text-xl font-semibold text-white">AttendAI</span>
           </div>
+          {/* Desktop collapse button - hidden on mobile */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="absolute right-4 p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
+            className="hidden lg:block absolute right-4 p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
             title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
           >
             {isCollapsed ? <MenuIcon className="h-5 w-5" /> : <XIcon className="h-5 w-5" />}
+          </button>
+          {/* Mobile close button */}
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden absolute right-4 p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
+            title="Close Menu"
+          >
+            <XIcon className="h-5 w-5" />
           </button>
         </div>
         
@@ -242,15 +262,25 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
       
       {/* Main Content Area */}
       <div
-        className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${isCollapsed ? 'pl-20' : 'pl-64'}`}
+        className={`flex flex-col min-h-screen transition-all duration-300 ease-in-out ${
+          isCollapsed ? 'pl-0 lg:pl-20' : 'pl-0 lg:pl-64'
+        }`}
       >
         {/* Top Header Bar */}
-        <div className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between px-6 flex-shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-semibold text-white">{getPageTitle()}</h1>
+        <div className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-700/50 flex items-center justify-between px-3 sm:px-4 md:px-6 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Mobile menu button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-lg hover:bg-slate-800/50 text-slate-300 hover:text-white transition-colors"
+              title="Open Menu"
+            >
+              <MenuIcon className="h-5 w-5" />
+            </button>
+            <h1 className="text-base sm:text-lg md:text-xl font-semibold text-white truncate">{getPageTitle()}</h1>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-blue-200/80">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="hidden sm:block text-xs sm:text-sm text-blue-200/80">
               Welcome back, <span className="font-medium text-white">{user?.name?.split(' ')[0] || 'Student'}</span>
             </div>
             <ProfileDropdown
@@ -264,7 +294,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
         </div>
         
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-3 sm:p-4 md:p-6">
           {children}
         </div>
       </div>

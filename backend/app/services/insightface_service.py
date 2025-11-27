@@ -9,6 +9,16 @@ from insightface.app import FaceAnalysis
 from insightface.data import get_image as ins_get_image
 import onnxruntime as ort
 from app.core.config import settings
+from app.core.face_constants import (
+    DETECTION_MIN_CONFIDENCE,
+    REGISTRATION_MIN_CONFIDENCE,
+    SIMILARITY_THRESHOLD,
+    LIVE_SIMILARITY_THRESHOLD,
+    MIN_FACE_PIXEL_SIZE,
+    MIN_FACE_AREA_PERCENT,
+    MAX_DECODE_DIMENSION,
+    MIN_EMBEDDING_NORM,
+)
 from app.schemas import FaceRecognitionResponse
 import logging
 import os
@@ -28,8 +38,10 @@ class InsightFaceService:
     def __init__(self):
         """Initialize InsightFace service with optimized settings."""
         self.app = None
-        self.tolerance = getattr(settings, 'face_recognition_tolerance', 0.6)
-        self.confidence_threshold = 0.5  # Minimum face detection confidence
+        # Keep tolerance aligned with centralized constants for matching
+        self.tolerance = getattr(settings, 'face_recognition_tolerance', SIMILARITY_THRESHOLD)
+        # Minimum face detection confidence
+        self.confidence_threshold = DETECTION_MIN_CONFIDENCE
         self.development_mode = DEVELOPMENT_MODE
         
         if self.development_mode:
@@ -160,6 +172,18 @@ class InsightFaceService:
             # Convert to RGB then to BGR for OpenCV
             rgb_image = pil_image.convert('RGB')
             bgr_image = cv2.cvtColor(np.array(rgb_image), cv2.COLOR_RGB2BGR)
+            # Convert to numpy
+            arr = np.array(rgb_image)
+
+            # Optional downscale for performance if image is very large
+            h, w = arr.shape[:2]
+            if max(h, w) > MAX_DECODE_DIMENSION:
+                scale = MAX_DECODE_DIMENSION / float(max(h, w))
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+                arr = cv2.resize(arr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
+            bgr_image = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
             
             return bgr_image
         
@@ -299,7 +323,7 @@ class InsightFaceService:
                 )
             
             # Check face quality
-            if face_info['confidence'] < self.confidence_threshold:
+            if face_info['confidence'] < REGISTRATION_MIN_CONFIDENCE:
                 return FaceRecognitionResponse(
                     success=False,
                     message=f"Face detection confidence too low ({face_info['confidence']:.2f}). Please improve lighting.",
@@ -365,12 +389,12 @@ class InsightFaceService:
             face_width = bbox[2] - bbox[0]
             face_height = bbox[3] - bbox[1]
             
-            if face_width < 80 or face_height < 80:
+            if face_width < MIN_FACE_PIXEL_SIZE or face_height < MIN_FACE_PIXEL_SIZE:
                 return False, "Face appears too small. Please move closer to the camera."
             
             # Check embedding quality
             embedding_norm = face_info['embedding_norm']
-            if embedding_norm < 0.1:  # Very low norm indicates poor feature extraction
+            if embedding_norm < MIN_EMBEDDING_NORM:  # Very low norm indicates poor feature extraction
                 return False, "Face features could not be extracted clearly. Please ensure good lighting and clear visibility."
             
             logger.info(f"✅ Face validation passed - Confidence: {face_info['confidence']:.3f}, "
@@ -486,7 +510,7 @@ class InsightFaceService:
             
             # Check detection confidence
             confidence = face_data['confidence']
-            if confidence < self.confidence_threshold:
+            if confidence < REGISTRATION_MIN_CONFIDENCE:
                 return False, f"Face detection confidence too low ({confidence:.2f}). Please improve lighting and face visibility."
             
             # Check face size relative to image
@@ -495,7 +519,7 @@ class InsightFaceService:
             face_height = face_data['height']
             
             # Face should be at least 80x80 pixels
-            if face_width < 80 or face_height < 80:
+            if face_width < MIN_FACE_PIXEL_SIZE or face_height < MIN_FACE_PIXEL_SIZE:
                 return False, f"Face too small ({face_width:.0f}x{face_height:.0f}px). Please move closer to camera."
             
             # Face should not be too large (avoiding extreme close-ups)
@@ -507,15 +531,15 @@ class InsightFaceService:
             face_area = face_data['area']
             face_percentage = (face_area / image_area) * 100
             
-            if face_percentage < 5:
+            if face_percentage < MIN_FACE_AREA_PERCENT:
                 return False, f"Face too small in frame ({face_percentage:.1f}%). Please move closer."
             
-            if face_percentage > 70:
+            if face_percentage > MAX_FACE_AREA_PERCENT:
                 return False, f"Face too large in frame ({face_percentage:.1f}%). Please move back."
             
             # Check embedding quality
             embedding_norm = face_data['embedding_norm']
-            if embedding_norm < 0.1:
+            if embedding_norm < MIN_EMBEDDING_NORM:
                 return False, "Face features unclear. Please ensure good lighting and clear facial visibility."
             
             # Check if face is reasonably centered
@@ -528,7 +552,7 @@ class InsightFaceService:
             center_offset_x = abs(face_center_x - image_center_x) / image_width
             center_offset_y = abs(face_center_y - image_center_y) / image_height
             
-            if center_offset_x > 0.3 or center_offset_y > 0.3:
+            if center_offset_x > MAX_CENTER_OFFSET or center_offset_y > MAX_CENTER_OFFSET:
                 return False, "Please center your face in the camera frame."
             
             # All validation checks passed

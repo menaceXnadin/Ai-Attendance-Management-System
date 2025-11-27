@@ -38,10 +38,10 @@ import {
   Globe,
   GripVertical,
   GraduationCap,
-  Users2
+  Users2,
+  KeyRound
 } from 'lucide-react';
 import logo from '@/assets/main.png';
-import { ThemeToggle } from '@/components/ThemeToggle';
 import NotificationCenter from '@/components/NotificationCenter';
 import { useAuth } from '@/contexts/useAuth';
 
@@ -316,6 +316,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     if (path.includes('/app/monitoring')) return { title: 'System Monitor', description: 'Real-time monitoring, alerts, and system status' };
     if (path.includes('/app/auto-absent')) return { title: 'Auto-Absent Control', description: 'Manage automatic absent marking system' };
     if (path.includes('/app/notifications')) return { title: 'Notifications', description: 'System notifications and alerts management' };
+    if (path.includes('/app/tools/reset-link')) return { title: 'Password Reset', description: 'Generate secure password reset links for users' };
     if (path.includes('/app/settings')) return { title: 'Settings', description: 'System configuration and preferences' };
     return { title: 'Dashboard', description: 'Welcome to AttendAI' };
   };
@@ -372,8 +373,7 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
               {/* Notifications */}
               <NotificationCenter />
               
-              {/* Theme Toggle */}
-              <ThemeToggle />
+              {/* Theme Toggle removed: dark mode enforced */}
             </div>
           </div>
 
@@ -487,6 +487,12 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
                     icon={<Bell className="w-5 h-5 transition-transform duration-300" />} 
                     label="Notifications" 
                     to="/app/notifications"
+                    isNew={true}
+                  />
+                  <SidebarNavItem 
+                    icon={<KeyRound className="w-5 h-5 transition-transform duration-300" />} 
+                    label="Password Reset" 
+                    to="/app/tools/reset-link"
                     isNew={true}
                   />
                   <SidebarNavItem 

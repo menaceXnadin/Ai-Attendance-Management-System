@@ -1,6 +1,0 @@
-student_number,date,subject_code,status,notes
-STU2025001,2025-10-01,CS101,present,Attended class - verified from paper attendance sheet
-STU2025001,2025-10-03,CS102,present,Present - instructor confirmed
-STU2025001,2025-10-05,CS101,absent,Absent - no signature on paper sheet
-STU2025002,2025-10-01,CS101,present,Attended - paper records
-STU2025002,2025-10-03,CS102,late,Arrived 15min late - noted by instructor

@@ -143,11 +143,11 @@ const StudentProfile: React.FC = () => {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">
       {/* Modern Header */}
-      <div className="text-center space-y-3">
-        <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
+      <div className="text-center space-y-2 sm:space-y-3">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
           Student Profile
         </h1>
-        <p className="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto">
+        <p className="text-sm sm:text-base md:text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto px-4">
           Manage your personal information and academic details
         </p>
       </div>
@@ -161,12 +161,12 @@ const StudentProfile: React.FC = () => {
             <div className="absolute inset-0 bg-gradient-to-r from-black/20 to-transparent"></div>
             
             {/* Content */}
-            <div className="relative px-8 py-12 text-white">
-              <div className="flex flex-col lg:flex-row items-center gap-8">
+            <div className="relative px-4 sm:px-6 md:px-8 py-8 sm:py-10 md:py-12 text-white">
+              <div className="flex flex-col lg:flex-row items-center gap-4 sm:gap-6 md:gap-8">
                 {/* Avatar Section */}
                 <div className="relative">
                   <div className="relative">
-                    <Avatar className="h-32 w-32 border-4 border-white/20 shadow-2xl ring-4 ring-white/10">
+                    <Avatar className="h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 border-4 border-white/20 shadow-2xl ring-4 ring-white/10">
                       <AvatarImage 
                         src={studentData.profileImage} 
                         alt={studentData.name || 'Profile'} 
@@ -194,21 +194,21 @@ const StudentProfile: React.FC = () => {
                 </div>
 
                 {/* Profile Info */}
-                <div className="flex-1 text-center lg:text-left space-y-4">
+                <div className="flex-1 text-center lg:text-left space-y-3 sm:space-y-4">
                   <div>
-                    <h2 className="text-4xl font-bold mb-2">
+                    <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-2">
                       {studentData.name || user?.name || 'Student'}
                     </h2>
-                    <div className="flex items-center gap-2 text-xl text-white/90 mb-4 justify-center lg:justify-start">
-                      <IdCard className="h-5 w-5" />
+                    <div className="flex items-center gap-2 text-base sm:text-lg md:text-xl text-white/90 mb-3 sm:mb-4 justify-center lg:justify-start">
+                      <IdCard className="h-4 w-4 sm:h-5 sm:w-5" />
                       {studentData.student_id || studentData.studentId || 'ID not assigned'}
                     </div>
                   </div>
                   
                   {/* Badges */}
-                  <div className="flex flex-wrap gap-3 justify-center lg:justify-start">
-                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30 px-4 py-2 text-sm">
-                      <GraduationCap className="h-4 w-4 mr-2" />
+                  <div className="flex flex-wrap gap-2 sm:gap-3 justify-center lg:justify-start">
+                    <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30 px-2 sm:px-3 md:px-4 py-1 sm:py-1.5 md:py-2 text-xs sm:text-sm">
+                      <GraduationCap className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                       {studentData.faculty || 'Faculty not assigned'}
                     </Badge>
                     {studentData.year && (
@@ -226,9 +226,9 @@ const StudentProfile: React.FC = () => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-3 justify-center lg:justify-start pt-4">
-                    <Button className="bg-white/20 text-white border border-white/30 hover:bg-white/30 backdrop-blur-sm">
-                      <Edit3 className="h-4 w-4 mr-2" />
+                  <div className="flex gap-2 sm:gap-3 justify-center lg:justify-start pt-3 sm:pt-4">
+                    <Button className="bg-white/20 text-white border border-white/30 hover:bg-white/30 backdrop-blur-sm text-xs sm:text-sm px-3 sm:px-4">
+                      <Edit3 className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                       Edit Profile
                     </Button>
                     <Button className="bg-white text-indigo-600 hover:bg-white/90">
@@ -244,16 +244,16 @@ const StudentProfile: React.FC = () => {
       </Card>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
         <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-emerald-600" />
+          <CardContent className="p-4 sm:p-5 md:p-6">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl flex items-center justify-center shrink-0">
+                <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
               </div>
-              <div>
-                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Status</p>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">Active</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Status</p>
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">Active</p>
               </div>
             </div>
           </CardContent>
@@ -291,36 +291,36 @@ const StudentProfile: React.FC = () => {
       </div>
 
       {/* Information Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
         {/* Personal Information */}
         <Card className="border-0 shadow-xl bg-white dark:bg-slate-900">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
               <User className="h-5 w-5 text-indigo-600" />
               Personal Information
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-                  <User className="h-5 w-5 text-blue-600" />
+          <CardContent className="space-y-4 sm:space-y-6">
+            <div className="space-y-3 sm:space-y-4">
+              <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Full Name</p>
-                  <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Full Name</p>
+                  <p className="text-sm sm:text-base md:text-lg font-semibold text-slate-900 dark:text-white truncate">
                     {studentData.name || user?.name || 'Not provided'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center">
-                  <Mail className="h-5 w-5 text-emerald-600" />
+              <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg flex items-center justify-center shrink-0">
+                  <Mail className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Email Address</p>
-                  <p className="text-lg font-semibold text-slate-900 dark:text-white break-all">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">Email Address</p>
+                  <p className="text-sm sm:text-base md:text-lg font-semibold text-slate-900 dark:text-white break-all">
                     {studentData.email || user?.email || 'Not provided'}
                   </p>
                 </div>
@@ -429,40 +429,40 @@ const StudentProfile: React.FC = () => {
 
       {/* Face Recognition Status */}
       <Card className="border-0 shadow-xl bg-white dark:bg-slate-900 overflow-hidden">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <Camera className="h-5 w-5 text-emerald-600" />
+        <CardHeader className="pb-3 sm:pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <Camera className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
             Face Recognition System
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className={`relative p-6 rounded-2xl border-2 ${
+          <div className={`relative p-4 sm:p-5 md:p-6 rounded-2xl border-2 ${
             studentData.face_encoding 
               ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
               : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
           }`}>
-            <div className="flex items-center gap-6">
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${
+            <div className="flex items-center gap-3 sm:gap-4 md:gap-6">
+              <div className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center shrink-0 ${
                 studentData.face_encoding 
                   ? 'bg-emerald-100 dark:bg-emerald-800'
                   : 'bg-amber-100 dark:bg-amber-800'
               }`}>
                 {studentData.face_encoding ? (
-                  <CheckCircle className="h-8 w-8 text-emerald-600" />
+                  <CheckCircle className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 text-emerald-600" />
                 ) : (
-                  <Clock className="h-8 w-8 text-amber-600" />
+                  <Clock className="h-6 w-6 sm:h-7 sm:w-7 md:h-8 md:w-8 text-amber-600" />
                 )}
               </div>
               
-              <div className="flex-1">
-                <h3 className={`text-xl font-bold mb-2 ${
+              <div className="flex-1 min-w-0">
+                <h3 className={`text-base sm:text-lg md:text-xl font-bold mb-1 sm:mb-2 ${
                   studentData.face_encoding 
                     ? 'text-emerald-800 dark:text-emerald-300'
                     : 'text-amber-800 dark:text-amber-300'
                 }`}>
                   {studentData.face_encoding ? 'Face Recognition Active' : 'Face Recognition Pending'}
                 </h3>
-                <p className={`${
+                <p className={`text-xs sm:text-sm ${
                   studentData.face_encoding 
                     ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-amber-600 dark:text-amber-400'
@@ -475,8 +475,8 @@ const StudentProfile: React.FC = () => {
               </div>
 
               {!studentData.face_encoding && (
-                <Button className="bg-amber-500 hover:bg-amber-600 text-white">
-                  <Camera className="h-4 w-4 mr-2" />
+                <Button className="bg-amber-500 hover:bg-amber-600 text-white text-xs sm:text-sm px-3 sm:px-4 shrink-0">
+                  <Camera className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                   Register Face
                 </Button>
               )}

@@ -1,43 +1,9 @@
-# FastAPI Core
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
-gunicorn==21.2.0
-setuptools==68.0.0
-wheel==0.40.0
-
-# Database
-sqlalchemy==2.0.23
-asyncpg==0.29.0
-alembic==1.12.1
-psycopg2-binary==2.9.9
-pgvector==0.2.4
-
-# Authentication & Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
-
-# Data Validation & Settings
-pydantic==2.5.0
-pydantic-settings==2.1.0
-
-# AI/ML dependencies moved to `requirements-ml.txt` to avoid heavy builds on Heroku
-# See `requirements-ml.txt` for the full list and install on ML-capable hosts if needed
-
-# Utilities
-python-dotenv==1.0.0
-email-validator==2.1.0
-aiofiles==23.2.1
-
-# CORS for React integration
-fastapi-cors==0.0.6
-
-# PDF Generation
-reportlab==4.0.7
-weasyprint==60.2
-
-# Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-httpx==0.25.2
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+insightface
+opencv-python
+numpy
+Pillow
+onnxruntime

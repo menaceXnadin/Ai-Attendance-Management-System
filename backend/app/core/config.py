@@ -1,8 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import List
 import os
-import logging
-from pydantic import ValidationError
 
 class Settings(BaseSettings):
     # Database
@@ -31,6 +29,10 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    # Frontend base URL for building links (used in reset links)
+    # If empty, will be constructed from frontend_port.
+    frontend_base_url: str = ""
+    frontend_port: int = 8080
     
     # Application
     project_name: str = "AttendAI"
@@ -45,24 +47,11 @@ class Settings(BaseSettings):
         case_sensitive = False
 
 # Create settings instance
-logger = logging.getLogger(__name__)
+settings = Settings()
 
-try:
-    settings = Settings()
-except ValidationError as e:
-    # If required environment variables aren't set (e.g. on a bare Heroku deploy),
-    # create a safe fallback Settings instance so the app can start and return
-    # helpful logs. For production, set the required config vars in the environment.
-    logger.warning("Settings validation failed: %s. Falling back to safe defaults.", e)
-    settings = Settings.construct(
-        database_url="sqlite:///./attendance.db",
-        database_url_sync="sqlite:///./attendance.db",
-        secret_key="dev-secret",
-        allowed_origins=["http://localhost:5173", "http://localhost:3000"],
-        project_name="AttendAI",
-        version="1.0.0",
-        debug=True,
-    )
+# Derive frontend_base_url dynamically if not explicitly provided
+if not settings.frontend_base_url:
+    settings.frontend_base_url = f"http://localhost:{settings.frontend_port}"
 
 # Ensure upload directory exists
 os.makedirs(settings.upload_dir, exist_ok=True)

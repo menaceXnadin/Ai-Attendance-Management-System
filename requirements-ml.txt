@@ -1,8 +1,0 @@
-# Heavy ML / Vision dependencies (install separately on ML-capable hosts)
-opencv-python==4.8.1.78
-insightface==0.7.3
-onnxruntime==1.20.0
-scikit-learn==1.3.2
-pillow==10.1.0
-numpy==1.24.3
-# Note: These are separated to avoid Heroku build issues. Install locally or on a dedicated ML worker.

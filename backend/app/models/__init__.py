@@ -83,7 +83,7 @@ class Student(Base):
     semester = Column(Integer, nullable=False, default=1)  # Current semester (1-8)
     year = Column(Integer, nullable=False, default=1)  # Current academic year (1-4)
     batch = Column(Integer, nullable=False)  # Year when student joined (e.g., 2025)
-    face_encoding = Column(JSON)  # Store face encoding as JSON (optimized with indexes)
+    face_encoding = Column(JSON)  # JSON embedding storage
     profile_image_url = Column(String)
     phone_number = Column(String)
     emergency_contact = Column(String)
@@ -231,3 +231,17 @@ class AIInsight(Base):
 
     # Relationships
     student = relationship("Student", back_populates="ai_insights")
+
+# Password Reset Token model
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, server_default=func.now())
+    
+    # Relationship
+    user = relationship("User")

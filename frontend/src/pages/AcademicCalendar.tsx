@@ -1232,13 +1232,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
   return (
     <div className={embedded ? "w-full" : "min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950"}>
-      <div className="p-6 space-y-6">
+      <div className="p-4 sm:p-6 space-y-6">
         {/* Header */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
+        <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-4 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Academic Calendar</h1>
-              <p className="text-slate-400">Manage your academic schedule and events</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">Academic Calendar</h1>
+              <p className="text-sm sm:text-base text-slate-400">Manage your academic schedule and events</p>
               {/* Debug badge */}
               <div className="mt-2 flex gap-2">
                 <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1254,7 +1254,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
             
             <div className="flex items-center gap-3 flex-wrap">
               {/* Date Navigation */}
-              <div className="flex items-center gap-2 bg-slate-800/60 rounded-xl p-2">
+              <div className="flex items-center gap-2 bg-slate-800/60 rounded-xl p-2 w-full sm:w-auto">
                 <button
                   onClick={navigateBack}
                   className="p-2 hover:bg-slate-700/60 rounded-lg transition-all duration-200"
@@ -1262,7 +1262,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   <ChevronLeft className="w-5 h-5 text-slate-300" />
                 </button>
                 
-                <div className="px-4 py-2 text-white font-medium min-w-[200px] text-center">
+                <div className="px-3 sm:px-4 py-2 text-white font-medium min-w-[120px] sm:min-w-[200px] text-center text-sm sm:text-base">
                   {formatDisplayDate()}
                 </div>
                 
@@ -1275,19 +1275,19 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 
                 <button
                   onClick={navigateToday}
-                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-lg hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-lg hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium text-sm"
                 >
                   Today
                 </button>
               </div>
 
               {/* View Selector */}
-              <div className="flex bg-slate-800/60 rounded-xl p-1">
+              <div className="flex bg-slate-800/60 rounded-xl p-1 w-full sm:w-auto">
                 {(['month', 'week', 'day'] as const).map((view) => (
                   <button
                     key={view}
                     onClick={() => setCurrentView(view)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all duration-200 ${
+                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all duration-200 ${
                       currentView === view
                         ? 'bg-gradient-to-r from-blue-500 to-teal-400 text-white shadow-md'
                         : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
@@ -1299,11 +1299,11 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
               </div>
 
               {/* Filter */}
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <select
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
-                  className="appearance-none bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 backdrop-blur-md"
+                  className="appearance-none bg-slate-800/60 border border-slate-600/50 rounded-xl px-3 sm:px-4 py-2.5 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 backdrop-blur-md w-full sm:w-auto"
                 >
                   <option value="all">All Events</option>
                   <option value="class">Academic Days</option>
@@ -1319,7 +1319,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
               {isAdmin && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white px-4 py-2.5 rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 shadow-lg font-medium"
+                  className="w-full sm:w-auto justify-center flex items-center gap-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white px-4 py-2.5 rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 shadow-lg font-medium"
                 >
                   <Plus className="w-4 h-4" />
                   <span>Add Event</span>
@@ -1328,7 +1328,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
               <button
                 onClick={() => setShowSettingsModal(true)}
-                className="p-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl hover:bg-slate-700/60 transition-all duration-200"
+                className="p-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl hover:bg-slate-700/60 transition-all duration-200 w-full sm:w-auto"
               >
                 <Settings className="w-5 h-5 text-slate-300" />
               </button>
@@ -1425,7 +1425,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 <div className="grid grid-cols-7 gap-1">
                   {/* Day Headers */}
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="p-3 text-center font-semibold text-slate-300 bg-slate-800/60 rounded-lg">
+                    <div key={day} className="p-2 sm:p-3 text-center font-semibold text-slate-300 bg-slate-800/60 rounded-lg text-xs sm:text-sm">
                       {day}
                     </div>
                   ))}
@@ -1465,8 +1465,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                           }`}
                         >
                           {/* Day Number and Admin Indicator */}
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="text-sm font-medium text-slate-300">
+                          <div className="flex items-center justify-between mb-1 sm:mb-2">
+                            <div className="text-xs sm:text-sm font-medium text-slate-300">
                               {dayDate.format('D')}
                             </div>
                             {/* Admin indicator for clickable cells */}
@@ -1497,7 +1497,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                       setCurrentView('day');
                                       setCurrentDate(dayDate.toDate());
                                     }}
-                                    className="cursor-pointer p-2 rounded text-xs font-medium text-white shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105"
+                                    className="cursor-pointer p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-medium text-white shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105"
                                     style={{
                                       backgroundColor: eventResource?.color_code || '#3B82F6',
                                       borderLeft: `4px solid ${eventResource?.color_code || '#3B82F6'}`
@@ -1513,7 +1513,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                             
                             {/* Show if no events for current month days */}
                             {dayEvents.length === 0 && dayDate.month() === moment(currentDate).month() && (
-                              <div className="text-xs text-slate-500 italic opacity-60">
+                              <div className="text-[10px] sm:text-xs text-slate-500 italic opacity-60">
                                 {isAdmin ? 'Click to add event' : 'No events'}
                               </div>
                             )}

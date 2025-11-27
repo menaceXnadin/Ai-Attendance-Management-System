@@ -270,6 +270,20 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+# Password Reset schemas
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+class PasswordResetResponse(BaseModel):
+    success: bool
+    message: str
+    reset_token: Optional[str] = None
+    reset_url: Optional[str] = None
+
 # Dashboard schemas
 class AttendanceStats(BaseModel):
     total_classes: int

@@ -15,6 +15,8 @@ import HomePage from "./pages/HomePage";
 import AboutPage from "./pages/AboutPage";
 import BlogPage from "./pages/BlogPage";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import StudentDashboard from "./pages/StudentDashboard";
 import DashboardLayout from "./pages/DashboardLayout";
 import Dashboard from "./pages/Dashboard";
@@ -63,6 +65,7 @@ import TeacherNotificationsPage from "./pages/TeacherNotificationsPage";
 import TeacherSchedulePage from "./pages/TeacherSchedulePage";
 import TeacherProfilePage from "./pages/TeacherProfilePage";
 import TeachersPage from "./pages/TeachersPage";
+import AdminGenerateResetLinkPage from "./pages/AdminGenerateResetLinkPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -101,6 +104,8 @@ const App = () => {
               <Route path="/about" element={<AboutPage />} />
               <Route path="/blog" element={<BlogPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
               {/* Face Integration Test Route - MediaPipe + InsightFace */}
               <Route path="/face-integration-test" element={<FaceIntegrationTest />} />
               {/* Face Testing Page - Simple component testing */}
@@ -247,6 +252,7 @@ const App = () => {
                 <Route path="auto-absent" element={<AutoAbsentManagementPage />} />
                 <Route path="analytics" element={<ApiErrorBoundary><AnalyticsPage /></ApiErrorBoundary>} />
                 <Route path="admin/semester-configuration" element={<SemesterConfigurationPage />} />
+                <Route path="tools/reset-link" element={<AdminGenerateResetLinkPage />} />
               </Route>
               
               <Route path="analytics-showcase" element={<AnalyticsShowcase />} />

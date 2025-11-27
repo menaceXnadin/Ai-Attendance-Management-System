@@ -200,35 +200,35 @@ const EnhancedNotificationSystem: React.FC = () => {
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header with Stats */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-bold text-white mb-3 flex items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3 flex items-center gap-3">
             <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600">
               <BellRing className="h-5 w-5 text-white" />
             </div>
             Notifications
           </h3>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700">
+          <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm">
+            <span className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-slate-800/50 border border-slate-700">
               <div className="w-2 h-2 rounded-full bg-slate-400"></div>
               <span className="text-slate-300 font-medium">{notifications.length}</span>
               <span className="text-slate-500">Total</span>
             </span>
-            <span className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30">
+            <span className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30">
               <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
               <span className="text-blue-400 font-medium">{unreadCount}</span>
               <span className="text-blue-300/70">Unread</span>
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Modern Toggle Button */}
           <button
             onClick={() => setOnlyUnread(!onlyUnread)}
             className={`
-              group relative flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-medium text-sm
+              group relative flex items-center gap-2.5 px-3 sm:px-5 py-2 rounded-xl font-medium text-xs sm:text-sm
               transition-all duration-300 ease-out overflow-hidden
               ${onlyUnread 
                 ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/50' 
@@ -254,7 +254,7 @@ const EnhancedNotificationSystem: React.FC = () => {
             onClick={dismissAll}
             disabled={notifications.length === 0}
             className={`
-              group flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-medium text-sm
+              group flex items-center gap-2.5 px-3 sm:px-5 py-2 rounded-xl font-medium text-xs sm:text-sm
               transition-all duration-300 ease-out
               ${notifications.length === 0
                 ? 'bg-slate-800/30 text-slate-600 cursor-not-allowed opacity-50'
@@ -277,7 +277,7 @@ const EnhancedNotificationSystem: React.FC = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ScrollArea className="h-[600px] pr-4">
+          <ScrollArea className="h-[60vh] sm:h-[70vh] lg:h-[600px] pr-2 sm:pr-4">
             <div className="space-y-4">
               {notifications.length === 0 ? (
                 <div className="text-center py-12 text-slate-400">
@@ -294,7 +294,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                         <div className="flex items-center justify-center">
                           <button
                             onClick={() => setOnlyUnread(false)}
-                            className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-800/70 border border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600 transition-all hover:scale-105"
+                            className="px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium bg-slate-800/70 border border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-600 transition-all hover:scale-105"
                           >
                             Show All Notifications
                           </button>
@@ -307,7 +307,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                 notifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`relative p-4 rounded-lg border transition-all hover:border-slate-600/50 ${
+                    className={`relative p-3 sm:p-4 rounded-lg border transition-all hover:border-slate-600/50 ${
                       notification.is_read 
                         ? 'bg-slate-800/30 border-slate-700/30' 
                         : `${getTypeColor(notification.type)} border-l-4`
@@ -319,17 +319,17 @@ const EnhancedNotificationSystem: React.FC = () => {
                     )}
 
                     {/* Header */}
-                    <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-start justify-between mb-2 gap-2">
                       <div className="flex items-center gap-2">
                         {getTypeIcon(notification.type)}
-                        <h4 className={`font-semibold ${notification.is_read ? 'text-slate-300' : 'text-white'}`}>
+                        <h4 className={`font-semibold text-sm ${notification.is_read ? 'text-slate-300' : 'text-white'}`}>
                           {notification.title}
                         </h4>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge 
                           variant="outline" 
-                          className={`text-xs ${getPriorityColor(notification.priority)}`}
+                          className={`text-[10px] sm:text-xs ${getPriorityColor(notification.priority)}`}
                         >
                           {notification.priority.toUpperCase()}
                         </Badge>
@@ -337,13 +337,13 @@ const EnhancedNotificationSystem: React.FC = () => {
                     </div>
 
                     {/* Message */}
-                    <p className={`text-sm mb-3 ${notification.is_read ? 'text-slate-400' : 'text-slate-200'}`}>
+                    <p className={`text-xs sm:text-sm mb-2 sm:mb-3 ${notification.is_read ? 'text-slate-400' : 'text-slate-200'}`}>
                       {notification.message}
                     </p>
 
                     {/* Footer */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-slate-500">
                         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800/30">
                           <User className="h-3 w-3" />
                           <span>{notification.sender_name}</span>
@@ -354,10 +354,10 @@ const EnhancedNotificationSystem: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1 sm:gap-1.5">
                         {notification.action_url && (
                           <button
-                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all duration-200 hover:scale-105 active:scale-95"
+                            className="px-2 sm:px-3 py-1.5 rounded-lg text-[10px] sm:text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all duration-200 hover:scale-105 active:scale-95"
                             onClick={() => window.location.href = notification.action_url!}
                           >
                             View
@@ -365,7 +365,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                         )}
                         {!notification.is_read && (
                           <button
-                            className="group p-2 rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 hover:border-green-500/50 transition-all duration-200 hover:scale-110 active:scale-95"
+                            className="group p-1.5 sm:p-2 rounded-lg bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 hover:border-green-500/50 transition-all duration-200 hover:scale-110 active:scale-95"
                             onClick={() => markAsRead(notification.id)}
                             title="Mark as read"
                           >
@@ -373,7 +373,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                           </button>
                         )}
                         <button
-                          className="group p-2 rounded-lg bg-slate-700/30 text-slate-400 border border-slate-600/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all duration-200 hover:scale-110 active:scale-95"
+                          className="group p-1.5 sm:p-2 rounded-lg bg-slate-700/30 text-slate-400 border border-slate-600/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all duration-200 hover:scale-110 active:scale-95"
                           onClick={() => dismissNotification(notification.id)}
                           title="Dismiss"
                         >
@@ -382,7 +382,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                         {/* Only show delete button for admins */}
                         {isAdmin && (
                           <button
-                            className="group p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 hover:scale-110 active:scale-95"
+                            className="group p-1.5 sm:p-2 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 hover:border-red-500/50 transition-all duration-200 hover:scale-110 active:scale-95"
                             onClick={() => deleteNotification(notification.id)}
                             title="Delete permanently (admin only)"
                           >

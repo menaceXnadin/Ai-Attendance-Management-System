@@ -21,8 +21,6 @@ import {
   Eye, 
   Sliders,
   Settings as SettingsIcon,
-  Moon,
-  Sun,
   Check,
   ArrowRight,
   Shield,
@@ -144,19 +142,6 @@ const SettingsPage = () => {
             </CardHeader>
             <CardContent className="relative p-6 md:p-8 space-y-6">
               <div className="space-y-6">
-                <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-blue-300/50 dark:hover:border-blue-700/50 transition-all duration-200">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg group-hover:scale-110 transition-transform duration-200">
-                      <Moon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div>
-                      <Label htmlFor="dark-mode" className="text-base font-semibold cursor-pointer">Dark Mode</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Enable dark theme for the application</p>
-                    </div>
-                  </div>
-                  <Switch id="dark-mode" className="data-[state=checked]:bg-blue-600" />
-                </div>
-                
                 <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
                 
                 <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-emerald-300/50 dark:hover:border-emerald-700/50 transition-all duration-200">

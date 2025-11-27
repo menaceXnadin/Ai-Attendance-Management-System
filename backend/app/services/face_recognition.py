@@ -6,6 +6,14 @@ from typing import Optional, List, Tuple
 from io import BytesIO
 from PIL import Image
 from app.core.config import settings
+from app.core.face_constants import (
+    DETECTION_MIN_CONFIDENCE,
+    REGISTRATION_MIN_CONFIDENCE,
+    SIMILARITY_THRESHOLD,
+    LIVE_SIMILARITY_THRESHOLD,
+    MIN_EMBEDDING_NORM,
+    MIN_FACE_PIXEL_SIZE,
+)
 from app.schemas import FaceRecognitionResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -16,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class FaceRecognitionService:
     def __init__(self):
-        self.tolerance = settings.face_recognition_tolerance
+        self.tolerance = getattr(settings, 'face_recognition_tolerance', SIMILARITY_THRESHOLD)
         # Initialize InsightFace model
         self.app = insightface.app.FaceAnalysis(
             providers=['CPUExecutionProvider'],  # Use CPU, can switch to CUDA if available
@@ -360,7 +368,7 @@ class FaceRecognitionService:
                 return False, "Face is too small. Please move closer to the camera"
             
             # Check detection confidence if available
-            if hasattr(face, 'det_score') and face.det_score < 0.8:
+            if hasattr(face, 'det_score') and face.det_score < REGISTRATION_MIN_CONFIDENCE:
                 return False, "Face detection confidence is too low. Please ensure good lighting"
             
             # Extract encoding to verify quality

@@ -14,6 +14,11 @@ from app.schemas import (
 from app.services.insightface_service import insightface_service
 from app.api.dependencies import get_current_student
 from pydantic import BaseModel
+from app.core.face_constants import (
+    LIVE_SIMILARITY_THRESHOLD,
+    EXCELLENT_MATCH_THRESHOLD,
+    GOOD_MATCH_THRESHOLD,
+)
 
 # Helper function to auto-mark absent for expired classes
 async def mark_absent_for_expired_classes(db: AsyncSession, student_id: int, student: Student, today: date):
@@ -778,28 +783,6 @@ async def live_face_recognition(
                 recognition_quality="poor"
             )
         
-        # Get all registered students with face encodings
-        result = await db.execute(
-            select(Student).options(selectinload(Student.user)).where(Student.face_encoding.isnot(None))
-        )
-        students = result.scalars().all()
-        
-        if not students:
-            return LiveRecognitionResponse(
-                success=False,
-                message="No registered students found",
-                student_recognized=False,
-                faces_detected=1,
-                recognition_quality="no_database"
-            )
-        
-        # Prepare known encodings for recognition
-        known_encodings = [
-            (student.id, student.face_encoding) 
-            for student in students 
-            if student.face_encoding
-        ]
-        
         # Extract embedding from current face
         face_info = insightface_service.extract_face_features(image)
         
@@ -814,46 +797,49 @@ async def live_face_recognition(
         
         unknown_embedding = face_info['embedding']
         
-        # Find best match
+        # JSON-based face matching with linear scan
+        result = await db.execute(
+            select(Student).options(selectinload(Student.user)).where(Student.face_encoding.isnot(None))
+        )
+        students = result.scalars().all()
+        
+        if not students:
+            return LiveRecognitionResponse(
+                success=False,
+                message="No registered students found",
+                student_recognized=False,
+                faces_detected=1,
+                recognition_quality="no_database"
+            )
+        
         best_match = None
         best_similarity = 0.0
-        similarity_threshold = 0.6  # Lower threshold for live recognition
         
-        for student_id, known_encoding in known_encodings:
-            is_match, similarity_score, _ = insightface_service.compare_embeddings(
-                [known_encoding], unknown_embedding
-            )
-            
-            if similarity_score > best_similarity:
-                best_similarity = similarity_score
-                if similarity_score >= similarity_threshold:
-                    best_match = student_id
+        for s in students:
+            is_match, sim_pct, _ = insightface_service.compare_embeddings([s.face_encoding], unknown_embedding)
+            sim = sim_pct / 100.0
+            if sim > best_similarity:
+                best_similarity = sim
+                if sim >= LIVE_SIMILARITY_THRESHOLD:
+                    best_match = s
         
         if best_match:
-            # Get student details
-            matched_student = next((s for s in students if s.id == best_match), None)
-            
-            if matched_student:
-                # Determine recognition quality based on confidence
-                if best_similarity >= 0.8:
-                    quality = "excellent"
-                elif best_similarity >= 0.7:
-                    quality = "good"
-                else:
-                    quality = "fair"
-                
-                return LiveRecognitionResponse(
-                    success=True,
-                    message=f"Recognized: {matched_student.user.full_name}",
-                    student_recognized=True,
-                    student_name=matched_student.user.full_name,
-                    student_id=matched_student.id,
-                    confidence_score=best_similarity * 100,  # Convert to percentage
-                    faces_detected=1,
-                    recognition_quality=quality
-                )
+            quality = (
+                "excellent" if best_similarity >= EXCELLENT_MATCH_THRESHOLD else
+                "good" if best_similarity >= GOOD_MATCH_THRESHOLD else
+                "fair"
+            )
+            return LiveRecognitionResponse(
+                success=True,
+                message=f"Recognized: {best_match.user.full_name}",
+                student_recognized=True,
+                student_name=best_match.user.full_name,
+                student_id=best_match.id,
+                confidence_score=best_similarity * 100,
+                faces_detected=1,
+                recognition_quality=quality
+            )
         
-        # No match found
         return LiveRecognitionResponse(
             success=False,
             message="Face not recognized",

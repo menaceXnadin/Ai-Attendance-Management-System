@@ -1,7 +1,6 @@
 import * as React from 'react';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { useTheme } from '@/hooks/useTheme';
 
 interface AttendanceData {
   name: string;
@@ -18,21 +17,12 @@ interface AttendanceChartProps {
 }
 
 const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceChartProps) => {
-  const { theme } = useTheme();
+  // Always use dark theme colors
+  const colorSet = ['#22c55e', '#ef4444', '#f59e0b']; // green-500, red-500, amber-500
   
-  // Define colors based on theme - using clear, contrasting colors
-  // Present = Green, Absent = Red, Late = Orange/Yellow
-  const COLORS = {
-    light: ['#22c55e', '#ef4444', '#f59e0b'],  // green-500, red-500, amber-500
-    dark: ['#22c55e', '#ef4444', '#f59e0b'],   // green-500, red-500, amber-500
-  };
-  
-  // Choose color set based on theme
-  const colorSet = theme === 'dark' ? COLORS.dark : COLORS.light;
-  
-  // Grid and text colors
-  const gridColor = theme === 'dark' ? '#374151' : '#e5e7eb';
-  const textColor = theme === 'dark' ? '#f9fafb' : '#1f2937';
+  // Dark theme colors
+  const gridColor = '#374151';
+  const textColor = '#f9fafb';
   
   const renderChart = () => {
     switch (type) {
@@ -60,7 +50,7 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
                   <Cell key={`cell-${index}`} fill={colorSet[index % colorSet.length]} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
               <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
             </PieChart>
           </ResponsiveContainer>
@@ -74,7 +64,7 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
               <XAxis dataKey="name" stroke={textColor} />
               <YAxis stroke={textColor} />
-              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
               <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
               <Line type="monotone" dataKey="present" stroke={colorSet[0]} activeDot={{ r: 8 }} />
               <Line type="monotone" dataKey="absent" stroke={colorSet[1]} />
@@ -91,7 +81,7 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
               <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
               <XAxis dataKey="name" stroke={textColor} />
               <YAxis stroke={textColor} />
-              <Tooltip contentStyle={{ backgroundColor: theme === 'dark' ? '#1f2937' : '#ffffff', borderColor: gridColor }} />
+              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
               <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
               <Bar dataKey="present" fill={colorSet[0]} />
               <Bar dataKey="absent" fill={colorSet[1]} />

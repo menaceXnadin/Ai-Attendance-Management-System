@@ -189,34 +189,34 @@ const StudentDashboard = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
 
         {/* Header Section */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <header className="flex flex-col gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white tracking-tight">
               Welcome back, <span className="text-blue-400">{studentData?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'}</span>
             </h1>
-            <p className="text-slate-400 text-sm sm:text-base">
+            <p className="text-slate-400 text-xs sm:text-sm md:text-base">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1.5 w-fit">
+          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1.5 w-fit text-xs sm:text-sm">
             <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse mr-2" />
             Active
           </Badge>
         </header>
 
         {/* Enhanced Quick Stats */}
-        <section aria-label="Quick Statistics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <section aria-label="Quick Statistics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
           {/* Semester Attendance */}
           <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-xs font-medium text-slate-400 uppercase tracking-wide">Attendance</CardTitle>
-              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <CalendarIcon className="h-4 w-4 text-blue-400" />
+              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Attendance</CardTitle>
+              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
               </div>
             </CardHeader>
             <CardContent className="relative">
-              <div className={`text-3xl font-bold mb-1 tabular-nums ${
+              <div className={`text-2xl sm:text-3xl font-bold mb-1 tabular-nums ${
                 (attendanceSummary?.percentage_present || 0) >= 90 ? 'text-emerald-400' :
                 (attendanceSummary?.percentage_present || 0) >= 75 ? 'text-amber-400' : 'text-rose-400'
               }`}>
@@ -226,7 +226,7 @@ const StudentDashboard = () => {
                   `${attendanceSummary?.percentage_present || 0}%`
                 )}
               </div>
-              <p className="text-xs text-slate-500 mb-3">
+              <p className="text-[10px] sm:text-xs text-slate-500 mb-2 sm:mb-3">
                 {attendanceSummary?.present || 0} of {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0} days
               </p>
               <div className="relative">
@@ -247,13 +247,13 @@ const StudentDashboard = () => {
           <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-xs font-medium text-slate-400 uppercase tracking-wide">Progress</CardTitle>
-              <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Activity className="h-4 w-4 text-purple-400" />
+              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Progress</CardTitle>
+              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
               </div>
             </CardHeader>
             <CardContent className="relative">
-              <div className="text-3xl font-bold text-purple-400 mb-1 tabular-nums">
+              <div className="text-2xl sm:text-3xl font-bold text-purple-400 mb-1 tabular-nums">
                 {isLoadingAttendance ? (
                   <Loader2 className="h-8 w-8 animate-spin" />
                 ) : attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
@@ -303,13 +303,13 @@ const StudentDashboard = () => {
           <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-xs font-medium text-slate-400 uppercase tracking-wide">Student ID</CardTitle>
-              <div className="h-8 w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <User className="h-4 w-4 text-cyan-400" />
+              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Student ID</CardTitle>
+              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                <User className="h-3 w-3 sm:h-4 sm:w-4 text-cyan-400" />
               </div>
             </CardHeader>
             <CardContent className="relative">
-              <div className="text-2xl font-bold text-white mb-1 tabular-nums">
+              <div className="text-lg sm:text-2xl font-bold text-white mb-1 tabular-nums">
                 {isLoadingStudent ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
@@ -326,13 +326,13 @@ const StudentDashboard = () => {
           <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-xs font-medium text-slate-400 uppercase tracking-wide">Face ID</CardTitle>
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <Shield className="h-4 w-4 text-emerald-400" />
+              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Face ID</CardTitle>
+              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />
               </div>
             </CardHeader>
             <CardContent className="relative">
-              <div className={`text-2xl font-bold mb-1 flex items-center gap-2 ${studentData?.face_encoding ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <div className={`text-lg sm:text-2xl font-bold mb-1 flex items-center gap-2 ${studentData?.face_encoding ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {isLoadingStudent ? (
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : (
@@ -370,16 +370,16 @@ const StudentDashboard = () => {
         {/* Today's Attendance Overview */}
         <section aria-label="Today's Schedule">
           <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 overflow-hidden">
-            <CardHeader className="border-b border-slate-800/50 pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <CardHeader className="border-b border-slate-800/50 pb-3 sm:pb-4">
+              <div className="flex flex-col gap-2 sm:gap-3">
                 <div className="space-y-1">
-                  <CardTitle className="text-xl sm:text-2xl text-white flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <BookOpen className="h-4 w-4 text-blue-400" />
+                  <CardTitle className="text-lg sm:text-xl md:text-2xl text-white flex items-center gap-2">
+                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                      <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
                     </div>
                     Today's Schedule
                   </CardTitle>
-                  <CardDescription className="text-slate-400 text-sm">
+                  <CardDescription className="text-slate-400 text-xs sm:text-sm">
                     {new Date().toLocaleDateString('en-US', { weekday: 'long' })} • {todaySchedules.length} {todaySchedules.length === 1 ? 'class' : 'classes'}
                   </CardDescription>
                 </div>
@@ -392,30 +392,30 @@ const StudentDashboard = () => {
               </div>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
-                <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <CheckCircle className="h-5 w-5 text-emerald-400" />
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
+                <div className="bg-slate-800/60 rounded-xl p-3 sm:p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                      <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-2xl font-bold text-white tabular-nums">
+                      <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">
                         {isLoadingSchedules ? '...' : relevantAttendanceRecords.filter(record => record.status === 'present').length}
                       </p>
-                      <p className="text-xs text-slate-400 truncate">Present</p>
+                      <p className="text-[10px] sm:text-xs text-slate-400 truncate">Present</p>
                     </div>
                   </div>
                 </div>
-                <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <Calendar className="h-5 w-5 text-blue-400" />
+                <div className="bg-slate-800/60 rounded-xl p-3 sm:p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
+                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
                     </div>
                     <div className="min-w-0">
-                      <p className="text-2xl font-bold text-white tabular-nums">
+                      <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">
                         {isLoadingSchedules ? '...' : todaySchedules.length}
                       </p>
-                      <p className="text-xs text-slate-400 truncate">Total</p>
+                      <p className="text-[10px] sm:text-xs text-slate-400 truncate">Total</p>
                     </div>
                   </div>
                 </div>
@@ -479,25 +479,25 @@ const StudentDashboard = () => {
                     }
                     
                     return (
-                      <div key={schedule.id} className={`group flex items-center justify-between p-4 rounded-xl border transition-all duration-200 ${
+                      <div key={schedule.id} className={`group flex items-center justify-between p-3 sm:p-4 rounded-xl border transition-all duration-200 ${
                         schedule.is_cancelled 
                           ? 'bg-slate-800/40 border-gray-600/50 opacity-75' 
                           : 'bg-slate-800/60 hover:bg-slate-800/80 border-slate-700/70 hover:border-slate-600/70'
                       }`}>
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className={`h-2 w-2 rounded-full shrink-0 ${
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                          <div className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full shrink-0 ${
                             status === 'Cancelled' ? 'bg-gray-500' :
                             status === 'Present' ? 'bg-emerald-400' : 
                             status === 'Absent' ? 'bg-rose-400' :
                             status === 'Late' ? 'bg-amber-400' : 'bg-slate-500'
                           }`}></div>
                           <div className="min-w-0 flex-1">
-                            <p className={`text-sm font-medium truncate ${
+                            <p className={`text-xs sm:text-sm font-medium truncate ${
                               schedule.is_cancelled ? 'text-gray-400 line-through' : 'text-white'
                             }`}>
                               {schedule.subject_name}
                             </p>
-                            <p className="text-slate-400 text-xs truncate">
+                            <p className="text-slate-400 text-[10px] sm:text-xs truncate">
                               {schedule.time_slot_display}
                               {schedule.is_cancelled && schedule.cancellation_reason && (
                                 <span className="ml-2 text-gray-500">• {schedule.cancellation_reason}</span>
@@ -505,8 +505,8 @@ const StudentDashboard = () => {
                             </p>
                           </div>
                         </div>
-                        <Badge variant="outline" className={`${statusColor} flex items-center gap-1.5 shrink-0 ml-2`}>
-                          {statusIcon}
+                        <Badge variant="outline" className={`${statusColor} flex items-center gap-1 sm:gap-1.5 shrink-0 ml-2 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5`}>
+                          <span className="h-2.5 w-2.5 sm:h-3 sm:w-3">{statusIcon}</span>
                           <span className="hidden sm:inline">{status}</span>
                         </Badge>
                       </div>
@@ -528,34 +528,34 @@ const StudentDashboard = () => {
 
         {/* Quick Actions Grid */}
         <section aria-label="Quick Actions">
-          <h2 className="text-lg font-semibold text-white mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             <Link to="/student/calendar" className="group">
               <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-blue-500/50 hover:bg-slate-900/85 transition-all duration-300 h-full">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Calendar className="h-6 w-6 text-blue-400" />
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-start justify-between mb-3 sm:mb-4">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
                     </div>
-                    <ArrowRight className="h-5 w-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
                   </div>
-                  <h3 className="font-semibold text-white mb-2">Academic Calendar</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">View semester schedule, holidays, and important dates</p>
+                  <h3 className="font-semibold text-white mb-1.5 sm:mb-2 text-sm sm:text-base">Academic Calendar</h3>
+                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">View semester schedule, holidays, and important dates</p>
                 </CardContent>
               </Card>
             </Link>
 
             <Link to="/face-registration" className="group">
               <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-purple-500/50 hover:bg-slate-900/85 transition-all duration-300 h-full">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="h-12 w-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Camera className="h-6 w-6 text-purple-400" />
+                <CardContent className="p-4 sm:p-6">
+                  <div className="flex items-start justify-between mb-3 sm:mb-4">
+                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                      <Camera className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
                     </div>
-                    <ArrowRight className="h-5 w-5 text-slate-500 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-slate-500 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
                   </div>
-                  <h3 className="font-semibold text-white mb-2">Face Registration</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{studentData?.face_encoding ? 'Update your biometric data' : 'Set up face recognition for quick access'}</p>
+                  <h3 className="font-semibold text-white mb-1.5 sm:mb-2 text-sm sm:text-base">Face Registration</h3>
+                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">{studentData?.face_encoding ? 'Update your biometric data' : 'Set up face recognition for quick access'}</p>
                 </CardContent>
               </Card>
             </Link>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "dark" | "light";
+type Theme = "dark"; // Light mode removed
 
 type ThemeProviderProps = {
   children: React.ReactNode;
@@ -28,48 +28,19 @@ export function ThemeProvider({
   storageKey = "vite-ui-theme",
   ...props
 }: ThemeProviderProps) {
-  // Debug log
-  console.log("ThemeProvider initializing with defaultTheme:", defaultTheme);
-  console.log("Current localStorage:", localStorage.getItem(storageKey));
-  
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Check localStorage first
-    const storedTheme = localStorage.getItem(storageKey);
-    console.log("Initial stored theme:", storedTheme);
-    
-    if (storedTheme === "light" || storedTheme === "dark") {
-      return storedTheme;
-    }
-    // Use default if no valid theme in localStorage
-    return defaultTheme;
-  });
+  // Always use dark theme; ignore localStorage
+  const [theme, setTheme] = useState<Theme>(() => "dark");
 
   useEffect(() => {
-    console.log("Theme effect running with theme:", theme);
     const root = window.document.documentElement;
-    
-    console.log("Before removing classes:", root.classList.toString());
     root.classList.remove("light", "dark");
-    console.log("After removing classes:", root.classList.toString());
-    
-    root.classList.add(theme);
-    console.log("After adding theme class:", root.classList.toString());
-    
-    // Force repaint
-    document.body.style.display = 'none';
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    document.body.offsetHeight; // Trigger reflow
-    document.body.style.display = '';
+    root.classList.add("dark");
   }, [theme]);
 
   const value = {
     theme,
-    setTheme: (newTheme: Theme) => {
-      console.log("setTheme called with:", newTheme);
-      localStorage.setItem(storageKey, newTheme);
-      console.log("localStorage updated:", localStorage.getItem(storageKey));
-      setTheme(newTheme);
-    },
+    // No-op setter; always dark
+    setTheme: () => setTheme("dark"),
   };
 
   return (

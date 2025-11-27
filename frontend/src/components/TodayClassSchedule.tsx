@@ -525,17 +525,17 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
       <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-purple-500"></div>
       <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-xl text-white flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-              <Calendar className="h-4 w-4 text-white" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <CardTitle className="text-lg sm:text-xl text-white flex items-center gap-3">
+            <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
+              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
             </div>
-            Today's Class Schedule
+            <span className="truncate">Today's Class Schedule</span>
           </CardTitle>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30 text-[10px] sm:text-xs px-2 py-1">
               {new Date().toLocaleDateString('en-US', { 
-                weekday: 'long', 
+                weekday: 'short', 
                 month: 'short', 
                 day: 'numeric' 
               })}
@@ -543,7 +543,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4">
         {/* Time restrictions enabled - verification controlled by school hours and periods */}
 
         {/* Time Restriction Status */}
@@ -598,26 +598,27 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         {todaySchedule.map((subject, index) => (
           <div
             key={`${subject.subjectId}-${subject.startTime}-${index}`}
-            className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all"
+            className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-3 sm:p-4 hover:border-slate-600/50 transition-all"
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 flex-1">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-                  <BookOpen className="h-6 w-6 text-white" />
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1">
+                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center flex-shrink-0">
+                  <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                 </div>
-                
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <h3 className="font-semibold text-white">{subject.subjectName}</h3>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-white text-sm sm:text-base truncate max-w-[160px] sm:max-w-none">
+                      {subject.subjectName}
+                    </h3>
                     <Badge 
-                      className={`${getStatusColor(subject.status)} flex items-center gap-1`}
+                      className={`${getStatusColor(subject.status)} flex items-center gap-1 text-[10px] sm:text-xs px-2 py-0.5 sm:py-1`}
                     >
                       {getStatusIcon(subject.status)}
-                      {subject.status}
+                      <span className="truncate max-w-[70px]">{subject.status}</span>
                     </Badge>
                   </div>
-                  <p className="text-sm text-slate-400 mb-2">{subject.subjectCode}</p>
-                  <div className="flex items-center gap-4 text-sm text-slate-300">
+                  <p className="text-[11px] sm:text-sm text-slate-400 mb-1 sm:mb-2 truncate">{subject.subjectCode}</p>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-sm text-slate-300">
                     <div className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       {formatTime(subject.startTime)} - {formatTime(subject.endTime)}
@@ -625,78 +626,73 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
                   </div>
                 </div>
               </div>
-
-              <div className="flex flex-col items-end gap-2">
-                {/* FIXED: Only show Present badge when status is actually Present */}
+              <div className="flex items-start md:items-end md:flex-col gap-2 md:gap-2 w-full md:w-auto">
                 {subject.status === 'Cancelled' ? (
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge className="bg-gray-600/30 text-gray-400 border-gray-500/30">
+                  <div className="flex flex-col items-start md:items-end gap-1">
+                    <Badge className="bg-gray-600/30 text-gray-400 border-gray-500/30 text-[10px] sm:text-xs px-2 py-0.5">
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       Cancelled
                     </Badge>
                     {subject.cancellation_reason && (
-                      <p className="text-xs text-gray-400 text-right max-w-48">
+                      <p className="text-[10px] sm:text-xs text-gray-400 text-left md:text-right max-w-[160px]">
                         {subject.cancellation_reason}
                       </p>
                     )}
                   </div>
                 ) : subject.status === 'Present' ? (
-                  <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
+                  <Badge className="bg-green-500/20 text-green-300 border-green-400/30 text-[10px] sm:text-xs px-2 py-0.5">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Present
                   </Badge>
                 ) : subject.status === 'Pending' ? (
                   <>
                     {!isFaceVerificationAllowed ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
+                      <div className="flex flex-col items-start md:items-end gap-1">
+                        <Badge className="bg-red-500/20 text-red-300 border-red-400/30 text-[10px] sm:text-xs px-2 py-0.5">
                           <Lock className="h-3 w-3 mr-1" />
                           Restricted
                         </Badge>
-                        <p className="text-xs text-red-400 text-right max-w-32">
+                        <p className="text-[10px] sm:text-xs text-red-400 text-left md:text-right max-w-[140px]">
                           {restrictionReason}
                         </p>
                         {timeUntilNext && (
-                          <p className="text-xs text-slate-400 text-right">
+                          <p className="text-[10px] sm:text-xs text-slate-400 text-left md:text-right">
                             Next: {timeUntilNext}
                           </p>
                         )}
                       </div>
                     ) : !studentData?.face_encoding ? (
-                      <div className="flex flex-col items-end gap-1">
-                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30">
+                      <div className="flex flex-col items-start md:items-end gap-1">
+                        <Badge className="bg-amber-500/20 text-amber-300 border-amber-400/30 text-[10px] sm:text-xs px-2 py-0.5">
                           <AlertTriangle className="h-3 w-3 mr-1" />
                           Setup Required
                         </Badge>
-                        <p className="text-xs text-amber-400 text-right">
+                        <p className="text-[10px] sm:text-xs text-amber-400 text-left md:text-right">
                           Face registration required
                         </p>
                       </div>
                     ) : (
                       <Button
                         onClick={() => handleMarkAttendance(subject.subjectId)}
-                        className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg"
-                        // TESTING: Disabled attribute removed for testing purposes
-                        // disabled={!subject.isCurrentPeriod}
+                        className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg h-8 text-[11px] sm:text-sm px-3 sm:px-4"
                       >
-                        <Scan className="h-4 w-4 mr-2" />
-                        Mark Attendance
+                        <Scan className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        Mark
                       </Button>
                     )}
                   </>
                 ) : subject.status === 'Absent' ? (
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge className="bg-red-500/20 text-red-300 border-red-400/30">
+                  <div className="flex flex-col items-start md:items-end gap-1">
+                    <Badge className="bg-red-500/20 text-red-300 border-red-400/30 text-[10px] sm:text-xs px-2 py-0.5">
                       <AlertTriangle className="h-3 w-3 mr-1" />
                       Absent
                     </Badge>
-                    {/* FIXED: Clearer explanation of how attendance was determined */}
-                    <p className="text-xs text-slate-400">
+                    <p className="text-[10px] sm:text-xs text-slate-400">
                       {subject.attendanceMarked ? 'Marked by admin' : 'Auto-marked absent'}
                     </p>
                   </div>
                 ) : subject.status === 'Starts Soon' ? (
-                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30">
+                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30 text-[10px] sm:text-xs px-2 py-0.5">
                     <Timer className="h-3 w-3 mr-1" />
                     Starts Soon
                   </Badge>

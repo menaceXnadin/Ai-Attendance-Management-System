@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Menu, X, User, LogOut, Home, Book, Info, LayoutDashboard, Camera } from 'lucide-react';
 import logo from '@/assets/main.png';
 import { useAuth } from '@/contexts/useAuth';
-import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Navbar = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);

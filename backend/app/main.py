@@ -21,7 +21,7 @@ from app.api.routes.calendar_generator import router as calendar_generator_route
 from app.api.routes.streaks_badges import router as streaks_badges_router
 from app.api.routes.auto_absent_trigger import router as auto_absent_trigger_router
 from app.api.routes.system_settings import router as system_settings_router
-from app.api.endpoints.notifications import router as notifications_router
+from app.api.routes.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
 from app.middleware import ResponseTimeMiddleware
 from app.services.scheduler_service import scheduler_service
@@ -65,21 +65,14 @@ async def lifespan(app: FastAPI):
 
     # Start the background scheduler for auto-absent processing
     logger.info("Starting background scheduler...")
-    try:
-        await scheduler_service.start()
-    except Exception as e:
-        # Don't let scheduler failures bring down the whole app; log and continue.
-        logger.exception(f"Failed to start scheduler (continuing without it): {e}")
+    await scheduler_service.start()
 
     # Hand control to application runtime
     yield
 
     # Shutdown
     logger.info("Stopping background scheduler...")
-    try:
-        await scheduler_service.stop()
-    except Exception as e:
-        logger.exception(f"Error stopping scheduler: {e}")
+    await scheduler_service.stop()
 
 # Create FastAPI app with lifespan handler
 app = FastAPI(
