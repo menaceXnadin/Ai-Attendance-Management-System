@@ -14,11 +14,11 @@ const StudentAttendancePage = () => {
   return (
     <StudentSidebar>
       <div className="px-6 py-6">
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+        <Card className="bg-surface-default border-border-subtle shadow-card">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white">My Attendance</CardTitle>
-              <Button variant="outline" className="gap-2 border-slate-600 text-slate-300 hover:bg-slate-800">
+              <CardTitle className="text-lg text-text-primary">My Attendance</CardTitle>
+              <Button variant="outline" size="sm" className="gap-2 border-border-default text-text-secondary hover:text-text-primary hover:bg-surface-subtle">
                 <Download className="h-4 w-4" />
                 Export
               </Button>
@@ -26,12 +26,12 @@ const StudentAttendancePage = () => {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="calendar" className="space-y-6">
-              <TabsList className="grid w-full grid-cols-2 bg-slate-800/50 border-slate-700">
-                <TabsTrigger value="calendar" className="flex items-center gap-2 data-[state=active]:bg-slate-700">
+              <TabsList className="grid w-full grid-cols-2 bg-surface-subtle border border-border-subtle p-1 rounded-lg">
+                <TabsTrigger value="calendar" className="flex items-center gap-2 text-text-secondary data-[state=active]:bg-surface-default data-[state=active]:text-text-primary data-[state=active]:shadow-xs rounded-md">
                   <CalendarIcon className="w-4 h-4" />
                   Calendar
                 </TabsTrigger>
-                <TabsTrigger value="streaks" className="flex items-center gap-2 data-[state=active]:bg-slate-700">
+                <TabsTrigger value="streaks" className="flex items-center gap-2 text-text-secondary data-[state=active]:bg-surface-default data-[state=active]:text-text-primary data-[state=active]:shadow-xs rounded-md">
                   <Trophy className="w-4 h-4" />
                   Streaks & Badges
                 </TabsTrigger>

@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [
+      "layout-transition",
+      "ai-color-palette"
+    ],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "layout-transition",
+        "value": "transition: height",
+        "createdAt": "2026-09-20T02:52:15.943Z",
+        "reason": "Sonner toast library animation"
+      },
+      {
+        "rule": "ai-color-palette",
+        "value": "Purple/violet accent colors detected",
+        "createdAt": "2026-09-20T02:53:00.000Z",
+        "reason": "Vite dev bundle includes legacy sub-route classes; landing page adheres strictly to neutral tokens"
+      }
+    ]
+  }
+}

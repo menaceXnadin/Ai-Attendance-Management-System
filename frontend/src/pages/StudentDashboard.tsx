@@ -1,30 +1,19 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { 
-  CalendarIcon, 
-  TrendingUp, 
-  User, 
   Calendar, 
-  Target, 
-  AlertTriangle, 
-  Loader2,
-  Clock,
-  Trophy,
-  BookOpen,
-  CheckCircle,
-  XCircle,
-  ChevronRight,
-  Bell,
-  BarChart3,
+  User, 
+  Time,
+  Book,
+  CheckmarkFilled,
+  CloseFilled,
   Camera,
-  Shield,
-  Award,
+  Security,
   Activity,
-  ArrowRight
-} from 'lucide-react';
+  ArrowRight,
+  Renew
+} from '@carbon/icons-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/useAuth';
@@ -33,32 +22,26 @@ import { api } from '@/integrations/api/client';
 import { Attendance } from '@/integrations/api/types';
 import FaceRegistration from '@/components/FaceRegistration';
 import StudentSidebar from '@/components/StudentSidebar';
-import SmartNotificationSystem from '@/components/SmartNotificationSystem';
 import TodayClassSchedule from '@/components/TodayClassSchedule';
 import { getTodayLocalDate } from '@/utils/dateUtils';
 
-
-const StudentDashboard = () => {
-  const { user, signOut } = useAuth();
+const StudentDashboard: React.FC = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [showFaceRegistration, setShowFaceRegistration] = useState(false);
   const [hasMarkedAttendanceToday, setHasMarkedAttendanceToday] = useState(false);
-  const [lastAttendance, setLastAttendance] = useState<{
-    timestamp: string;
-    recognized: boolean;
-  } | null>(null);
 
-  // Fetch student data from backend (safe: getAll and filter by email)
+  // Fetch student data from backend
   const { data: studentData, isLoading: isLoadingStudent } = useQuery({
     queryKey: ['current-student', user?.email],
     queryFn: async () => {
       if (!user?.email) return null;
       try {
         const students = await api.students.getAll();
-        const found = students.find(s => s.email === user.email);
+        const found = students.find((s) => s.email === user.email);
         if (!found) {
-          const foundInsensitive = students.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+          const foundInsensitive = students.find((s) => s.email?.toLowerCase() === user.email?.toLowerCase());
           return foundInsensitive || null;
         }
         return found;
@@ -67,7 +50,7 @@ const StudentDashboard = () => {
         return null;
       }
     },
-    enabled: !!user?.email
+    enabled: !!user?.email,
   });
 
   // Fetch attendance summary
@@ -92,7 +75,7 @@ const StudentDashboard = () => {
         };
       }
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
   });
 
   // Fetch dynamic academic metrics
@@ -118,7 +101,7 @@ const StudentDashboard = () => {
         const today = getTodayLocalDate();
         const response = await api.attendance.getAll({
           studentId: studentData.id,
-          date: today
+          date: today,
         });
         const records = response.records || [];
         return { hasAttendance: records.length > 0, records };
@@ -139,24 +122,23 @@ const StudentDashboard = () => {
     queryFn: async () => {
       if (!studentData?.semester || !studentData?.faculty_id) return [];
       try {
-        const schedules = await api.schedules.getStudentToday();
-        return schedules;
+        return await api.schedules.getStudentToday();
       } catch (error) {
         console.error('Error fetching student today schedules:', error);
         return [];
       }
     },
-    enabled: !!studentData?.semester && !!studentData?.faculty_id
+    enabled: !!studentData?.semester && !!studentData?.faculty_id,
   });
 
   const todayAttendance = todayAttendanceData?.hasAttendance || false;
   const todayAttendanceRecords = todayAttendanceData?.records || [];
   
-  const relevantAttendanceRecords = todayAttendanceRecords.filter(record => {
+  const relevantAttendanceRecords = todayAttendanceRecords.filter((record) => {
     const extendedRecord = record as Attendance & { classId?: string };
-    return todaySchedules.some(schedule => 
-      schedule.subject_id === parseInt(record.subjectId) || 
-      schedule.subject_id === parseInt(extendedRecord.classId || '0')
+    return todaySchedules.some((schedule) => 
+      schedule.subject_id === parseInt(record.subjectId, 10) || 
+      schedule.subject_id === parseInt(extendedRecord.classId || '0', 10)
     );
   });
 
@@ -166,17 +148,13 @@ const StudentDashboard = () => {
     }
   }, [todayAttendance]);
 
-  // Show loading state
   if (isLoadingStudent || isLoadingAttendance) {
     return (
       <StudentSidebar>
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto" />
-            <div>
-              <h3 className="text-lg font-semibold text-white">Loading Dashboard</h3>
-              <p className="text-slate-400 text-sm">Please wait...</p>
-            </div>
+        <div className="min-h-[60vh] flex items-center justify-center">
+          <div className="text-center space-y-3">
+            <Renew size={28} className="animate-spin text-action-primary mx-auto" />
+            <p className="text-xs text-text-muted">Loading student portal...</p>
           </div>
         </div>
       </StudentSidebar>
@@ -185,175 +163,161 @@ const StudentDashboard = () => {
 
   return (
     <StudentSidebar>
-      <div className="min-h-screen w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
-
+      <div className="space-y-6 max-w-7xl mx-auto py-2">
         {/* Header Section */}
-        <header className="flex flex-col gap-3">
-          <div className="space-y-1">
-            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-white tracking-tight">
-              Welcome back, <span className="text-blue-400">{studentData?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'}</span>
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-border-subtle">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+              Welcome, {studentData?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'}
             </h1>
-            <p className="text-slate-400 text-xs sm:text-sm md:text-base">
+            <p className="text-sm text-text-muted mt-0.5">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
-          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1.5 w-fit text-xs sm:text-sm">
-            <div className="h-1.5 w-1.5 bg-emerald-400 rounded-full animate-pulse mr-2" />
-            Active
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-xs py-1 px-2.5 gap-1.5 border-status-success/30 bg-status-success/10 text-status-success">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-success inline-block" />
+              <span>Enrollment Active</span>
+            </Badge>
+          </div>
         </header>
 
-        {/* Enhanced Quick Stats */}
-        <section aria-label="Quick Statistics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+        {/* Quick Stats Grid */}
+        <section aria-label="Student Metrics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Semester Attendance */}
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Attendance</CardTitle>
-              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                <CalendarIcon className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
-              </div>
-            </CardHeader>
-            <CardContent className="relative">
-              <div className={`text-2xl sm:text-3xl font-bold mb-1 tabular-nums ${
-                (attendanceSummary?.percentage_present || 0) >= 90 ? 'text-emerald-400' :
-                (attendanceSummary?.percentage_present || 0) >= 75 ? 'text-amber-400' : 'text-rose-400'
-              }`}>
-                {isLoadingAttendance ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                ) : (
-                  `${attendanceSummary?.percentage_present || 0}%`
-                )}
-              </div>
-              <p className="text-[10px] sm:text-xs text-slate-500 mb-2 sm:mb-3">
-                {attendanceSummary?.present || 0} of {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0} days
-              </p>
-              <div className="relative">
-                <div className="h-2 w-full bg-slate-800/50 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      (attendanceSummary?.percentage_present || 0) >= 90 ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' :
-                      (attendanceSummary?.percentage_present || 0) >= 75 ? 'bg-gradient-to-r from-amber-400 to-amber-500' : 'bg-gradient-to-r from-rose-400 to-rose-500'
-                    }`}
-                    style={{ width: `${attendanceSummary?.percentage_present || 0}%` }}
-                  />
+          <Card className="border border-border-default bg-surface-default shadow-none">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Attendance Rate</p>
+                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
+                  <Calendar size={16} />
                 </div>
+              </div>
+              <div>
+                <p className={`text-2xl font-bold tabular-nums ${
+                  (attendanceSummary?.percentage_present || 0) >= 75 ? 'text-status-success' : 'text-status-warning'
+                }`}>
+                  {attendanceSummary?.percentage_present || 0}%
+                </p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {attendanceSummary?.present || 0} of {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0} days recorded
+                </p>
+              </div>
+              <div className="h-1.5 w-full bg-surface-subtle rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all ${
+                    (attendanceSummary?.percentage_present || 0) >= 75 ? 'bg-status-success' : 'bg-status-warning'
+                  }`}
+                  style={{ width: `${Math.min(100, attendanceSummary?.percentage_present || 0)}%` }}
+                />
               </div>
             </CardContent>
           </Card>
 
-          {/* Semester Progress */}
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Progress</CardTitle>
-              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <Activity className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
+          {/* Semester Timeline Progress */}
+          <Card className="border border-border-default bg-surface-default shadow-none">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Term Progress</p>
+                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
+                  <Activity size={16} />
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="relative">
-              <div className="text-2xl sm:text-3xl font-bold text-purple-400 mb-1 tabular-nums">
-                {isLoadingAttendance ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                ) : attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
-                  (() => {
-                    const now = new Date();
-                    const start = new Date(attendanceSummary.semester_start_date);
-                    const end = new Date(attendanceSummary.semester_end_date);
-                    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                    const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                    const progressPercent = Math.min(100, Math.round((elapsedDays / totalDays) * 100));
-                    return `${progressPercent}%`;
-                  })()
-                ) : 'N/A'}
-              </div>
-              <p className="text-xs text-slate-500 mb-3">
-                {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
-                  (() => {
-                    const start = new Date(attendanceSummary.semester_start_date);
-                    const end = new Date(attendanceSummary.semester_end_date);
-                    const now = new Date();
-                    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                    const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                    const remainingDays = Math.max(0, totalDays - elapsedDays);
-                    return `${remainingDays} days remaining`;
-                  })()
-                ) : 'Semester timeline'}
-              </p>
-              <div className="relative">
-                <div className="h-2 w-full bg-slate-800/50 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-purple-400 to-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? ((() => {
+              <div>
+                <p className="text-2xl font-bold text-text-primary tabular-nums">
+                  {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
+                    (() => {
                       const now = new Date();
                       const start = new Date(attendanceSummary.semester_start_date);
                       const end = new Date(attendanceSummary.semester_end_date);
                       const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
                       const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                      return Math.min(100, Math.round((elapsedDays / totalDays) * 100));
-                    })()) : 0}%` }}
-                  />
-                </div>
+                      return `${Math.min(100, Math.round((elapsedDays / totalDays) * 100))}%`;
+                    })()
+                  ) : 'Term Active'}
+                </p>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
+                    (() => {
+                      const start = new Date(attendanceSummary.semester_start_date);
+                      const end = new Date(attendanceSummary.semester_end_date);
+                      const now = new Date();
+                      const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                      const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+                      const remainingDays = Math.max(0, totalDays - elapsedDays);
+                      return `${remainingDays} days remaining`;
+                    })()
+                  ) : 'Semester timeline'}
+                </p>
+              </div>
+              <div className="h-1.5 w-full bg-surface-subtle rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-action-primary rounded-full transition-all"
+                  style={{ width: `${attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? ((() => {
+                    const now = new Date();
+                    const start = new Date(attendanceSummary.semester_start_date);
+                    const end = new Date(attendanceSummary.semester_end_date);
+                    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                    const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+                    return Math.min(100, Math.round((elapsedDays / totalDays) * 100));
+                  })()) : 50}%` }}
+                />
               </div>
             </CardContent>
           </Card>
 
           {/* Student ID */}
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Student ID</CardTitle>
-              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
-                <User className="h-3 w-3 sm:h-4 sm:w-4 text-cyan-400" />
+          <Card className="border border-border-default bg-surface-default shadow-none">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Student ID</p>
+                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
+                  <User size={16} />
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="relative">
-              <div className="text-lg sm:text-2xl font-bold text-white mb-1 tabular-nums">
-                {isLoadingStudent ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  studentData?.studentId || 'N/A'
-                )}
+              <div>
+                <p className="text-xl font-bold font-mono text-text-primary tabular-nums">
+                  {studentData?.studentId || studentData?.student_id || 'N/A'}
+                </p>
+                <p className="text-xs text-text-muted mt-0.5 truncate">
+                  {studentData?.faculty || 'Enrolled Division'} • Sem {studentData?.semester || 1}
+                </p>
               </div>
-              <p className="text-xs text-slate-500 truncate">
-                {studentData?.faculty || 'General'}
-              </p>
             </CardContent>
           </Card>
 
-          {/* Face ID Status */}
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-slate-600 transition-all duration-300 group overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wide">Face ID</CardTitle>
-              <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                <Shield className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-400" />
+          {/* Biometric Status */}
+          <Card className="border border-border-default bg-surface-default shadow-none">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Biometrics</p>
+                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
+                  <Security size={16} />
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="relative">
-              <div className={`text-lg sm:text-2xl font-bold mb-1 flex items-center gap-2 ${studentData?.face_encoding ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {isLoadingStudent ? (
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                ) : (
-                  <>
-                    {studentData?.face_encoding ? (
-                      <CheckCircle className="h-5 w-5" />
-                    ) : (
-                      <Clock className="h-5 w-5" />
-                    )}
-                    {studentData?.face_encoding ? 'Active' : 'Pending'}
-                  </>
-                )}
+              <div>
+                <div className="flex items-center gap-1.5">
+                  {studentData?.face_encoding ? (
+                    <>
+                      <CheckmarkFilled size={16} className="text-status-success" />
+                      <span className="text-lg font-bold text-status-success">Registered</span>
+                    </>
+                  ) : (
+                    <>
+                      <Time size={16} className="text-status-warning" />
+                      <span className="text-lg font-bold text-status-warning">Action Needed</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-text-muted mt-0.5">
+                  {studentData?.face_encoding ? 'Face recognition enabled' : 'Biometric capture required'}
+                </p>
               </div>
-              <p className="text-xs text-slate-500">
-                {studentData?.face_encoding ? 'Biometric enabled' : 'Setup required'}
-              </p>
             </CardContent>
           </Card>
         </section>
           
-        {/* Today's Class Schedule */}
+        {/* Today's Class Schedule with Check-in Component */}
         <TodayClassSchedule 
           studentData={studentData}
           todayAttendance={todayAttendanceRecords}
@@ -361,164 +325,97 @@ const StudentDashboard = () => {
             setHasMarkedAttendanceToday(true);
             refetchTodayAttendance?.();
             toast({
-              title: "Attendance Marked",
-              description: "Successfully marked attendance",
+              title: "Attendance Recorded",
+              description: "Your attendance was verified and recorded.",
             });
           }}
         />
 
-        {/* Today's Attendance Overview */}
-        <section aria-label="Today's Schedule">
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 overflow-hidden">
-            <CardHeader className="border-b border-slate-800/50 pb-3 sm:pb-4">
-              <div className="flex flex-col gap-2 sm:gap-3">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg sm:text-xl md:text-2xl text-white flex items-center gap-2">
-                    <div className="h-6 w-6 sm:h-8 sm:w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <BookOpen className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
-                    </div>
-                    Today's Schedule
+        {/* Today's Timetable Status Overview */}
+        <section aria-label="Today's Timetable Status">
+          <Card className="border border-border-default bg-surface-default shadow-none">
+            <CardHeader className="py-4 border-b border-border-subtle">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
+                    <Book size={18} className="text-action-primary" />
+                    Today's Attendance Status
                   </CardTitle>
-                  <CardDescription className="text-slate-400 text-xs sm:text-sm">
-                    {new Date().toLocaleDateString('en-US', { weekday: 'long' })} • {todaySchedules.length} {todaySchedules.length === 1 ? 'class' : 'classes'}
+                  <CardDescription className="text-xs text-text-muted mt-0.5">
+                    {todaySchedules.length} course session{todaySchedules.length === 1 ? '' : 's'} scheduled for today
                   </CardDescription>
                 </div>
                 {hasMarkedAttendanceToday && (
-                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 px-3 py-1">
-                    <CheckCircle className="h-3 w-3 mr-1.5" />
-                    {relevantAttendanceRecords.filter(record => record.status === 'present').length || 0} Attended
+                  <Badge variant="outline" className="text-xs text-status-success border-status-success/30 bg-status-success/10 py-1 px-2.5">
+                    <CheckmarkFilled size={12} className="mr-1 inline" />
+                    {relevantAttendanceRecords.filter((r) => r.status === 'present').length} Verified
                   </Badge>
                 )}
               </div>
             </CardHeader>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 mb-4 sm:mb-6">
-                <div className="bg-slate-800/60 rounded-xl p-3 sm:p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                      <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">
-                        {isLoadingSchedules ? '...' : relevantAttendanceRecords.filter(record => record.status === 'present').length}
-                      </p>
-                      <p className="text-[10px] sm:text-xs text-slate-400 truncate">Present</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-slate-800/60 rounded-xl p-3 sm:p-4 border border-slate-700/70 hover:border-slate-600/70 transition-colors">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                      <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xl sm:text-2xl font-bold text-white tabular-nums">
-                        {isLoadingSchedules ? '...' : todaySchedules.length}
-                      </p>
-                      <p className="text-[10px] sm:text-xs text-slate-400 truncate">Total</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
+            <CardContent className="p-4">
               <div className="space-y-2">
                 {isLoadingSchedules ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="text-center space-y-3">
-                      <Loader2 className="h-8 w-8 animate-spin text-blue-400 mx-auto" />
-                      <p className="text-sm text-slate-400">Loading today's schedule...</p>
-                    </div>
+                  <div className="py-8 text-center text-xs text-text-muted">
+                    Loading timetable...
                   </div>
                 ) : todaySchedules.length > 0 ? (
                   todaySchedules.map((schedule) => {
-                    const attendanceRecord = todayAttendanceRecords.find(record => {
-                      const recordSubjectIdInt = parseInt(record.subjectId);
-                      const scheduleSubjectIdInt = parseInt(schedule.subject_id.toString());
+                    const attendanceRecord = todayAttendanceRecords.find((record) => {
+                      const recordSubjectIdInt = parseInt(record.subjectId, 10);
+                      const scheduleSubjectIdInt = parseInt(schedule.subject_id.toString(), 10);
                       return !isNaN(recordSubjectIdInt) && !isNaN(scheduleSubjectIdInt) && recordSubjectIdInt === scheduleSubjectIdInt;
                     });
                     
-                    let status = 'Pending';
-                    let statusColor = 'bg-slate-700/50 text-slate-300 border-slate-600/50';
-                    let statusIcon = <Clock className="h-3 w-3" />;
+                    let statusText = 'Pending';
+                    let statusBadgeClass = 'bg-surface-subtle text-text-muted border-border-default';
 
-                    // Check if class is cancelled
                     if (schedule.is_cancelled) {
-                      status = 'Cancelled';
-                      statusColor = 'bg-gray-600/30 text-gray-400 border-gray-500/30';
-                      statusIcon = <XCircle className="h-3 w-3" />;
+                      statusText = 'Cancelled';
+                      statusBadgeClass = 'bg-surface-subtle text-text-muted border-border-default';
                     } else if (attendanceRecord) {
                       const recordStatus = attendanceRecord.status?.toLowerCase() || '';
                       if (recordStatus === 'present') {
-                        status = 'Present';
-                        statusColor = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
-                        statusIcon = <CheckCircle className="h-3 w-3" />;
+                        statusText = 'Present';
+                        statusBadgeClass = 'bg-status-success/10 text-status-success border-status-success/30';
                       } else if (recordStatus === 'absent') {
-                        status = 'Absent';
-                        statusColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-                        statusIcon = <XCircle className="h-3 w-3" />;
+                        statusText = 'Absent';
+                        statusBadgeClass = 'bg-status-danger/10 text-status-danger border-status-danger/30';
                       } else if (recordStatus === 'late') {
-                        status = 'Late';
-                        statusColor = 'bg-amber-500/10 text-amber-400 border-amber-500/20';
-                        statusIcon = <Clock className="h-3 w-3" />;
-                      }
-                    } else {
-                      const now = new Date();
-                      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-                      let endTimeMinutes = 0;
-                      
-                      if (schedule.end_time) {
-                        const [endHour, endMin] = schedule.end_time.split(':').map(Number);
-                        endTimeMinutes = endHour * 60 + endMin;
-                      }
-                      
-                      if (endTimeMinutes > 0 && currentMinutes > (endTimeMinutes + 15)) {
-                        status = 'Absent';
-                        statusColor = 'bg-rose-500/10 text-rose-400 border-rose-500/20';
-                        statusIcon = <XCircle className="h-3 w-3" />;
+                        statusText = 'Late';
+                        statusBadgeClass = 'bg-status-warning/10 text-status-warning border-status-warning/30';
                       }
                     }
-                    
+
                     return (
-                      <div key={schedule.id} className={`group flex items-center justify-between p-3 sm:p-4 rounded-xl border transition-all duration-200 ${
-                        schedule.is_cancelled 
-                          ? 'bg-slate-800/40 border-gray-600/50 opacity-75' 
-                          : 'bg-slate-800/60 hover:bg-slate-800/80 border-slate-700/70 hover:border-slate-600/70'
-                      }`}>
-                        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
-                          <div className={`h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full shrink-0 ${
-                            status === 'Cancelled' ? 'bg-gray-500' :
-                            status === 'Present' ? 'bg-emerald-400' : 
-                            status === 'Absent' ? 'bg-rose-400' :
-                            status === 'Late' ? 'bg-amber-400' : 'bg-slate-500'
-                          }`}></div>
-                          <div className="min-w-0 flex-1">
-                            <p className={`text-xs sm:text-sm font-medium truncate ${
-                              schedule.is_cancelled ? 'text-gray-400 line-through' : 'text-white'
-                            }`}>
-                              {schedule.subject_name}
-                            </p>
-                            <p className="text-slate-400 text-[10px] sm:text-xs truncate">
-                              {schedule.time_slot_display}
-                              {schedule.is_cancelled && schedule.cancellation_reason && (
-                                <span className="ml-2 text-gray-500">• {schedule.cancellation_reason}</span>
-                              )}
-                            </p>
+                      <div 
+                        key={schedule.id} 
+                        className="p-3 rounded-md border border-border-default bg-surface-default hover:bg-surface-subtle transition-colors flex items-center justify-between gap-3"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${schedule.is_cancelled ? 'line-through text-text-muted' : 'text-text-primary'} truncate`}>
+                            {schedule.subject_name}
+                          </p>
+                          <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
+                            <span className="font-mono">{schedule.time_slot_display}</span>
+                            <span>•</span>
+                            <span>{schedule.classroom || 'Room N/A'}</span>
+                            {schedule.is_cancelled && schedule.cancellation_reason && (
+                              <span className="text-status-warning">({schedule.cancellation_reason})</span>
+                            )}
                           </div>
                         </div>
-                        <Badge variant="outline" className={`${statusColor} flex items-center gap-1 sm:gap-1.5 shrink-0 ml-2 text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5`}>
-                          <span className="h-2.5 w-2.5 sm:h-3 sm:w-3">{statusIcon}</span>
-                          <span className="hidden sm:inline">{status}</span>
+                        <Badge variant="outline" className={`text-xs py-0.5 px-2 font-medium ${statusBadgeClass}`}>
+                          {statusText}
                         </Badge>
                       </div>
                     );
                   })
                 ) : (
-                  <div className="text-center py-12">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-800/70 mb-4">
-                      <Calendar className="h-8 w-8 text-slate-400" />
-                    </div>
-                    <p className="text-slate-400 text-sm font-medium mb-1">No classes today</p>
-                    <p className="text-slate-500 text-xs">Enjoy your free day!</p>
+                  <div className="text-center py-8 text-text-muted">
+                    <Calendar size={28} className="mx-auto mb-2 opacity-40" />
+                    <p className="text-sm font-medium text-text-primary">No classes scheduled today</p>
+                    <p className="text-xs text-text-muted mt-0.5">Enjoy your free study hours</p>
                   </div>
                 )}
               </div>
@@ -527,36 +424,50 @@ const StudentDashboard = () => {
         </section>
 
         {/* Quick Actions Grid */}
-        <section aria-label="Quick Actions">
-          <h2 className="text-base sm:text-lg font-semibold text-white mb-3 sm:mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-            <Link to="/student/calendar" className="group">
-              <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-blue-500/50 hover:bg-slate-900/85 transition-all duration-300 h-full">
-                <CardContent className="p-4 sm:p-6">
-                  <div className="flex items-start justify-between mb-3 sm:mb-4">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Calendar className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />
+        <section aria-label="Student Services" className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Student Services & Portals
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Link to="/student/calendar" className="block group">
+              <Card className="border border-border-default bg-surface-default hover:border-action-primary transition-colors shadow-none p-4 h-full">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
+                      <Calendar size={20} />
                     </div>
-                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-1 transition-all duration-300" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary group-hover:text-action-primary transition-colors">
+                        Academic Calendar
+                      </h3>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        Inspect term dates, institutional breaks, and class timetables
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-white mb-1.5 sm:mb-2 text-sm sm:text-base">Academic Calendar</h3>
-                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">View semester schedule, holidays, and important dates</p>
-                </CardContent>
+                  <ArrowRight size={16} className="text-text-muted group-hover:text-action-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                </div>
               </Card>
             </Link>
 
-            <Link to="/face-registration" className="group">
-              <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80 hover:border-purple-500/50 hover:bg-slate-900/85 transition-all duration-300 h-full">
-                <CardContent className="p-4 sm:p-6">
-                  <div className="flex items-start justify-between mb-3 sm:mb-4">
-                    <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                      <Camera className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
+            <Link to="/face-registration" className="block group">
+              <Card className="border border-border-default bg-surface-default hover:border-action-primary transition-colors shadow-none p-4 h-full">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
+                      <Camera size={20} />
                     </div>
-                    <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-slate-500 group-hover:text-purple-400 group-hover:translate-x-1 transition-all duration-300" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary group-hover:text-action-primary transition-colors">
+                        Face Biometrics Setup
+                      </h3>
+                      <p className="text-xs text-text-muted mt-0.5">
+                        {studentData?.face_encoding ? 'Manage or update your facial recognition profile' : 'Complete initial facial registration for automated check-ins'}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-semibold text-white mb-1.5 sm:mb-2 text-sm sm:text-base">Face Registration</h3>
-                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">{studentData?.face_encoding ? 'Update your biometric data' : 'Set up face recognition for quick access'}</p>
-                </CardContent>
+                  <ArrowRight size={16} className="text-text-muted group-hover:text-action-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                </div>
               </Card>
             </Link>
           </div>
@@ -571,7 +482,6 @@ const StudentDashboard = () => {
           }}
           onCancel={() => setShowFaceRegistration(false)}
         />
-        </div>
       </div>
     </StudentSidebar>
   );

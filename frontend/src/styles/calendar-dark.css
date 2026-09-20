@@ -1,398 +1,195 @@
-/* Override styles to ensure events are always visible */
-.calendar-override .rbc-event {
-  background-color: #3B82F6 !important;
-  color: white !important;
-  border: 2px solid #1D4ED8 !important;
-  border-radius: 6px !important;
-  padding: 4px 6px !important;
-  font-weight: 600 !important;
-  font-size: 13px !important;
-  opacity: 1 !important;
-  display: block !important;
-  z-index: 10 !important;
-  min-height: 24px !important;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
-  position: relative !important;
-  margin: 2px !important;
+/* AttendAI Enterprise Calendar Styling for React Big Calendar & Schedule Views */
+
+.rbc-calendar {
+  font-family: var(--font-sans, 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif);
+  color: var(--text-primary, #161616);
+  background-color: var(--surface-default, #FFFFFF);
+  border: 1px solid var(--border-subtle, #E0E0E0);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.calendar-override .rbc-event:hover {
-  background-color: #2563EB !important;
-  transform: scale(1.02) !important;
-  transition: all 0.2s ease !important;
-}
-
-.calendar-override .rbc-event-content {
-  color: white !important;
-  font-weight: 600 !important;
-  text-align: center !important;
-  width: 100% !important;
-  height: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-.calendar-override .rbc-row-segment {
-  position: relative !important;
-}
-
-.calendar-override .rbc-event-allday {
-  position: relative !important;
-  width: 100% !important;
-  display: block !important;
-}
-
-/* Dark theme for react-big-calendar */
-.calendar-dark .rbc-calendar {
-  background-color: transparent;
-  color: #f1f5f9;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.calendar-dark .rbc-header {
-  background-color: rgba(30, 41, 59, 0.8);
-  border-color: rgba(71, 85, 105, 0.5);
-  color: #cbd5e1;
+/* Header */
+.rbc-header {
+  background-color: var(--surface-canvas, #F4F4F4);
+  border-bottom: 1px solid var(--border-subtle, #E0E0E0);
+  color: var(--text-secondary, #525252);
   font-weight: 600;
-  padding: 12px 8px;
+  padding: 10px 8px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-size: 11px;
 }
 
-.calendar-dark .rbc-month-view {
-  background-color: transparent;
-  border-color: rgba(71, 85, 105, 0.3);
+.rbc-header + .rbc-header {
+  border-left: 1px solid var(--border-subtle, #E0E0E0);
 }
 
-.calendar-dark .rbc-day-bg {
-  background-color: rgba(30, 41, 59, 0.3);
-  border-color: rgba(71, 85, 105, 0.3);
-  position: relative;
-  min-height: 120px;
+/* Month View */
+.rbc-month-view {
+  border: none;
 }
 
-.calendar-dark .rbc-day-bg:hover {
-  background-color: rgba(30, 41, 59, 0.5);
+.rbc-month-row + .rbc-month-row {
+  border-top: 1px solid var(--border-subtle, #E0E0E0);
 }
 
-.calendar-dark .rbc-off-range-bg {
-  background-color: rgba(15, 23, 42, 0.3);
+.rbc-day-bg {
+  background-color: var(--surface-default, #FFFFFF);
+  border-left: 1px solid var(--border-subtle, #E0E0E0);
+  min-height: 100px;
+  transition: background-color 0.15s ease;
 }
 
-.calendar-dark .rbc-today {
-  background-color: rgba(59, 130, 246, 0.15) !important;
-  border: 2px solid rgba(59, 130, 246, 0.4);
+.rbc-day-bg:hover {
+  background-color: var(--surface-canvas, #F4F4F4);
 }
 
-/* Today's date number styling */
-.calendar-dark .rbc-today .rbc-button-link {
-  background: #3b82f6 !important;
-  color: #ffffff !important;
-  border-radius: 50% !important;
-  width: 32px !important;
-  height: 32px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  margin: 4px !important;
+.rbc-off-range-bg {
+  background-color: var(--surface-canvas, #F4F4F4);
+  opacity: 0.75;
+}
+
+/* Today highlight */
+.rbc-today {
+  background-color: #EDF5FF !important; /* Soft blue tint */
+}
+
+.dark .rbc-today {
+  background-color: rgba(11, 87, 208, 0.08) !important;
+}
+
+.rbc-today .rbc-button-link {
+  color: #0B57D0 !important;
+  font-weight: 700 !important;
+}
+
+/* Date cell numbers */
+.rbc-date-cell {
+  padding: 6px 8px;
+  text-align: right;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #525252);
+}
+
+.rbc-date-cell.rbc-off-range {
+  color: var(--text-muted, #8D8D8D);
+  opacity: 0.6;
+}
+
+/* Events */
+.rbc-event {
+  background-color: #0B57D0 !important;
+  color: #FFFFFF !important;
+  border: 1px solid #0043CE !important;
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+  font-weight: 500 !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06) !important;
+  margin: 1px 2px !important;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.rbc-event:hover {
+  filter: brightness(0.92);
+}
+
+.rbc-event-content {
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rbc-event.event-holiday {
+  background-color: #DA1E28 !important;
+  border-color: #BA1B23 !important;
+}
+
+.rbc-event.event-exam {
+  background-color: #F1C21B !important;
+  color: #161616 !important;
+  border-color: #D2A106 !important;
+}
+
+.rbc-event.event-special {
+  background-color: #8A3FFC !important;
+  border-color: #6929C4 !important;
+}
+
+.rbc-event.event-cancelled {
+  background-color: #8D8D8D !important;
+  border-color: #6F6F6F !important;
+}
+
+.rbc-event.event-class {
+  background-color: #198038 !important;
+  border-color: #0E6027 !important;
+}
+
+/* Time views */
+.rbc-time-view {
+  border: none;
+}
+
+.rbc-time-header {
+  border-bottom: 1px solid var(--border-subtle, #E0E0E0);
+}
+
+.rbc-time-content {
+  border-top: 1px solid var(--border-subtle, #E0E0E0);
+}
+
+.rbc-time-slot {
+  border-top: 1px solid var(--border-subtle, #F4F4F4);
+}
+
+.rbc-timeslot-group {
+  border-bottom: 1px solid var(--border-subtle, #E0E0E0);
+  min-height: 48px;
+}
+
+.rbc-current-time-indicator {
+  background-color: #0B57D0;
+  height: 2px;
+}
+
+/* Popover & Show more */
+.rbc-show-more {
+  color: #0B57D0 !important;
+  background: transparent !important;
+  font-size: 11px !important;
   font-weight: 600 !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.6) !important;
-  text-shadow: none !important;
+  padding: 1px 4px !important;
+  border-radius: 2px !important;
 }
 
-/* Style for calendar cells that contain events - fill entire cell background */
-.calendar-dark .rbc-date-cell {
-  padding: 0;
-  min-height: 120px;
-  position: relative;
-  overflow: visible;
-  border: 1px solid rgba(71, 85, 105, 0.3);
+.rbc-show-more:hover {
+  text-decoration: underline;
 }
 
-/* When a cell has an event, fill the entire cell background with event color */
-.calendar-dark .rbc-date-cell.rbc-has-event {
-  padding: 0;
+.rbc-overlay {
+  background-color: var(--surface-default, #FFFFFF);
+  border: 1px solid var(--border-subtle, #E0E0E0);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 8px;
 }
 
-.calendar-dark .rbc-row-content {
-  position: relative;
-  z-index: 1;
-}
-
-.calendar-dark .rbc-row-segment {
-  padding: 0;
-  margin: 0;
-  position: relative;
-}
-
-.calendar-dark .rbc-event {
-  border: none;
-  border-radius: 0;
+.rbc-overlay-header {
+  border-bottom: 1px solid var(--border-subtle, #E0E0E0);
+  padding: 6px 8px;
   font-size: 13px;
-  font-weight: 700;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  cursor: pointer;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  background-clip: border-box;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  color: #ffffff;
-}
-
-.calendar-dark .rbc-event:hover {
-  filter: brightness(1.15) saturate(1.1);
-  z-index: 5;
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.3);
-  transform: scale(1.02);
-  transition: all 0.2s ease;
-}
-
-/* Remove any default event container styling - prevent wrapper conflicts */
-.calendar-dark .rbc-event-content {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px;
-  pointer-events: none; /* Prevent event conflicts */
-}
-
-/* Ensure date numbers are visible over event backgrounds */
-.calendar-dark .rbc-date-cell > a {
-  position: relative;
-  z-index: 10;
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  font-weight: 700;
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.4);
-  display: inline-block;
-  margin: 4px;
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 14px;
-}
-
-.calendar-dark .rbc-date-cell > a:hover {
-  background: rgba(0, 0, 0, 0.6);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-/* Remove or modify the selected event styling to preserve original color */
-.calendar-dark .rbc-selected {
-  /* Remove the blue override - let events keep their original colors when selected */
-  border: 3px solid rgba(255, 255, 255, 0.9);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.6), 0 6px 20px rgba(0, 0, 0, 0.4);
-  z-index: 15;
-  transform: scale(1.02);
-}
-
-/* Special styling for cell-filling events - using CSS variables to prevent overrides */
-.calendar-dark .cell-filling-event {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-  margin: 0;
-  padding: 8px 6px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  background-color: var(--event-bg-color, #8B5CF6);
-  color: var(--event-text-color, #ffffff);
-  font-weight: 700;
-  font-size: 13px;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  cursor: pointer;
-  border: none;
-}
-
-.calendar-dark .cell-filling-event:hover {
-  filter: brightness(1.15) saturate(1.1);
-  z-index: 5;
-  transform: scale(1.01);
-  transition: all 0.2s ease;
-}
-
-/* Calendar cell wrapper styling to prevent override conflicts */
-.calendar-dark .calendar-cell-wrapper {
-  background: var(--cell-bg-color, transparent);
-  transition: background-color 0.2s ease;
-}
-
-.calendar-dark .calendar-cell-wrapper:hover {
-  background: var(--cell-bg-color, rgba(30, 41, 59, 0.5));
-}
-
-/* Event type specific styling using CSS variables */
-.calendar-dark .event-holiday {
-  --event-bg-color: #ef4444;
-}
-
-.calendar-dark .event-exam {
-  --event-bg-color: #f97316;
-}
-
-.calendar-dark .event-special_event {
-  --event-bg-color: #8b5cf6;
-}
-
-.calendar-dark .event-cancelled_class {
-  --event-bg-color: #64748b;
-}
-
-.calendar-dark .event-class {
-  --event-bg-color: #22c55e;
-}
-
-.calendar-dark .rbc-slot-selection {
-  background-color: rgba(59, 130, 246, 0.2);
-  border: 2px solid #3b82f6;
-}
-
-.calendar-dark .rbc-time-view {
-  border-color: rgba(71, 85, 105, 0.3);
-}
-
-.calendar-dark .rbc-time-header {
-  border-color: rgba(71, 85, 105, 0.3);
-}
-
-.calendar-dark .rbc-time-content {
-  border-color: rgba(71, 85, 105, 0.3);
-}
-
-.calendar-dark .rbc-timeslot-group {
-  border-color: rgba(71, 85, 105, 0.2);
-}
-
-.calendar-dark .rbc-time-slot {
-  border-color: rgba(71, 85, 105, 0.2);
-}
-
-.calendar-dark .rbc-current-time-indicator {
-  background-color: #ef4444;
-}
-
-.calendar-dark .rbc-agenda-view {
-  background-color: transparent;
-  color: #f1f5f9;
-}
-
-.calendar-dark .rbc-agenda-view table.rbc-agenda-table {
-  border-color: rgba(71, 85, 105, 0.3);
-}
-
-.calendar-dark .rbc-agenda-view .rbc-agenda-table tbody > tr > td {
-  border-color: rgba(71, 85, 105, 0.3);
-  color: #e2e8f0;
-}
-
-.calendar-dark .rbc-agenda-view .rbc-agenda-table thead > tr > th {
-  border-color: rgba(71, 85, 105, 0.3);
-  background-color: rgba(30, 41, 59, 0.8);
-  color: #cbd5e1;
-}
-
-.calendar-dark .rbc-show-more {
-  background-color: rgba(59, 130, 246, 0.8);
-  color: white;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
   font-weight: 600;
+  color: var(--text-primary, #161616);
 }
 
-.calendar-dark .rbc-overlay {
-  background-color: rgba(15, 23, 42, 0.95);
-  border: 1px solid rgba(71, 85, 105, 0.5);
-  border-radius: 12px;
-  backdrop-filter: blur(8px);
-}
-
-.calendar-dark .rbc-overlay-header {
-  background-color: rgba(30, 41, 59, 0.8);
-  border-bottom: 1px solid rgba(71, 85, 105, 0.5);
-  color: #f1f5f9;
-  font-weight: 600;
-}
-
-/* Off-range (previous/next month) dates styling */
-.calendar-dark .rbc-off-range {
-  color: #64748b !important;
-  opacity: 0.5;
-}
-
-.calendar-dark .rbc-off-range .rbc-button-link {
-  color: #64748b !important;
-  background: rgba(100, 116, 139, 0.1) !important;
-}
-
-/* Nepal calendar system styling */
-.calendar-dark .nepal-weekend-day {
-  background-color: rgba(239, 68, 68, 0.08) !important;
-}
-
-.calendar-dark .nepal-working-day {
-  background-color: transparent !important;
-}
-
-/* Override react-big-calendar default weekend styling for Nepal */
-.calendar-dark .rbc-date-cell.rbc-off-range {
-  opacity: 0.3;
-}
-
-/* Weekend styling - Nepal calendar: Only Saturday is weekend */
-.calendar-dark .rbc-date-cell.weekend {
-  background-color: rgba(239, 68, 68, 0.05);
-}
-
-/* Saturday-specific styling for Nepal calendar */
-.calendar-dark .rbc-date-cell[data-day="6"] {
-  background-color: rgba(239, 68, 68, 0.05);
-}
-
-/* Event type specific enhancements */
-.calendar-dark .rbc-event.event-holiday {
-  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
-}
-
-.calendar-dark .rbc-event.event-exam {
-  background: linear-gradient(135deg, #f97316, #ea580c) !important;
-}
-
-.calendar-dark .rbc-event.event-special {
-  background: linear-gradient(135deg, #8b5cf6, #7c3aed) !important;
-}
-
-.calendar-dark .rbc-event.event-cancelled {
-  background: linear-gradient(135deg, #64748b, #475569) !important;
-}
-
-.calendar-dark .rbc-event.event-class {
-  background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+/* Nepal Saturday Weekend highlight */
+.rbc-date-cell.weekend,
+.rbc-date-cell[data-day="6"] {
+  background-color: rgba(218, 30, 40, 0.04);
 }

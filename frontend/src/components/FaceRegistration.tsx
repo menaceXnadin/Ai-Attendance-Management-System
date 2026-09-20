@@ -544,7 +544,7 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({
                 </p>
                 <Button 
                   onClick={() => setIsActive(true)} 
-                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0"
+                  className="bg-action-primary hover:bg-action-primary-hover text-white px-8 py-2.5 text-sm font-semibold transition-colors"
                 >
                   <Camera className="mr-2 h-4 w-4" />
                   Start Registration
@@ -734,7 +734,7 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({
                 </p>
                 <Button 
                   onClick={retryCapture}
-                  className="bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-600 hover:to-indigo-600 text-white px-8 py-3 text-base font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0"
+                  className="bg-action-primary hover:bg-action-primary-hover text-white px-8 py-2.5 text-sm font-semibold transition-colors"
                 >
                   Try Again
                 </Button>

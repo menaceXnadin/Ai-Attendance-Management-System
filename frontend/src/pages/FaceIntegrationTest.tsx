@@ -140,7 +140,7 @@ const FaceIntegrationTest: React.FC = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center space-y-0 pb-2">
-            <Brain className="h-8 w-8 text-purple-500 mr-3" />
+            <Brain className="h-8 w-8 text-action-primary mr-3" />
             <div className="flex-1">
               <CardTitle className="text-lg">Backend: InsightFace</CardTitle>
               <p className="text-sm text-muted-foreground">AI-powered face recognition</p>
@@ -178,7 +178,7 @@ const FaceIntegrationTest: React.FC = () => {
             <Button 
               onClick={() => setShowRegistration(true)}
               size="lg"
-              className="h-16 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+              className="h-16 bg-action-primary hover:bg-action-primary-hover text-white"
               disabled={testResults.frontend !== 'success' || testResults.backend !== 'success'}
             >
               <div className="text-center">
@@ -190,7 +190,7 @@ const FaceIntegrationTest: React.FC = () => {
             <Button 
               onClick={() => setShowRecognition(true)}
               size="lg"
-              className="h-16 bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700"
+              className="h-16 bg-status-success hover:bg-status-success/90 text-white"
               disabled={testResults.frontend !== 'success' || testResults.backend !== 'success'}
             >
               <div className="text-center">
@@ -228,7 +228,7 @@ const FaceIntegrationTest: React.FC = () => {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-2 text-purple-600">Backend (InsightFace)</h4>
+              <h4 className="font-semibold mb-2 text-action-primary">Backend (InsightFace)</h4>
               <ul className="text-sm space-y-1">
                 <li>• High-accuracy face recognition</li>
                 <li>• 512-dimensional embeddings</li>

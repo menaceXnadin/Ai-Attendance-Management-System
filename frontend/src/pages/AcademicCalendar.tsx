@@ -1230,325 +1230,387 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     }
   }, [filteredEvents]);
 
-  return (
-    <div className={embedded ? "w-full" : "min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950"}>
-      <div className="p-4 sm:p-6 space-y-6">
-        {/* Header */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-4 sm:p-6">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1 sm:mb-2">Academic Calendar</h1>
-              <p className="text-sm sm:text-base text-slate-400">Manage your academic schedule and events</p>
-              {/* Debug badge */}
-              <div className="mt-2 flex gap-2">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  isAdmin ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'
-                }`}>
-                  {isAdmin ? 'Admin User' : 'Student User'}
-                </span>
-                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">
-                  Role: {user?.role || 'Unknown'}
-                </span>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3 flex-wrap">
-              {/* Date Navigation */}
-              <div className="flex items-center gap-2 bg-slate-800/60 rounded-xl p-2 w-full sm:w-auto">
-                <button
-                  onClick={navigateBack}
-                  className="p-2 hover:bg-slate-700/60 rounded-lg transition-all duration-200"
-                >
-                  <ChevronLeft className="w-5 h-5 text-slate-300" />
-                </button>
-                
-                <div className="px-3 sm:px-4 py-2 text-white font-medium min-w-[120px] sm:min-w-[200px] text-center text-sm sm:text-base">
-                  {formatDisplayDate()}
-                </div>
-                
-                <button
-                  onClick={navigateNext}
-                  className="p-2 hover:bg-slate-700/60 rounded-lg transition-all duration-200"
-                >
-                  <ChevronRight className="w-5 h-5 text-slate-300" />
-                </button>
-                
-                <button
-                  onClick={navigateToday}
-                  className="px-3 py-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-lg hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium text-sm"
-                >
-                  Today
-                </button>
-              </div>
+    return (
+    <div className={embedded ? "w-full space-y-6" : "w-full max-w-[1600px] mx-auto space-y-6 pb-12"}>
+      {/* Page Context & Top Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-xl sm:text-2xl font-bold text-text-primary tracking-tight">
+              Academic Calendar
+            </h1>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-action-primary-subtle text-action-primary border border-action-primary/20">
+              Nepal Standard
+            </span>
+            {isAdmin && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-status-success-subtle text-status-success border border-status-success-border">
+                Admin Mode
+              </span>
+            )}
+          </div>
+          <p className="text-xs sm:text-sm text-text-muted mt-1">
+            Institutional semester dates, examination schedules, sessions, and holiday tracking
+          </p>
+        </div>
 
-              {/* View Selector */}
-              <div className="flex bg-slate-800/60 rounded-xl p-1 w-full sm:w-auto">
-                {(['month', 'week', 'day'] as const).map((view) => (
-                  <button
-                    key={view}
-                    onClick={() => setCurrentView(view)}
-                    className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all duration-200 ${
-                      currentView === view
-                        ? 'bg-gradient-to-r from-blue-500 to-teal-400 text-white shadow-md'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                    }`}
-                  >
-                    {view}
-                  </button>
-                ))}
-              </div>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          {isAdmin && (
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-action-primary hover:bg-action-primary-hover text-white rounded-lg text-xs sm:text-sm font-semibold shadow-xs transition-colors active:scale-[0.98]"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Event</span>
+            </button>
+          )}
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            className="p-2 bg-surface-default hover:bg-surface-subtle border border-border-default rounded-lg text-text-secondary hover:text-text-primary transition-colors shadow-xs"
+            title="Calendar Settings"
+            aria-label="Calendar Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
-              {/* Filter */}
-              <div className="relative w-full sm:w-auto">
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="appearance-none bg-slate-800/60 border border-slate-600/50 rounded-xl px-3 sm:px-4 py-2.5 pr-10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 backdrop-blur-md w-full sm:w-auto"
-                >
-                  <option value="all">All Events</option>
-                  <option value="class">Academic Days</option>
-                  <option value="exam">Exams</option>
-                  <option value="holiday">Holidays</option>
-                  <option value="special_event">Special Events</option>
-                  <option value="cancelled_class">Cancelled Classes</option>
-                </select>
-                <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-              </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: This Month */}
+        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">This Month</p>
+            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
+              {stats.total_events_this_month || 0}
+            </p>
+            <p className="text-[11px] text-text-secondary">Events in {moment(currentDate).format('MMMM')}</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-action-primary-subtle flex items-center justify-center text-action-primary shrink-0">
+            <CalendarDays className="w-5 h-5" />
+          </div>
+        </div>
 
-              {/* Admin Actions */}
-              {isAdmin && (
-                <button
-                  onClick={() => setShowCreateModal(true)}
-                  className="w-full sm:w-auto justify-center flex items-center gap-2 bg-gradient-to-r from-blue-500 to-teal-400 text-white px-4 py-2.5 rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 shadow-lg font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Add Event</span>
-                </button>
-              )}
+        {/* Card 2: Upcoming */}
+        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Upcoming Events</p>
+            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
+              {stats.upcoming_events || 0}
+            </p>
+            <p className="text-[11px] text-text-secondary">Next 30 days ahead</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-status-info-subtle flex items-center justify-center text-status-info shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
 
+        {/* Card 3: Today */}
+        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Today\'s Schedule</p>
+            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
+              {stats.classes_today || 0}
+            </p>
+            <p className="text-[11px] text-text-secondary">{moment().format('dddd, MMM D')}</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-status-warning-subtle flex items-center justify-center text-status-warning shrink-0">
+            <BookOpen className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 4: Attendance */}
+        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Attendance Marked</p>
+            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
+              {stats.total_attendance_marked || 0}
+            </p>
+            <p className="text-[11px] text-text-secondary">Recorded sessions</p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-status-success-subtle flex items-center justify-center text-status-success shrink-0">
+            <TrendingUp className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* Main Calendar Card */}
+      <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xs overflow-hidden">
+        {/* Integrated Calendar Header / Toolbar */}
+        <div className="p-4 sm:p-5 border-b border-border-subtle flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-surface-default">
+          {/* Left: Date Display & Connected Navigation */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center shadow-2xs rounded-lg overflow-hidden border border-border-default">
               <button
-                onClick={() => setShowSettingsModal(true)}
-                className="p-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl hover:bg-slate-700/60 transition-all duration-200 w-full sm:w-auto"
+                onClick={navigateBack}
+                className="p-2 bg-surface-default hover:bg-surface-subtle text-text-secondary hover:text-text-primary transition-colors border-r border-border-default"
+                aria-label="Previous date range"
+                title="Previous"
               >
-                <Settings className="w-5 h-5 text-slate-300" />
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                onClick={navigateToday}
+                className="px-3.5 py-1.5 bg-surface-default hover:bg-surface-subtle text-text-primary text-xs font-semibold transition-colors border-r border-border-default"
+              >
+                Today
+              </button>
+              <button
+                onClick={navigateNext}
+                className="p-2 bg-surface-default hover:bg-surface-subtle text-text-secondary hover:text-text-primary transition-colors"
+                aria-label="Next date range"
+                title="Next"
+              >
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
+
+            <h2 className="text-lg sm:text-xl font-bold text-text-primary tracking-tight">
+              {formatDisplayDate()}
+            </h2>
+
+            <span className="text-xs text-text-muted bg-surface-subtle px-2.5 py-1 rounded-full border border-border-subtle font-medium hidden sm:inline-flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-action-primary" />
+              {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}
+            </span>
+          </div>
+
+          {/* Right: View Selector, Filter, and Admin Indicator */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* View Selector segmented control */}
+            <div className="inline-flex bg-surface-subtle border border-border-subtle rounded-lg p-1">
+              {(['month', 'week', 'day'] as const).map((view) => (
+                <button
+                  key={view}
+                  onClick={() => setCurrentView(view)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all ${
+                    currentView === view
+                      ? 'bg-surface-default text-text-primary shadow-xs'
+                      : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  {view}
+                </button>
+              ))}
+            </div>
+
+            {/* Filter Dropdown */}
+            <div className="relative">
+              <select
+                value={filterType}
+                onChange={(e) => setFilterType(e.target.value)}
+                className="appearance-none bg-surface-default border border-border-default rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-text-primary hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-action-primary/20 focus:border-action-primary transition-colors cursor-pointer"
+              >
+                <option value="all">All Event Types</option>
+                <option value="class">Academic Days</option>
+                <option value="exam">Examinations</option>
+                <option value="holiday">Holidays (Saturdays)</option>
+                <option value="special_event">Special Events</option>
+                <option value="cancelled_class">Cancelled Classes</option>
+              </select>
+              <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
+            </div>
+
+            {isAdmin && (
+              <div className="hidden xl:flex items-center gap-1.5 text-xs text-text-muted bg-surface-subtle border border-border-subtle px-2.5 py-1.5 rounded-lg">
+                <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
+                <span>Click cell to add event</span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-400">This Month</p>
-                <p className="text-2xl font-bold text-white mt-1">{stats.total_events_this_month || 0}</p>
-              </div>
-              <div className="p-3 bg-blue-500/20 rounded-xl">
-                <CalendarDays className="w-6 h-6 text-blue-400" />
-              </div>
-            </div>
+        {/* Calendar Body */}
+        {loading ? (
+          <div className="flex flex-col items-center justify-center h-96">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-action-primary mb-3"></div>
+            <p className="text-xs font-medium text-text-muted">Loading calendar events...</p>
           </div>
-
-          <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-400">Upcoming</p>
-                <p className="text-2xl font-bold text-white mt-1">{stats.upcoming_events || 0}</p>
-              </div>
-              <div className="p-3 bg-teal-500/20 rounded-xl">
-                <Clock className="w-6 h-6 text-teal-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-400">Today's Academic Events</p>
-                <p className="text-2xl font-bold text-white mt-1">{stats.classes_today || 0}</p>
-              </div>
-              <div className="p-3 bg-purple-500/20 rounded-xl">
-                <CalendarDays className="w-6 h-6 text-purple-400" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-400">Attendance</p>
-                <p className="text-2xl font-bold text-white mt-1">{stats.total_attendance_marked || 0}</p>
-              </div>
-              <div className="p-3 bg-purple-500/20 rounded-xl">
-                <TrendingUp className="w-6 h-6 text-purple-400" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Custom Calendar - Events from Database */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl overflow-hidden">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center h-96">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mb-4"></div>
-              <p className="text-slate-400">Loading calendar events...</p>
-            </div>
-          ) : (
-            <div className="p-6">
-              {/* Calendar Header */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white mb-2">
-                      {moment(currentDate).format('MMMM YYYY')}
-                    </h3>
-                    <div className="text-slate-400">
-                      Showing {filteredEvents.length} events
-                    </div>
-                  </div>
-                  {isAdmin && (
-                    <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                      <div className="flex items-center gap-2 text-blue-300 text-sm">
-                        <div className="w-4 h-4 border border-dashed border-blue-400 rounded flex items-center justify-center">
-                          <span className="text-xs">+</span>
-                        </div>
-                        <span>Click any date to create an event</span>
+        ) : (
+          <div>
+            {/* Month View */}
+            {currentView === 'month' && (
+              <div className="overflow-x-auto">
+                <div className="min-w-[720px]">
+                  {/* Day Headers Row */}
+                  <div className="grid grid-cols-7 border-b border-border-subtle bg-surface-subtle/70 text-center divide-x divide-border-subtle">
+                    {[
+                      { name: 'Sun', full: 'Sunday' },
+                      { name: 'Mon', full: 'Monday' },
+                      { name: 'Tue', full: 'Tuesday' },
+                      { name: 'Wed', full: 'Wednesday' },
+                      { name: 'Thu', full: 'Thursday' },
+                      { name: 'Fri', full: 'Friday' },
+                      { name: 'Sat', full: 'Saturday', isHoliday: true }
+                    ].map(day => (
+                      <div
+                        key={day.name}
+                        className={`py-2.5 px-2 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 ${
+                          day.isHoliday ? 'text-status-error' : 'text-text-secondary'
+                        }`}
+                      >
+                        <span>{day.name}</span>
+                        {day.isHoliday && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-status-error-subtle text-status-error font-medium normal-case hidden sm:inline">
+                            Holiday
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+                    ))}
+                  </div>
 
-              {/* Calendar Views */}
-              {currentView === 'month' && (
-                <div className="grid grid-cols-7 gap-1">
-                  {/* Day Headers */}
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                    <div key={day} className="p-2 sm:p-3 text-center font-semibold text-slate-300 bg-slate-800/60 rounded-lg text-xs sm:text-sm">
-                      {day}
-                    </div>
-                  ))}
-                  
-                  {/* Calendar Days */}
-                  {(() => {
-                    const startOfMonth = moment(currentDate).startOf('month');
-                    const endOfMonth = moment(currentDate).endOf('month');
-                    const startOfWeek = moment(startOfMonth).startOf('week');
-                    const endOfWeek = moment(endOfMonth).endOf('week');
-                    
-                    const days = [];
-                    const current = moment(startOfWeek);
-                    
-                    while (current.isSameOrBefore(endOfWeek)) {
-                      const dayDate = current.clone();
-                      const dayEvents = viewFilteredEvents.filter(event => 
-                        moment(event.start).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD')
-                      );
+                  {/* Calendar Days Matrix */}
+                  <div className="grid grid-cols-7 divide-x divide-y divide-border-subtle border-b border-border-subtle">
+                    {(() => {
+                      const startOfMonth = moment(currentDate).startOf('month');
+                      const endOfMonth = moment(currentDate).endOf('month');
+                      const startOfWeek = moment(startOfMonth).startOf('week');
+                      const endOfWeek = moment(endOfMonth).endOf('week');
                       
-                      days.push(
-                        <div 
-                          key={dayDate.format('YYYY-MM-DD')}
-                          onClick={() => isAdmin && handleCellClick(dayDate)}
-                          className={`min-h-[120px] p-2 border border-slate-700/50 rounded-lg relative transition-all duration-200 group ${
-                            dayDate.month() === moment(currentDate).month() 
-                              ? 'bg-slate-800/40' 
-                              : 'bg-slate-900/20 opacity-50'
-                          } ${
-                            dayDate.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
-                              ? 'ring-2 ring-blue-500/50 bg-blue-950/30'
-                              : ''
-                          } ${
-                            isAdmin && dayDate.month() === moment(currentDate).month()
-                              ? 'cursor-pointer hover:bg-slate-700/50 hover:border-blue-500/30 hover:shadow-md'
-                              : ''
-                          }`}
-                        >
-                          {/* Day Number and Admin Indicator */}
-                          <div className="flex items-center justify-between mb-1 sm:mb-2">
-                            <div className="text-xs sm:text-sm font-medium text-slate-300">
-                              {dayDate.format('D')}
-                            </div>
-                            {/* Admin indicator for clickable cells */}
-                            {isAdmin && dayDate.month() === moment(currentDate).month() && (
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                <div className="w-5 h-5 border border-dashed border-blue-400 rounded flex items-center justify-center text-blue-400">
-                                  <span className="text-xs font-bold">+</span>
-                                </div>
+                      const days = [];
+                      const current = moment(startOfWeek);
+                      
+                      while (current.isSameOrBefore(endOfWeek)) {
+                        const dayDate = current.clone();
+                        const dayEvents = viewFilteredEvents.filter(event => 
+                          moment(event.start).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD')
+                        );
+                        const isCurrentMonth = dayDate.month() === moment(currentDate).month();
+                        const isSaturday = dayDate.day() === 6;
+                        const isToday = dayDate.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+
+                        days.push(
+                          <div 
+                            key={dayDate.format('YYYY-MM-DD')}
+                            onClick={() => isAdmin && isCurrentMonth && handleCellClick(dayDate)}
+                            className={`min-h-[110px] sm:min-h-[125px] lg:min-h-[135px] p-2 sm:p-2.5 flex flex-col justify-between transition-colors relative group ${
+                              !isCurrentMonth
+                                ? 'bg-surface-canvas/50 text-text-muted/40'
+                                : isSaturday
+                                  ? 'bg-status-error-subtle/15 hover:bg-status-error-subtle/25'
+                                  : 'bg-surface-default hover:bg-surface-subtle/50'
+                            } ${
+                              isToday ? 'bg-action-primary-subtle/30 ring-1 ring-inset ring-action-primary/40' : ''
+                            } ${
+                              isAdmin && isCurrentMonth ? 'cursor-pointer' : ''
+                            }`}
+                          >
+                            {/* Day Header Row */}
+                            <div className="flex items-center justify-between mb-1.5">
+                              {isToday ? (
+                                <span className="w-6 h-6 rounded-full bg-action-primary text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                                  {dayDate.format('D')}
+                                </span>
+                              ) : (
+                                <span className={`text-xs sm:text-sm font-semibold ${
+                                  !isCurrentMonth ? 'text-text-muted/40' : isSaturday ? 'text-status-error' : 'text-text-primary'
+                                }`}>
+                                  {dayDate.format('D')}
+                                </span>
+                              )}
+
+                              {/* Weekend label or Admin Hover Plus */}
+                              <div className="flex items-center gap-1">
+                                {isSaturday && isCurrentMonth && dayEvents.length === 0 && (
+                                  <span className="text-[9px] font-medium text-status-error/80 px-1 py-0.5 rounded bg-status-error-subtle hidden sm:inline">
+                                    Weekend
+                                  </span>
+                                )}
+                                {isAdmin && isCurrentMonth && (
+                                  <span
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded hover:bg-action-primary-subtle text-action-primary flex items-center justify-center text-xs font-bold"
+                                    title="Click to add event"
+                                  >
+                                    +
+                                  </span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          
-                          {/* Events for this day */}
-                          <div className="space-y-1">
-                            {dayEvents
-                              .map(event => {
+                            </div>
+
+                            {/* Events List in Day Cell */}
+                            <div className="space-y-1 flex-1">
+                              {dayEvents.slice(0, 3).map(event => {
                                 const eventResource = event.resource as ExtendedCalendarEvent;
+                                const color = eventResource?.color_code || '#3B82F6';
                                 return (
                                   <div
                                     key={event.id}
                                     onClick={(e) => {
-                                      e.stopPropagation(); // Prevent cell click when clicking event
+                                      e.stopPropagation();
                                       handleEventClick(event);
                                     }}
                                     onDoubleClick={(e) => {
                                       e.stopPropagation();
-                                      // Switch to daily view for this date
                                       setCurrentView('day');
                                       setCurrentDate(dayDate.toDate());
                                     }}
-                                    className="cursor-pointer p-1.5 sm:p-2 rounded text-[10px] sm:text-xs font-medium text-white shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105"
+                                    className="cursor-pointer px-2 py-1 rounded text-[11px] font-medium leading-tight text-white truncate shadow-2xs hover:shadow-xs transition-all hover:opacity-95 flex items-center gap-1.5"
                                     style={{
-                                      backgroundColor: eventResource?.color_code || '#3B82F6',
-                                      borderLeft: `4px solid ${eventResource?.color_code || '#3B82F6'}`
+                                      backgroundColor: color
                                     }}
-                                    title="Double-click to view daily details"
+                                    title={`${event.title} (Double-click to open day view)`}
                                   >
-                                    <div className="truncate">
-                                      {event.title}
-                                    </div>
+                                    <span className="truncate">{event.title}</span>
                                   </div>
                                 );
                               })}
-                            
-                            {/* Show if no events for current month days */}
-                            {dayEvents.length === 0 && dayDate.month() === moment(currentDate).month() && (
-                              <div className="text-[10px] sm:text-xs text-slate-500 italic opacity-60">
-                                {isAdmin ? 'Click to add event' : 'No events'}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                      
-                      current.add(1, 'day');
-                    }
-                    
-                    return days;
-                  })()}
-                </div>
-              )}
 
-              {/* Week View */}
-              {currentView === 'week' && (
-                <div className="space-y-2">
+                              {dayEvents.length > 3 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentView('day');
+                                    setCurrentDate(dayDate.toDate());
+                                  }}
+                                  className="text-[10px] font-semibold text-action-primary hover:underline pl-1 block text-left"
+                                >
+                                  +{dayEvents.length - 3} more
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+
+                        current.add(1, 'day');
+                      }
+
+                      return days;
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Week View */}
+            {currentView === 'week' && (
+              <div className="overflow-x-auto">
+                <div className="min-w-[800px]">
                   {/* Week Header */}
-                  <div className="grid grid-cols-8 gap-1 mb-4">
-                    <div className="p-2 text-center font-semibold text-slate-400 text-sm">Time</div>
+                  <div className="grid grid-cols-8 border-b border-border-subtle bg-surface-subtle/70 text-center divide-x divide-border-subtle">
+                    <div className="py-2.5 px-2 text-xs font-semibold text-text-muted uppercase tracking-wider flex items-center justify-center">
+                      Time
+                    </div>
                     {(() => {
                       const startOfWeek = moment(currentDate).startOf('week');
                       const weekDays = [];
                       
                       for (let i = 0; i < 7; i++) {
                         const day = moment(startOfWeek).add(i, 'days');
+                        const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+                        const isSaturday = day.day() === 6;
+
                         weekDays.push(
-                          <div key={day.format('YYYY-MM-DD')} className={`p-3 text-center rounded-lg ${
-                            day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
-                              ? 'bg-blue-500/20 text-blue-300 font-bold'
-                              : 'bg-slate-800/60 text-slate-300'
-                          }`}>
-                            <div className="font-semibold">{day.format('ddd')}</div>
-                            <div className="text-lg">{day.format('D')}</div>
+                          <div 
+                            key={day.format('YYYY-MM-DD')} 
+                            className={`py-2.5 px-2 text-center transition-colors ${
+                              isToday
+                                ? 'bg-action-primary-subtle text-action-primary font-bold'
+                                : isSaturday
+                                  ? 'text-status-error font-semibold'
+                                  : 'text-text-secondary'
+                            }`}
+                          >
+                            <div className="text-xs uppercase tracking-wider">{day.format('ddd')}</div>
+                            <div className="text-base font-bold mt-0.5">{day.format('D')}</div>
                           </div>
                         );
                       }
@@ -1558,15 +1620,15 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   </div>
 
                   {/* Week Calendar Grid */}
-                  <div className="space-y-1">
+                  <div className="divide-y divide-border-subtle">
                     {(() => {
                       const hours = [];
                       const startOfWeek = moment(currentDate).startOf('week');
                       
                       for (let hour = 6; hour <= 22; hour++) {
                         hours.push(
-                          <div key={hour} className="grid grid-cols-8 gap-1 h-16">
-                            <div className="p-2 text-xs text-slate-400 font-medium border-r border-slate-700/50">
+                          <div key={hour} className="grid grid-cols-8 divide-x divide-border-subtle min-h-[58px]">
+                            <div className="p-2 text-xs text-text-muted font-medium text-center bg-surface-subtle/20 flex items-start justify-center">
                               {moment().hour(hour).minute(0).format('h:mm A')}
                             </div>
                             {(() => {
@@ -1577,6 +1639,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                 const dayEvents = viewFilteredEvents.filter(event => 
                                   isEventInHour(event, hour, day.format('YYYY-MM-DD'))
                                 );
+                                const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+                                const isSaturday = day.day() === 6;
                                 
                                 weekCells.push(
                                   <div 
@@ -1584,42 +1648,39 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                     onClick={() => {
                                       if (!isAdmin) return;
                                       
-                                      // Check if this time slot has a session
                                       const sessionEvent = dayEvents.find(event => 
                                         event.title?.startsWith('[SESSION]') || 
                                         (event.resource as ExtendedCalendarEvent)?.isSession
                                       );
                                       
                                       if (sessionEvent) {
-                                        // If it's a session, open session edit modal
                                         handleEventClick(sessionEvent);
                                       } else {
-                                        // If empty slot, create new session
                                         handleCellClick(day, hour);
                                       }
                                     }}
-                                    className={`border border-slate-700/30 rounded p-1 transition-all duration-200 group ${
-                                      isAdmin ? 'cursor-pointer hover:bg-slate-700/50 hover:border-blue-500/30' : ''
+                                    className={`p-1 transition-all group ${
+                                      isAdmin ? 'cursor-pointer hover:bg-surface-subtle/70' : ''
                                     } ${
-                                      day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD')
-                                        ? 'bg-blue-950/20'
-                                        : 'bg-slate-800/20'
+                                      isToday
+                                        ? 'bg-action-primary-subtle/20'
+                                        : isSaturday
+                                          ? 'bg-status-error-subtle/10'
+                                          : 'bg-surface-default'
                                     }`}
                                     style={{
-                                      // Set background color for all time slots within event range
                                       backgroundColor: (() => {
                                         const parentEvent = dayEvents.find(event => 
                                           !event.title?.startsWith('[SESSION]') && 
                                           !(event.resource as ExtendedCalendarEvent)?.isSession
                                         );
                                         if (parentEvent) {
-                                          return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}60`;
+                                          return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}30`;
                                         }
                                         return undefined;
                                       })()
                                     }}
                                   >
-                                    {/* Show parent event title for ALL time slots in event range, and sessions when present */}
                                     {(() => {
                                       const sessions = dayEvents.filter(event => 
                                         event.title?.startsWith('[SESSION]') || 
@@ -1633,20 +1694,16 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                       if (parentEvent) {
                                         return (
                                           <div className="space-y-1">
-                                            {/* Always show parent event title as identifier */}
-                                            <div className="text-xs font-medium text-slate-400 mb-1">
+                                            <div className="text-[11px] font-semibold text-text-primary px-1.5 py-0.5 rounded truncate">
                                               {parentEvent.title}
                                             </div>
                                             
-                                            {/* Show sessions if they exist */}
                                             {sessions.length > 0 && sessions.map((event, idx) => (
                                               <div 
                                                 key={idx}
-                                                className="cursor-pointer hover:opacity-80 transition-opacity p-1 rounded text-xs"
+                                                className="cursor-pointer hover:opacity-90 transition-opacity p-1 rounded text-[11px] font-medium text-white shadow-2xs"
                                                 style={{
-                                                  backgroundColor: `${(event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}80`,
-                                                  color: '#ffffff',
-                                                  border: `1px solid ${(event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}`
+                                                  backgroundColor: (event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'
                                                 }}
                                                 onClick={(e) => {
                                                   e.stopPropagation();
@@ -1654,7 +1711,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                                 }}
                                                 title={`${event.title} - Click for details`}
                                               >
-                                                <div className="font-semibold">
+                                                <div className="font-semibold truncate">
                                                   {event.title.replace('[SESSION] ', '')}
                                                 </div>
                                               </div>
@@ -1663,7 +1720,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                                         );
                                       } else {
                                         return isAdmin && (
-                                          <div className="opacity-0 group-hover:opacity-50 text-xs text-slate-500 text-center">
+                                          <div className="opacity-0 group-hover:opacity-60 text-xs text-text-muted text-center font-bold">
                                             +
                                           </div>
                                         );
@@ -1683,202 +1740,182 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                     })()}
                   </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Day View */}
-              {currentView === 'day' && (
-                <div className="space-y-2">
-                  {/* Day Header */}
-                  <div className="bg-slate-800/60 rounded-lg p-4 text-center">
-                    <h3 className="text-xl font-bold text-white">
-                      {moment(currentDate).format('dddd, MMMM D, YYYY')}
-                    </h3>
-                  </div>
+            {/* Day View */}
+            {currentView === 'day' && (
+              <div>
+                {/* Day Header Banner */}
+                <div className="bg-surface-subtle/80 border-b border-border-subtle p-4 text-center">
+                  <h3 className="text-lg sm:text-xl font-bold text-text-primary">
+                    {moment(currentDate).format('dddd, MMMM D, YYYY')}
+                  </h3>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    {viewFilteredEvents.length} events and sessions scheduled for today
+                  </p>
+                </div>
 
-                  {/* Day Schedule */}
-                  <div className="space-y-1">
-                    {(() => {
-                      const hours = [];
+                {/* Day Schedule Grid */}
+                <div className="divide-y divide-border-subtle">
+                  {(() => {
+                    const hours = [];
+                    
+                    for (let hour = 6; hour <= 22; hour++) {
+                      const hourEvents = viewFilteredEvents.filter(event => 
+                        isEventInHour(event, hour, moment(currentDate).format('YYYY-MM-DD'))
+                      );
                       
-                      for (let hour = 6; hour <= 22; hour++) {
-                        const hourEvents = viewFilteredEvents.filter(event => 
-                          isEventInHour(event, hour, moment(currentDate).format('YYYY-MM-DD'))
-                        );
-                        
-                        hours.push(
-                          <div key={hour} className="grid grid-cols-12 gap-2 min-h-[60px]">
-                            <div className="col-span-2 p-3 text-sm font-medium text-slate-400 border-r border-slate-700/50">
-                              {moment().hour(hour).minute(0).format('h:mm A')}
-                            </div>
-                            <div 
-                              className={`col-span-10 border border-slate-700/30 rounded-lg p-2 transition-all duration-200 group ${
-                                isAdmin ? 'cursor-pointer hover:bg-slate-700/50 hover:border-blue-500/30' : ''
-                              }`}
-                              style={{
-                                // Set background color for all time slots within event range
-                                backgroundColor: (() => {
-                                  const parentEvent = hourEvents.find(event => 
-                                    !event.title?.startsWith('[SESSION]') && 
-                                    !(event.resource as ExtendedCalendarEvent)?.isSession
-                                  );
-                                  if (parentEvent) {
-                                    return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}60`;
-                                  }
-                                  return undefined;
-                                })()
-                              }}
-                              onClick={() => {
-                                if (!isAdmin) return;
-                                
-                                // Check if this time slot has a session
-                                const sessionEvent = hourEvents.find(event => 
-                                  event.title?.startsWith('[SESSION]') || 
-                                  (event.resource as ExtendedCalendarEvent)?.isSession
-                                );
-                                
-                                if (sessionEvent) {
-                                  // If it's a session, open session edit modal
-                                  handleEventClick(sessionEvent);
-                                } else {
-                                  // If empty slot, create new session
-                                  handleCellClick(moment(currentDate), hour);
-                                }
-                              }}
-                            >
-                              {/* Show parent event title for ALL time slots in event range, and sessions when present */}
-                              {(() => {
-                                const sessions = hourEvents.filter(event => 
-                                  event.title?.startsWith('[SESSION]') || 
-                                  (event.resource as ExtendedCalendarEvent)?.isSession
-                                );
+                      hours.push(
+                        <div key={hour} className="grid grid-cols-12 divide-x divide-border-subtle min-h-[58px]">
+                          <div className="col-span-3 sm:col-span-2 p-3 text-xs font-semibold text-text-muted text-center bg-surface-subtle/20 flex items-start justify-center">
+                            {moment().hour(hour).minute(0).format('h:mm A')}
+                          </div>
+                          <div 
+                            className={`col-span-9 sm:col-span-10 p-2 sm:p-2.5 transition-all group ${
+                              isAdmin ? 'cursor-pointer hover:bg-surface-subtle/60' : ''
+                            }`}
+                            style={{
+                              backgroundColor: (() => {
                                 const parentEvent = hourEvents.find(event => 
                                   !event.title?.startsWith('[SESSION]') && 
                                   !(event.resource as ExtendedCalendarEvent)?.isSession
                                 );
-
                                 if (parentEvent) {
-                                  return (
-                                    <div className="space-y-1">
-                                      {/* Always show parent event title as identifier */}
-                                      <div className="text-xs font-medium text-slate-400 mb-1">
-                                        {parentEvent.title}
-                                      </div>
-                                      
-                                      {/* Show sessions if they exist */}
-                                      {sessions.length > 0 && sessions.map((event, idx) => (
-                                        <div 
-                                          key={idx}
-                                          className="cursor-pointer hover:opacity-80 transition-opacity p-1 rounded text-xs"
-                                          style={{
-                                            backgroundColor: `${(event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}80`,
-                                            color: '#ffffff',
-                                            border: `1px solid ${(event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}`
-                                          }}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleEventClick(event);
-                                          }}
-                                          title={`${event.title} - Click for details`}
-                                        >
-                                          <div className="font-semibold">
-                                            {event.title.replace('[SESSION] ', '')}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  );
-                                } else {
-                                  return isAdmin && (
-                                    <div className="opacity-0 group-hover:opacity-50 text-slate-500 text-center text-sm">
-                                      Click to add event
-                                    </div>
-                                  );
+                                  return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}25`;
                                 }
-                              })()}
-                            </div>
-                          </div>
-                        );
-                      }
-                      
-                      return hours;
-                    })()}
-                  </div>
-                </div>
-              )}
+                                return undefined;
+                              })()
+                            }}
+                            onClick={() => {
+                              if (!isAdmin) return;
+                              
+                              const sessionEvent = hourEvents.find(event => 
+                                event.title?.startsWith('[SESSION]') || 
+                                (event.resource as ExtendedCalendarEvent)?.isSession
+                              );
+                              
+                              if (sessionEvent) {
+                                handleEventClick(sessionEvent);
+                              } else {
+                                handleCellClick(moment(currentDate), hour);
+                              }
+                            }}
+                          >
+                            {(() => {
+                              const sessions = hourEvents.filter(event => 
+                                event.title?.startsWith('[SESSION]') || 
+                                (event.resource as ExtendedCalendarEvent)?.isSession
+                              );
+                              const parentEvent = hourEvents.find(event => 
+                                !event.title?.startsWith('[SESSION]') && 
+                                !(event.resource as ExtendedCalendarEvent)?.isSession
+                              );
 
-              {/* Event Summary */}
-              <div className="mt-6 p-4 bg-slate-800/40 rounded-lg">
-                <h4 className="text-sm font-medium text-slate-300 mb-2">
-                  Events this {currentView}:
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {viewFilteredEvents.length === 0 ? (
-                    <span className="text-slate-400 text-sm">No events found</span>
-                  ) : (
-                    viewFilteredEvents.map(event => (
-                      <div 
-                        key={event.id}
-                        className="px-3 py-1 rounded-full text-xs font-medium text-white"
-                        style={{ backgroundColor: event.resource?.color_code || '#3B82F6' }}
-                      >
-                        {event.title} - {moment(event.start).format('MMM D')}
-                      </div>
-                    ))
-                  )}
+                              if (parentEvent) {
+                                return (
+                                  <div className="space-y-1.5">
+                                    <div className="text-xs font-semibold text-text-primary">
+                                      {parentEvent.title}
+                                    </div>
+                                    
+                                    {sessions.length > 0 && (
+                                      <div className="flex flex-wrap gap-2">
+                                        {sessions.map((event, idx) => (
+                                          <div 
+                                            key={idx}
+                                            className="cursor-pointer hover:opacity-90 transition-opacity px-2.5 py-1 rounded text-xs font-medium text-white shadow-2xs"
+                                            style={{
+                                              backgroundColor: (event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'
+                                            }}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleEventClick(event);
+                                            }}
+                                            title={`${event.title} - Click for details`}
+                                          >
+                                            <span className="font-semibold">{event.title.replace('[SESSION] ', '')}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              } else {
+                                return isAdmin && (
+                                  <div className="opacity-0 group-hover:opacity-50 text-text-muted text-xs font-medium">
+                                    + Click to schedule session
+                                  </div>
+                                );
+                              }
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    }
+                    
+                    return hours;
+                  })()}
                 </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Legend & Nepal Academic Calendar System Info */}
+      <div className="bg-surface-default border border-border-subtle rounded-xl p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
+            <Filter className="w-4 h-4 text-action-primary" />
+            <span>Event Types & Academic Schedule</span>
+          </h3>
+          <span className="text-xs text-text-muted font-medium">
+            Nepal Institutional System
+          </span>
         </div>
 
-        {/* Event Types Legend */}
-        <div className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Filter className="w-5 h-5 text-blue-400" />
-            Event Types (Nepal Calendar System)
-          </h3>
-          <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-            <p className="text-sm text-blue-300 font-medium flex items-center gap-2">
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-              </svg>
-              <strong>Nepal Academic Calendar:</strong> Saturday is weekend holiday, Sunday-Friday are working days
-            </p>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            {Object.entries({
-              class: { color: '#22C55E', icon: GraduationCap, label: 'Academic Days' },
-              holiday: { color: '#EF4444', icon: PartyPopper, label: 'Holidays (Saturdays)' },
-              exam: { color: '#F97316', icon: AlertCircle, label: 'Exams' },
-              special_event: { color: '#8B5CF6', icon: Users, label: 'Special Events' },
-              cancelled_class: { color: '#64748B', icon: CalendarX, label: 'Cancelled Classes' }
-            }).map(([type, info]) => {
-              const Icon = info.icon;
-              return (
-                <div key={type} className="flex items-center space-x-3 p-3 bg-slate-800/40 rounded-xl hover:bg-slate-700/40 transition-all duration-200">
-                  <div 
-                    className="w-4 h-4 rounded-lg shadow-sm"
-                    style={{ backgroundColor: info.color }}
-                  ></div>
-                  <Icon className="w-4 h-4 text-slate-400" />
-                  <span className="text-sm text-slate-300 font-medium">{info.label}</span>
+        {/* Nepal Calendar Banner */}
+        <div className="p-3 bg-action-primary-subtle/50 border border-action-primary/20 rounded-lg flex items-center gap-2.5 text-xs text-text-primary">
+          <Info className="w-4 h-4 text-action-primary shrink-0" />
+          <span>
+            <strong>Nepal Academic Calendar Standard:</strong> Saturday is the official weekly institutional holiday (marked in red). Sunday through Friday are active working academic days.
+          </span>
+        </div>
+
+        {/* Categories Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Object.entries({
+            class: { color: '#22C55E', icon: GraduationCap, label: 'Academic Days', desc: 'Lectures & regular classes' },
+            holiday: { color: '#EF4444', icon: PartyPopper, label: 'Holidays (Saturdays)', desc: 'Weekly offs & public holidays' },
+            exam: { color: '#F97316', icon: AlertCircle, label: 'Examinations', desc: 'Midterms & finals' },
+            special_event: { color: '#8B5CF6', icon: Users, label: 'Special Events', desc: 'Workshops & guest sessions' },
+            cancelled_class: { color: '#64748B', icon: CalendarX, label: 'Cancelled Classes', desc: 'Rescheduled sessions' }
+          }).map(([type, info]) => {
+            const Icon = info.icon;
+            return (
+              <div 
+                key={type} 
+                className="p-3 bg-surface-subtle/60 border border-border-subtle rounded-lg flex items-start gap-2.5 hover:bg-surface-subtle transition-colors"
+              >
+                <div 
+                  className="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-2xs"
+                  style={{ backgroundColor: info.color }}
+                />
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-text-primary truncate">{info.label}</div>
+                  <div className="text-[10px] text-text-muted truncate mt-0.5">{info.desc}</div>
                 </div>
-              );
-            })}
-          </div>
-          <div className="mt-4 p-3 bg-slate-800/40 rounded-xl">
-            <p className="text-xs text-slate-400">
-              <strong>Data Source:</strong> Events are loaded from backend database. 
-              Red background indicates Saturday holidays (Nepal standard).
-            </p>
-          </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Event Details Modal */}
+{/* Event Details Modal */}
       {showEventModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-start space-x-4">
@@ -1892,46 +1929,46 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                     })}
                   </div>
                   <div>
-                    <h2 className="text-2xl font-bold text-white">{getCleanTitle(selectedEvent.title, selectedEvent.event_type)}</h2>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 mt-2">
+                    <h2 className="text-2xl font-bold text-text-primary">{getCleanTitle(selectedEvent.title, selectedEvent.event_type)}</h2>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-action-primary-subtle text-action-primary mt-1.5">
                       {getEventTypeInfo(selectedEvent.event_type).label}
                     </span>
                   </div>
                 </div>
                 <button
                   onClick={() => setShowEventModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
               
               <div className="space-y-4">
                 {selectedEvent.description && (
                   <div>
-                    <h3 className="text-sm font-medium text-slate-400 mb-2">Description</h3>
-                    <p className="text-slate-200">{selectedEvent.description}</p>
+                    <h3 className="text-sm font-medium text-text-muted mb-1.5">Description</h3>
+                    <p className="text-text-primary">{selectedEvent.description}</p>
                   </div>
                 )}
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-sm font-medium text-slate-400 mb-2">Date & Time</h3>
-                    <div className="text-slate-200">
+                    <h3 className="text-sm font-medium text-text-muted mb-1.5">Date & Time</h3>
+                    <div className="text-text-primary">
                       <p>{moment(selectedEvent.start_date).format('MMMM D, YYYY')}</p>
                       {!selectedEvent.is_all_day && selectedEvent.start_time && (
-                        <p className="text-sm text-slate-400">
-                          {selectedEvent.start_time} {selectedEvent.end_time && `- ${selectedEvent.end_time}`}
+                        <p className="text-sm text-text-muted">
+                         {selectedEvent.start_time} {selectedEvent.end_time && `- ${selectedEvent.end_time}`}
                         </p>
                       )}
-                      {selectedEvent.is_all_day && <p className="text-sm text-slate-400">All day</p>}
+                      {selectedEvent.is_all_day && <p className="text-sm text-text-muted">All day</p>}
                     </div>
                   </div>
                   
                   {selectedEvent.location && (
                     <div>
-                      <h3 className="text-sm font-medium text-slate-400 mb-2">Location</h3>
-                      <p className="text-slate-200">{selectedEvent.location}</p>
+                      <h3 className="text-sm font-medium text-text-muted mb-1.5">Location</h3>
+                      <p className="text-text-primary">{selectedEvent.location}</p>
                     </div>
                   )}
                 </div>
@@ -1939,11 +1976,11 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
               {/* Admin Actions */}
               {isAdmin && (
-                <div className="border-t border-slate-700/50 pt-4 mt-6">
+                <div className="border-t border-border-subtle pt-4 mt-6">
                   <div className="flex gap-3 flex-wrap">
                     <button
                       onClick={handleEditEvent}
-                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
                     >
                       Edit Event
                     </button>
@@ -1952,13 +1989,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                         setShowSessionModal(true);
                         fetchEventSessions(selectedEvent.id);
                       }}
-                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-400 text-white rounded-xl hover:from-purple-600 hover:to-pink-500 transition-all duration-200 font-medium"
+                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-action-primary text-white rounded-md hover:bg-action-primary-hover transition-colors font-medium"
                     >
                       Manage Sessions
                     </button>
                     <button
                       onClick={handleDeleteEvent}
-                      className="px-4 py-2.5 bg-red-600/80 text-white rounded-xl hover:bg-red-700/80 transition-all duration-200 font-medium"
+                      className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                     >
                       Delete
                     </button>
@@ -1973,13 +2010,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Create Event Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Create New Event</h2>
+                  <h2 className="text-xl font-bold text-text-primary">Create New Event</h2>
                   {eventForm.start_date && (
-                    <div className="text-sm text-slate-400 mt-1">
+                    <div className="text-sm text-text-muted mt-1">
                       <p className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                           <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
@@ -2007,70 +2044,70 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 </div>
                 <button
                   onClick={() => setShowCreateModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
               <form onSubmit={handleCreateEvent} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Event Title</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Title</label>
                   <input
                     type="text"
                     value={eventForm.title}
                     onChange={(e) => handleFormChange('title', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event title..."
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
                   <textarea
                     rows={3}
                     value={eventForm.description}
                     onChange={(e) => handleFormChange('description', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event description..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Event Type</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Type</label>
                   <select 
                     value={eventForm.event_type}
                     onChange={(e) => handleFormChange('event_type', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                   >
                     <option value="class">Class</option>
                     <option value="exam">Exam</option>
                     <option value="holiday">Holiday</option>
                     <option value="special_event">Special Event</option>
                   </select>
-                  <p className="text-xs text-slate-400 mt-1">Color will be automatically assigned based on event type</p>
+                  <p className="text-xs text-text-muted mt-1">Color will be automatically assigned based on event type</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Start Date</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Date</label>
                     <input
                       type="date"
                       value={eventForm.start_date}
                       onChange={(e) => handleFormChange('start_date', e.target.value)}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">End Date</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">End Date</label>
                     <input
                       type="date"
                       value={eventForm.end_date}
                       onChange={(e) => handleFormChange('end_date', e.target.value)}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     />
                   </div>
                 </div>
@@ -2081,42 +2118,42 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                     id="allDay"
                     checked={eventForm.is_all_day}
                     onChange={(e) => handleFormChange('is_all_day', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
                   />
-                  <label htmlFor="allDay" className="text-sm font-medium text-slate-300">All Day Event</label>
+                  <label htmlFor="allDay" className="text-sm font-medium text-text-secondary">All Day Event</label>
                 </div>
 
                 {!eventForm.is_all_day && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Start Time</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
                       <input
                         type="time"
                         value={eventForm.start_time}
                         onChange={(e) => handleFormChange('start_time', e.target.value)}
-                        className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">End Time</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
                       <input
                         type="time"
                         value={eventForm.end_time}
                         onChange={(e) => handleFormChange('end_time', e.target.value)}
-                        className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
                   <input
                     type="text"
                     value={eventForm.location}
                     onChange={(e) => handleFormChange('location', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event location..."
                   />
                 </div>
@@ -2125,13 +2162,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="flex-1 px-4 py-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl text-slate-300 hover:bg-slate-700/60 transition-all duration-200"
+                    className="flex-1 px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
                   >
                     Create Event
                   </button>
@@ -2145,76 +2182,76 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Edit Event Modal */}
       {showEditModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Edit Event</h2>
+                <h2 className="text-xl font-bold text-text-primary">Edit Event</h2>
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
               <form onSubmit={handleUpdateEvent} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Event Title</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Title</label>
                   <input
                     type="text"
                     value={eventForm.title}
                     onChange={(e) => handleFormChange('title', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event title..."
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
                   <textarea
                     rows={3}
                     value={eventForm.description}
                     onChange={(e) => handleFormChange('description', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event description..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Event Type</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Type</label>
                   <select 
                     value={eventForm.event_type}
                     onChange={(e) => handleFormChange('event_type', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                   >
                     <option value="class">Class</option>
                     <option value="exam">Exam</option>
                     <option value="holiday">Holiday</option>
                     <option value="special_event">Special Event</option>
                   </select>
-                  <p className="text-xs text-slate-400 mt-1">Color will be automatically assigned based on event type</p>
+                  <p className="text-xs text-text-muted mt-1">Color will be automatically assigned based on event type</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Start Date</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Date</label>
                     <input
                       type="date"
                       value={eventForm.start_date}
                       onChange={(e) => handleFormChange('start_date', e.target.value)}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       required
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">End Date</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">End Date</label>
                     <input
                       type="date"
                       value={eventForm.end_date}
                       onChange={(e) => handleFormChange('end_date', e.target.value)}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     />
                   </div>
                 </div>
@@ -2225,42 +2262,42 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                     id="editAllDay"
                     checked={eventForm.is_all_day}
                     onChange={(e) => handleFormChange('is_all_day', e.target.checked)}
-                    className="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
                   />
-                  <label htmlFor="editAllDay" className="text-sm font-medium text-slate-300">All Day Event</label>
+                  <label htmlFor="editAllDay" className="text-sm font-medium text-text-secondary">All Day Event</label>
                 </div>
 
                 {!eventForm.is_all_day && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Start Time</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
                       <input
                         type="time"
                         value={eventForm.start_time}
                         onChange={(e) => handleFormChange('start_time', e.target.value)}
-                        className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">End Time</label>
+                      <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
                       <input
                         type="time"
                         value={eventForm.end_time}
                         onChange={(e) => handleFormChange('end_time', e.target.value)}
-                        className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                       />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
                   <input
                     type="text"
                     value={eventForm.location}
                     onChange={(e) => handleFormChange('location', e.target.value)}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter event location..."
                   />
                 </div>
@@ -2269,20 +2306,20 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   <button
                     type="button"
                     onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl text-slate-300 hover:bg-slate-700/60 transition-all duration-200"
+                    className="px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleDeleteEvent}
-                    className="px-4 py-2.5 bg-red-500/80 border border-red-400/50 rounded-xl text-white hover:bg-red-600/80 transition-all duration-200 font-medium"
+                    className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
                     Delete
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
                   >
                     Update Event
                   </button>
@@ -2296,22 +2333,22 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-md w-full">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Calendar Settings</h2>
+                <h2 className="text-xl font-bold text-text-primary">Calendar Settings</h2>
                 <button
                   onClick={() => setShowSettingsModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Default View</label>
-                  <select className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Default View</label>
+                  <select className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary">
                     <option>Month</option>
                     <option>Week</option>
                     <option>Day</option>
@@ -2319,8 +2356,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Week Starts On</label>
-                  <select className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50">
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Week Starts On</label>
+                  <select className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary">
                     <option>Sunday</option>
                     <option>Monday</option>
                   </select>
@@ -2330,7 +2367,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   <span className="text-sm font-medium text-slate-300">Show Weekends</span>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <div className="w-11 h-6 bg-border-default peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-action-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-action-primary"></div>
                   </label>
                 </div>
 
@@ -2338,7 +2375,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                   <span className="text-sm font-medium text-slate-300">Show Time Grid</span>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-800 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <div className="w-11 h-6 bg-border-default peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-action-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-action-primary"></div>
                   </label>
                 </div>
               </div>
@@ -2346,13 +2383,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
               <div className="flex gap-3 pt-6">
                 <button
                   onClick={() => setShowSettingsModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl text-slate-300 hover:bg-slate-700/60 transition-all duration-200"
+                  className="flex-1 px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => setShowSettingsModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                  className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
                 >
                   Save Settings
                 </button>
@@ -2365,102 +2402,102 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Edit Session Modal */}
       {showEditSessionModal && selectedSession && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-white">Edit Session</h2>
+                <h2 className="text-xl font-bold text-text-primary">Edit Session</h2>
                 <button
                   onClick={() => setShowEditSessionModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Session Title</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Session Title</label>
                   <input
                     type="text"
                     value={selectedSession.title}
                     onChange={(e) => setSelectedSession({...selectedSession, title: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter session title..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
                   <textarea
                     rows={3}
                     value={selectedSession.description || ''}
                     onChange={(e) => setSelectedSession({...selectedSession, description: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter session description..."
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Start Time</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
                     <input
                       type="time"
                       value={selectedSession.start_time}
                       onChange={(e) => setSelectedSession({...selectedSession, start_time: e.target.value})}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">End Time</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
                     <input
                       type="time"
                       value={selectedSession.end_time}
                       onChange={(e) => setSelectedSession({...selectedSession, end_time: e.target.value})}
-                      className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Presenter</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
                   <input
                     type="text"
                     value={selectedSession.presenter || ''}
                     onChange={(e) => setSelectedSession({...selectedSession, presenter: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter presenter name..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
                   <input
                     type="text"
                     value={selectedSession.location || ''}
                     onChange={(e) => setSelectedSession({...selectedSession, location: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="Enter session location..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Session Type</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Session Type</label>
                   <input
                     type="text"
                     value={selectedSession.session_type || ''}
                     onChange={(e) => setSelectedSession({...selectedSession, session_type: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                     placeholder="e.g., Lecture, Workshop, Lab..."
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Color</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Color</label>
                   <input
                     type="color"
                     value={selectedSession.color_code || '#3B82F6'}
                     onChange={(e) => setSelectedSession({...selectedSession, color_code: e.target.value})}
-                    className="w-full bg-slate-800/60 border border-slate-600/50 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
+                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
                   />
                 </div>
 
@@ -2470,9 +2507,9 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                     id="attendance_required"
                     checked={selectedSession.attendance_required}
                     onChange={(e) => setSelectedSession({...selectedSession, attendance_required: e.target.checked})}
-                    className="w-4 h-4 text-blue-600 bg-slate-800 border-slate-600 rounded focus:ring-blue-500"
+                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
                   />
-                  <label htmlFor="attendance_required" className="text-sm font-medium text-slate-300">
+                  <label htmlFor="attendance_required" className="text-sm font-medium text-text-secondary">
                     Attendance Required
                   </label>
                 </div>
@@ -2480,7 +2517,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 <div className="flex gap-3 pt-4">
                   <button
                     onClick={() => setShowEditSessionModal(false)}
-                    className="px-4 py-2.5 bg-slate-800/60 border border-slate-600/50 rounded-xl text-slate-300 hover:bg-slate-700/60 transition-all duration-200"
+                    className="px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
                   >
                     Cancel
                   </button>
@@ -2491,13 +2528,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                         setShowEditSessionModal(false);
                       }
                     }}
-                    className="px-4 py-2.5 bg-red-500/80 border border-red-400/50 rounded-xl text-white hover:bg-red-600/80 transition-all duration-200 font-medium"
+                    className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                   >
                     Delete
                   </button>
                   <button
                     onClick={handleUpdateSession}
-                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-teal-400 text-white rounded-xl hover:from-blue-600 hover:to-teal-500 transition-all duration-200 font-medium"
+                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
                   >
                     Update Session
                   </button>
@@ -2532,69 +2569,69 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Session Management Modal */}
       {showSessionModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Manage Sessions</h2>
-                  <p className="text-slate-400 mt-1">{selectedEvent.title}</p>
+                  <h2 className="text-xl font-bold text-text-primary">Manage Sessions</h2>
+                  <p className="text-text-muted mt-1">{selectedEvent.title}</p>
                 </div>
                 <button
                   onClick={() => setShowSessionModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
               {/* Session Form */}
-              <div className="bg-slate-800/50 rounded-xl p-4 mb-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Add New Session</h3>
+              <div className="bg-surface-subtle rounded-lg p-4 mb-5">
+                <h3 className="text-base font-semibold text-text-primary mb-3">Add New Session</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Session Title</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Title</label>
                     <input
                       type="text"
                       value={sessionForm.title}
                       onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       placeholder="e.g., Introduction"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Presenter</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
                     <input
                       type="text"
                       value={sessionForm.presenter}
                       onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       placeholder="Optional"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Start Time</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
                     <input
                       type="time"
                       value={sessionForm.start_time}
                       onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">End Time</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
                     <input
                       type="time"
                       value={sessionForm.end_time}
                       onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
                     />
                   </div>
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
                     <textarea
                       value={sessionForm.description}
                       onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       rows={2}
                       placeholder="Optional session description"
                     />
@@ -2603,7 +2640,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 <div className="flex justify-end mt-4">
                   <button
                     onClick={() => handleCreateSession()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors text-sm font-medium"
                   >
                     Add Session
                   </button>
@@ -2612,42 +2649,42 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
               {/* Sessions List */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">
+                <h3 className="text-base font-semibold text-text-primary mb-4">
                   Sessions ({eventSessions.length})
                 </h3>
                 {eventSessions.length === 0 ? (
-                  <p className="text-slate-400 text-center py-8">No sessions created yet</p>
+                  <p className="text-text-muted text-center py-8">No sessions created yet</p>
                 ) : (
                   <div className="space-y-3">
                     {eventSessions.map((session, index) => (
                       <div
                         key={session.id}
-                        className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50"
+                        className="bg-surface-subtle rounded-lg p-3.5 border border-border-subtle"
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">
                             <div className="flex items-center space-x-3">
-                              <span className="text-lg font-semibold text-white">
+                              <span className="text-base font-semibold text-text-primary">
                                 {session.title}
                               </span>
-                              <span className="text-sm text-slate-400">
+                              <span className="text-sm text-text-muted">
                                 {session.start_time} - {session.end_time}
                               </span>
                             </div>
                             {session.presenter && (
-                              <p className="text-sm text-slate-300 mt-1">
+                              <p className="text-sm text-text-secondary mt-1">
                                 Presenter: {session.presenter}
                               </p>
                             )}
                             {session.description && (
-                              <p className="text-sm text-slate-400 mt-2">
+                              <p className="text-sm text-text-muted mt-2">
                                 {session.description}
                               </p>
                             )}
                           </div>
                           <button
                             onClick={() => handleDeleteSession(session.id)}
-                            className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                            className="p-2 text-status-error hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -2665,18 +2702,18 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Create Session Modal */}
       {showCreateSessionModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Create Session</h2>
-                  <p className="text-slate-400 mt-1">Creating a new session for {clickedDateForSession}</p>
+                  <h2 className="text-xl font-bold text-text-primary">Create Session</h2>
+                  <p className="text-text-muted mt-1">Creating a new session for {clickedDateForSession}</p>
                 </div>
                 <button
                   onClick={() => setShowCreateSessionModal(false)}
-                  className="p-2 hover:bg-slate-800/60 rounded-lg transition-colors"
+                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-text-muted" />
                 </button>
               </div>
 
@@ -2684,21 +2721,21 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Session Title *</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Title *</label>
                     <input
                       type="text"
                       value={sessionForm.title}
                       onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       placeholder="e.g., Introduction to Programming"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Session Type</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Type</label>
                     <select
                       value={sessionForm.session_type}
                       onChange={(e) => setSessionForm({...sessionForm, session_type: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
                     >
                       <option value="lecture">Lecture</option>
                       <option value="practical">Practical</option>
@@ -2712,54 +2749,54 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Start Time *</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time *</label>
                     <input
                       type="time"
                       value={sessionForm.start_time}
                       onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">End Time *</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time *</label>
                     <input
                       type="time"
                       value={sessionForm.end_time}
                       onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Presenter</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
                     <input
                       type="text"
                       value={sessionForm.presenter}
                       onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       placeholder="Optional"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                    <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
                     <input
                       type="text"
                       value={sessionForm.location}
                       onChange={(e) => setSessionForm({...sessionForm, location: e.target.value})}
-                      className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                       placeholder="Optional"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
                   <textarea
                     value={sessionForm.description}
                     onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
-                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
                     rows={3}
                     placeholder="Optional session description"
                   />
@@ -2768,13 +2805,13 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     onClick={() => setShowCreateSessionModal(false)}
-                    className="px-4 py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-600/50 transition-colors"
+                    className="px-4 py-2 bg-surface-subtle border border-border-subtle text-text-secondary rounded-lg hover:bg-surface-canvas transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleCreateSessionWithEvent}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                    className="px-6 py-2 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors text-sm font-medium"
                   >
                     Create Session
                   </button>

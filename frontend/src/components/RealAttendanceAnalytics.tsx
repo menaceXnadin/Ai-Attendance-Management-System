@@ -129,12 +129,12 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
 
         {/* Attendance Rate */}
         <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-400">Attendance Rate</p>
-                <div className="text-2xl font-bold text-purple-400">
+                <div className="text-2xl font-bold text-action-primary">
                   {data.attendanceRate}%
                 </div>
                 <div className="flex items-center gap-1 mt-1">
@@ -148,7 +148,7 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
                   </span>
                 </div>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+              <div className="h-12 w-12 rounded-xl bg-action-primary flex items-center justify-center">
                 <BarChart3 className="h-6 w-6 text-white" />
               </div>
             </div>

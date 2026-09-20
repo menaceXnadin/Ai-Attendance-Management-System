@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
+from typing import AsyncGenerator
 from app.core.config import settings
 
 # Async engine for FastAPI
@@ -39,7 +40,9 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 # Dependency to get async database session
-async def get_db() -> AsyncSession:
+
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
             yield session
@@ -50,6 +53,8 @@ async def get_db() -> AsyncSession:
             await session.close()
 
 # Dependency to get sync database session (for migrations)
+
+
 def get_sync_db():
     db = SessionLocal()
     try:

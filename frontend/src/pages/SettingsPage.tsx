@@ -56,7 +56,7 @@ const SettingsPage = () => {
         {/* Header Section */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-text-primary">
               Settings
             </h1>
             <p className="text-slate-600 dark:text-slate-400">
@@ -193,12 +193,11 @@ const SettingsPage = () => {
         </TabsContent>
         
         <TabsContent value="system" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-pink-500/5 pointer-events-none" />
-            <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
+          <Card className="border-border-subtle bg-surface-default shadow-sm overflow-hidden">
+            <CardHeader className="relative border-b border-border-subtle">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <Sliders className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                <div className="p-2 bg-action-primary-subtle rounded-lg">
+                  <Sliders className="h-5 w-5 text-action-primary" />
                 </div>
                 <div>
                   <CardTitle className="text-xl">System Configuration</CardTitle>
@@ -211,11 +210,10 @@ const SettingsPage = () => {
             <CardContent className="relative p-6 md:p-8 space-y-4">
               {/* Attendance Thresholds - Active */}
               <Link to="/app/settings/attendance-thresholds" className="block group">
-                <div className="relative overflow-hidden p-6 rounded-xl border-2 border-purple-200 dark:border-purple-800/50 bg-gradient-to-br from-purple-50 via-white to-pink-50 dark:from-purple-950/30 dark:via-slate-900 dark:to-pink-950/30 hover:shadow-xl hover:shadow-purple-500/20 dark:hover:shadow-purple-500/10 hover:border-purple-400 dark:hover:border-purple-600 transition-all duration-300 hover:scale-[1.02]">
-                  <div className="absolute -right-8 -top-8 h-32 w-32 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-500" />
+                <div className="relative overflow-hidden p-6 rounded-xl border border-border-subtle bg-surface-canvas hover:border-action-primary transition-colors">
                   <div className="relative flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl shadow-lg shadow-purple-500/30 group-hover:shadow-xl group-hover:shadow-purple-500/40 transition-all duration-300 group-hover:scale-110">
+                      <div className="p-3 bg-action-primary rounded-xl text-white">
                         <Sliders className="h-6 w-6 text-white" />
                       </div>
                       <div className="flex-1">

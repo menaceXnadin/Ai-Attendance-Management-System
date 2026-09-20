@@ -241,7 +241,7 @@ const TeacherAttendancePage: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-blue-100 to-blue-200 bg-clip-text text-transparent">
+            <h1 className="text-3xl sm:text-4xl font-bold text-white">
               Mark Attendance
             </h1>
             <p className="text-slate-400 mt-2 text-lg">
@@ -756,7 +756,7 @@ const TeacherAttendancePage: React.FC = () => {
                 </div>
                 <div className="text-slate-600 text-2xl">→</div>
                 <div className="flex flex-col items-center gap-3 max-w-xs">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/10 text-white flex items-center justify-center text-lg font-bold shadow-lg">
+                  <div className="w-12 h-12 rounded-xl bg-action-primary/20 text-action-primary border border-action-primary/30 flex items-center justify-center text-lg font-bold">
                     3
                   </div>
                   <div className="text-center">

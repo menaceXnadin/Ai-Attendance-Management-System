@@ -122,7 +122,7 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+            <div className="h-8 w-8 rounded-lg bg-action-primary flex items-center justify-center">
               <BarChart3 className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -154,7 +154,7 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
               onClick={() => setActiveTab(tab.id as 'overview' | 'trends' | 'insights')}
               className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
                 activeTab === tab.id
-                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                  ? 'bg-action-primary text-white shadow-xs'
                   : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
               }`}
             >

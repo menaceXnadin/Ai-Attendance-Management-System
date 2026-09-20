@@ -427,8 +427,8 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
             title="All‑time Streak"
             current={stats.current_streak}
             longest={stats.longest_streak}
-            gradientFrom="from-purple-500"
-            gradientTo="to-pink-500"
+            gradientFrom="from-blue-500"
+            gradientTo="to-cyan-500"
           />
 
           <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
@@ -781,14 +781,11 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
         </Dialog>
 
         {/* Subject Breakdown - Enhanced */}
-        <Card className="relative overflow-hidden bg-gradient-to-br from-slate-900/70 to-slate-900/40 border-slate-700/50 shadow-xl shadow-purple-500/5">
-          {/* Decorative glow */}
-          <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-gradient-to-tr from-purple-500/10 to-pink-400/10 blur-2xl" />
-          
+        <Card className="relative overflow-hidden bg-slate-900/70 border-slate-700/50 shadow-sm">
           <CardHeader className="pb-4 pt-5 relative z-10">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg text-white flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-lg bg-action-primary flex items-center justify-center">
                   <BarChart3 className="h-4 w-4 text-white" />
                 </div>
                 Subject-wise Breakdown
@@ -813,7 +810,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
                 return (
                   <div 
                     key={subject.subject_name} 
-                    className="group relative rounded-xl bg-slate-800/50 border border-slate-700/50 p-4 hover:border-purple-500/30 transition-all duration-300 hover:shadow-lg hover:shadow-purple-500/10"
+                    className="group relative rounded-xl bg-slate-800/50 border border-slate-700/50 p-4 hover:border-action-primary/30 transition-colors"
                   >
                     {/* Subject header */}
                     <div className="flex items-start justify-between mb-3">

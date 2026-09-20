@@ -78,22 +78,23 @@ const TeacherSubjectStudents: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Button
           variant="outline"
-          className="mb-6 border-slate-600 text-slate-200"
+          size="sm"
+          className="mb-6 border-border-default text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
           onClick={() => navigate('/teacher')}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Dashboard
         </Button>
 
-        <Card className="bg-slate-900/70 border-slate-700/80">
-          <CardHeader className="border-b border-slate-800/50">
+        <Card className="bg-surface-default border-border-subtle shadow-card">
+          <CardHeader className="border-b border-border-subtle pb-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Users className="w-5 h-5" />
+                <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
+                  <Users className="w-4 h-4 text-action-primary" />
                   Students Enrolled
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-text-muted text-xs">
                   Semester {semester} • {students.length} students
                 </CardDescription>
               </div>
@@ -106,25 +107,25 @@ const TeacherSubjectStudents: React.FC = () => {
           </CardHeader>
           <CardContent className="pt-6">
             {students.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                <p>No students enrolled in this subject</p>
+              <div className="text-center py-12 text-text-muted">
+                <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                <p className="text-xs">No students enrolled in this subject</p>
               </div>
             ) : (
-              <div className="grid gap-4">
+              <div className="grid gap-3">
                 {students.map((student) => (
                   <div
                     key={student.id}
-                    className="flex items-center justify-between p-4 bg-slate-800/60 hover:bg-slate-800/80 rounded-xl border border-slate-700/70 hover:border-slate-600/70 transition-all duration-200"
+                    className="flex items-center justify-between p-3.5 bg-surface-canvas/60 hover:bg-surface-subtle rounded-lg border border-border-subtle transition-colors"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-400 flex items-center justify-center text-white font-bold">
-                        {student.name.charAt(0)}
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-action-primary text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                        {student.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-semibold text-white">{student.name}</h4>
-                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                          <span>{student.student_id}</span>
+                        <h4 className="font-semibold text-text-primary text-sm">{student.name}</h4>
+                        <div className="flex items-center gap-2 text-xs text-text-muted">
+                          <span className="font-mono">{student.student_id}</span>
                           <span>•</span>
                           <span className="flex items-center gap-1">
                             <Mail className="w-3 h-3" />

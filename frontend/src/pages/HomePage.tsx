@@ -1,413 +1,631 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import FeatureCard from '@/components/FeatureCard';
-import { Camera, BarChart, UserPlus, Book, ArrowRight, Zap, Shield, Clock } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { 
+  ArrowRight,
+  CheckmarkOutline,
+  CheckmarkFilled,
+  Security,
+  Locked,
+  Time,
+  Analytics,
+  UserMultiple,
+  Education,
+  Dashboard,
+  DataStructured,
+  FaceActivated,
+  Chip,
+  Terminal,
+  Calendar,
+  SettingsAdjust,
+  Checkmark,
+  User,
+  Information
+} from '@carbon/icons-react';
 
-const HomePage = () => {
+const HomePage: React.FC = () => {
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'faculty' | 'student'>('admin');
+  const [cockpitView, setCockpitView] = useState<'live' | 'vectors'>('live');
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 to-blue-950">
+    <div className="min-h-screen bg-surface-canvas text-text-primary flex flex-col selection:bg-action-primary selection:text-white">
       <Navbar />
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden pt-20 md:pt-28 pb-32 md:pb-44">
-        {/* Animated background elements */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full opacity-10 blur-3xl animate-pulse"></div>
-          <div className="absolute top-60 -left-20 w-60 h-60 bg-teal-400 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-          <div className="absolute bottom-0 right-1/4 w-40 h-40 bg-indigo-500 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '2s' }}></div>
-        </div>
-        
-        <div className="container mx-auto px-6 relative z-10">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-12">
-            <div className="lg:w-1/2 text-center lg:text-left max-w-2xl mx-auto lg:mx-0">
-              <div className="inline-block bg-gradient-to-r from-blue-600 to-teal-400 bg-clip-text text-transparent font-medium rounded-full px-4 py-1 border border-blue-400/20 mb-6 animate-fade-in-up">
-                Welcome to the Future of Attendance
+      {/* 1. Hero Section */}
+      <section className="relative pt-12 sm:pt-16 md:pt-20 pb-16 md:pb-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div className="max-w-3xl mx-auto text-center">
+            {/* Operational Readiness Badge */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium border border-border-subtle bg-surface-default text-text-secondary shadow-2xs mb-6">
+              <span className="w-2 h-2 rounded-full bg-status-success" />
+              <span>SYSTEM READY</span>
+              <span className="text-border-strong">•</span>
+              <span className="text-text-muted">v2.4 Academic Biometrics Engine</span>
+            </div>
+
+            {/* Headline */}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-text-primary leading-[1.15]">
+              Institutional Attendance Telemetry & Biometric Verification
+            </h1>
+
+            {/* Subheading with controlled line length */}
+            <p className="mt-5 text-sm sm:text-base md:text-lg text-text-secondary leading-relaxed max-w-prose mx-auto">
+              Engineered for academic departments, colleges, and polytechnics. AttendAI combines in-browser MediaPipe landmark telemetry with server-side InsightFace ArcFace embeddings for continuous, audit-compliant classroom attendance tracking.
+            </p>
+
+            {/* Action Bar */}
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Link to="/login" className="w-full sm:w-auto">
+                <Button size="default" className="w-full sm:w-auto h-10 px-5 text-xs font-semibold gap-2 shadow-2xs">
+                  <span>Access Academic Portal</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+              <a href="#architecture" className="w-full sm:w-auto">
+                <Button variant="outline" size="default" className="w-full sm:w-auto h-10 px-5 text-xs font-medium gap-2">
+                  <Terminal className="w-4 h-4 text-text-muted" />
+                  <span>Technical Specification</span>
+                </Button>
+              </a>
+            </div>
+          </div>
+
+          {/* Institutional Telemetry Strip - Clean single-border grid */}
+          <div className="mt-14 max-w-5xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border-subtle border-y border-border-subtle py-4">
+              <div className="p-3 sm:p-4">
+                <div className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">Vector Precision</div>
+                <div className="text-xl sm:text-2xl font-bold text-text-primary font-mono tracking-tight">512-D</div>
+                <div className="text-xs text-text-secondary mt-1">ArcFace embedding matrices</div>
               </div>
-              
-              <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-100 to-blue-200 leading-tight mb-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                AttendAI: <br />
-                <span className="bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">Smart Attendance</span>
-              </h1>
-              
-              <p className="text-lg md:text-xl text-blue-100/80 mb-10 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
-                Revolutionize classroom attendance with our cutting-edge facial recognition technology. 
-                Effortless tracking that saves time and improves accuracy.
-              </p>
-              
-              <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4 animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
-                <Link to="/login">
-                  <Button size="lg" className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white font-medium px-8 py-6 text-lg rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300 w-full sm:w-auto">
-                    Get Started <ArrowRight className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <Link to="/about">
-                  <Button variant="outline" size="lg" className="bg-blue-950/50 text-blue-100 border-blue-400/30 hover:bg-blue-900/50 hover:border-blue-400/50 font-medium px-8 py-6 text-lg rounded-xl transition-all duration-300 w-full sm:w-auto">
-                    Learn More
-                  </Button>
-                </Link>
+              <div className="p-3 sm:p-4">
+                <div className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">Edge Latency</div>
+                <div className="text-xl sm:text-2xl font-bold text-text-primary font-mono tracking-tight">&lt; 120ms</div>
+                <div className="text-xs text-text-secondary mt-1">Client WebAssembly inference</div>
+              </div>
+              <div className="p-3 sm:p-4">
+                <div className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">Audit Ledger</div>
+                <div className="text-xl sm:text-2xl font-bold text-text-primary font-mono tracking-tight">100%</div>
+                <div className="text-xs text-text-secondary mt-1">UTC & device-tagged trace</div>
+              </div>
+              <div className="p-3 sm:p-4">
+                <div className="text-xs font-mono text-text-muted uppercase tracking-wider mb-1">Access Model</div>
+                <div className="text-xl sm:text-2xl font-bold text-text-primary font-mono tracking-tight">3-Tier</div>
+                <div className="text-xs text-text-secondary mt-1">Admin, Faculty & Student RBAC</div>
               </div>
             </div>
-            
-            <div className="lg:w-1/2 relative animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
-              <div className="relative w-full aspect-video max-w-lg mx-auto">
-                {/* 3D Mockup container */}
-                <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/20 to-teal-400/20 rounded-2xl backdrop-blur-sm border border-white/10 shadow-[0_0_50px_rgba(56,189,248,0.3)] transform perspective-1000 rotateY-3 hover:rotateY-0 transition-transform duration-700"></div>
-                
-                {/* Dashboard mockup */}
-                <div className="absolute inset-5 rounded-lg overflow-hidden border border-white/10 shadow-lg">
-                  <div className="absolute inset-0 bg-slate-900 bg-opacity-95">
-                    {/* Browser header */}
-                    <div className="h-6 bg-slate-800 flex items-center px-3">
-                      <div className="flex space-x-2">
-                        <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                        <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
-                        <div className="w-3 h-3 rounded-full bg-green-400"></div>
-                      </div>
-                      <div className="ml-4 text-xs text-slate-400">AttendAI Dashboard</div>
+          </div>
+        </div>
+      </section>
+      <div className="w-full h-px bg-border-subtle" />
+
+      {/* 2. Cockpit Preview: Classroom Lecture In-Situ Architecture */}
+      <section className="py-14 sm:py-20 bg-surface-canvas">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mb-8">
+            <div className="text-xs font-mono uppercase tracking-wider text-action-primary font-semibold mb-1">
+              Operational Telemetry
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text-primary">
+              Live In-Classroom Session Monitor
+            </h2>
+            <p className="text-xs sm:text-sm text-text-secondary mt-2 max-w-prose">
+              Demonstrating concurrent edge landmark tracking, anti-spoofing liveness verification, and immediate ledger synchronization.
+            </p>
+          </div>
+
+          {/* Cockpit Window Header as flat top-bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-border-subtle">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 mr-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-border-strong/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-border-strong/60" />
+                <span className="w-2.5 h-2.5 rounded-full bg-border-strong/60" />
+              </div>
+              <span className="font-mono text-xs text-text-secondary font-medium">
+                session://tu-ioe/bct/sem-7/comp-401 [Active Lecture 08:00 - 09:30]
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCockpitView('live')}
+                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  cockpitView === 'live' 
+                    ? 'bg-action-primary text-white shadow-2xs' 
+                    : 'text-text-muted hover:text-text-primary'
+                }`}
+              >
+                Edge Video Stream
+              </button>
+              <button
+                type="button"
+                onClick={() => setCockpitView('vectors')}
+                className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                  cockpitView === 'vectors' 
+                    ? 'bg-action-primary text-white shadow-2xs' 
+                    : 'text-text-muted hover:text-text-primary'
+                }`}
+              >
+                Vector Telemetry
+              </button>
+              <span className="h-3 w-px bg-border-subtle mx-1" />
+              <span className="px-2 py-0.5 rounded border border-status-success/30 text-status-success bg-status-success/5 text-xs font-mono flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
+                <span>INSPECTION ACTIVE</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Cockpit Content Split: Left stream monitor and Right roster ledger as two parallel modular panels */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Viewport (Stream Simulation) - Unnested monitor panel */}
+            <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+              {cockpitView === 'live' ? (
+                <div>
+                  <div className="relative aspect-video rounded-md bg-neutral-950 border border-neutral-800 overflow-hidden flex items-center justify-center p-4">
+                    {/* Corner crosshair indicators */}
+                    <span className="absolute top-3 left-3 w-3 h-3 border-t-2 border-l-2 border-action-primary/60" />
+                    <span className="absolute top-3 right-3 w-3 h-3 border-t-2 border-r-2 border-action-primary/60" />
+                    <span className="absolute bottom-3 left-3 w-3 h-3 border-b-2 border-l-2 border-action-primary/60" />
+                    <span className="absolute bottom-3 right-3 w-3 h-3 border-b-2 border-r-2 border-action-primary/60" />
+
+                    {/* Simulated bounding box with explicit dark HUD styling */}
+                    <span className="relative border-2 border-action-primary rounded-md p-3 sm:p-5 flex flex-col items-center">
+                      <FaceActivated className="w-16 h-16 sm:w-20 sm:h-20 text-action-primary/80" />
+                      <span className="mt-3 px-2.5 py-0.5 rounded bg-neutral-900 text-neutral-100 border border-neutral-700 text-xs font-mono">
+                        P. Acharya [Roll 077BCT048]
+                      </span>
+                      <span className="text-xs font-mono text-emerald-400 mt-1 flex items-center gap-1">
+                        <Checkmark className="w-3 h-3" />
+                        <span>Liveness 0.992 • Conf 98.6%</span>
+                      </span>
+                    </span>
+
+                    {/* Live HUD Overlays */}
+                    <span className="absolute top-3 left-8 font-mono text-xs text-neutral-400 bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+                      CAM_01 • 1080P @ 30FPS • WEBRTC
+                    </span>
+                    <span className="absolute bottom-3 right-3 font-mono text-xs text-neutral-400 bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+                      MODEL: InsightFace ArcFace-r100
+                    </span>
+                  </div>
+
+                  {/* Stream Diagnostics - In-flow flat telemetry strip */}
+                  <div className="mt-4 grid grid-cols-3 divide-x divide-border-subtle border-t border-border-subtle pt-3 text-xs font-mono">
+                    <div className="pr-3">
+                      <div className="text-text-muted text-xs">INFERENCE TIME</div>
+                      <div className="text-text-primary font-semibold mt-0.5">74 ms</div>
                     </div>
-                    
-                    {/* Dashboard content */}
-                    <div className="p-3 text-xs">
-                      {/* Header */}
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="h-4 w-24 bg-gradient-to-r from-blue-500 to-teal-400 rounded text-white flex items-center justify-center text-[8px] font-bold">
-                          AttendAI
-                        </div>
-                        <div className="h-6 w-16 bg-slate-700 rounded-full"></div>
-                      </div>
-                      
-                      {/* Stats cards */}
-                      <div className="grid grid-cols-3 gap-2 mb-3">
-                        <div className="bg-blue-900/40 border border-blue-700/30 rounded p-2">
-                          <div className="text-[8px] text-blue-300 mb-1">Present Today</div>
-                          <div className="text-white font-bold text-xs">84%</div>
-                        </div>
-                        <div className="bg-teal-900/40 border border-teal-700/30 rounded p-2">
-                          <div className="text-[8px] text-teal-300 mb-1">Total Students</div>
-                          <div className="text-white font-bold text-xs">125</div>
-                        </div>
-                        <div className="bg-indigo-900/40 border border-indigo-700/30 rounded p-2">
-                          <div className="text-[8px] text-indigo-300 mb-1">Classes</div>
-                          <div className="text-white font-bold text-xs">8</div>
-                        </div>
-                      </div>
-                      
-                      {/* Attendance chart area */}
-                      <div className="bg-slate-800/80 border border-slate-700 rounded p-2 mb-3">
-                        <div className="text-[8px] text-slate-300 mb-2">Weekly Attendance</div>
-                        <div className="flex items-end space-x-1 h-12">
-                          <div className="w-2 bg-blue-500 rounded-t" style={{ height: '60%' }}></div>
-                          <div className="w-2 bg-blue-500 rounded-t" style={{ height: '80%' }}></div>
-                          <div className="w-2 bg-blue-500 rounded-t" style={{ height: '70%' }}></div>
-                          <div className="w-2 bg-blue-500 rounded-t" style={{ height: '90%' }}></div>
-                          <div className="w-2 bg-blue-500 rounded-t" style={{ height: '85%' }}></div>
-                          <div className="w-2 bg-teal-400 rounded-t" style={{ height: '75%' }}></div>
-                          <div className="w-2 bg-teal-400 rounded-t" style={{ height: '88%' }}></div>
-                        </div>
-                      </div>
-                      
-                      {/* Recent activity */}
-                      <div className="space-y-1">
-                        <div className="text-[8px] text-slate-300 mb-1">Recent Activity</div>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
-                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                          </div>
-                          <div className="flex-1 h-2 bg-slate-700 rounded"></div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
-                            <div className="w-2 h-2 bg-white rounded-full"></div>
-                          </div>
-                          <div className="flex-1 h-2 bg-slate-700 rounded"></div>
-                        </div>
-                      </div>
+                    <div className="px-3">
+                      <div className="text-text-muted text-xs">COSINE SIMILARITY</div>
+                      <div className="text-status-success font-semibold mt-0.5">0.824 &gt; 0.650</div>
+                    </div>
+                    <div className="pl-3">
+                      <div className="text-text-muted text-xs">ANTI-SPOOF ENGINE</div>
+                      <div className="text-text-primary font-semibold mt-0.5">PASSED</div>
                     </div>
                   </div>
                 </div>
+              ) : (
+                <div className="h-full flex flex-col justify-between">
+                  <div className="p-4 rounded-lg bg-surface-canvas font-mono text-xs text-text-secondary space-y-2">
+                    <div className="text-text-muted text-xs">// ARC_FACE VECTOR EMBEDDING BUFFER (EXTRACT 512D)</div>
+                    <div className="p-3 bg-surface-default rounded border border-border-subtle text-xs leading-relaxed text-text-primary overflow-x-auto">
+                      [-0.04218, 0.08941, -0.01235, 0.14502, -0.09841, 0.03419, 0.22104, -0.01844, ... +504 dimensions]
+                    </div>
+                    <div className="pt-2 text-xs text-text-secondary">
+                      <strong>Distance Metric:</strong> Cosine Similarity Threshold (<code className="text-action-primary">τ = 0.65</code>). Normalized L2 Euclidean distance verification.
+                    </div>
+                  </div>
+                  <div className="mt-4 p-3 rounded bg-surface-canvas text-xs text-text-secondary">
+                    <strong className="text-text-primary">Database Match:</strong> Identified student record <code className="text-text-primary font-mono">UUID #9d3f-42a1</code> matching enrolled baseline with 98.6% confidence rating.
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right Roster Ledger (Real-time Database Sync) */}
+            <div className="lg:col-span-5 rounded-lg border border-border-subtle bg-surface-default p-4 sm:p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                  <div>
+                    <div className="text-xs font-semibold text-text-primary">Active Class Roster</div>
+                    <div className="text-xs text-text-secondary">COMP-401 • Room 302</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-mono font-bold text-text-primary">41 / 45 Present</div>
+                    <div className="text-xs text-status-success font-medium">91.1% Attendance</div>
+                  </div>
+                </div>
+
+                {/* Progress Bar without outer border */}
+                <div className="w-full bg-surface-canvas h-1.5 rounded-full overflow-hidden my-3">
+                  <div className="bg-action-primary h-full rounded-full" style={{ width: '91.1%' }} />
+                </div>
+
+                {/* Recent Verifications Feed - In-flow list */}
+                <div className="mt-4">
+                  <div className="text-xs font-mono text-text-muted uppercase tracking-wider mb-2">
+                    Recent Biometric Check-ins
+                  </div>
+                  <div className="divide-y divide-border-subtle">
+                    {[
+                      { name: 'Prashant Acharya', roll: '077BCT048', time: '08:14:22 AM', method: 'Biometric Edge', status: 'Verified' },
+                      { name: 'Samikshya Gautam', roll: '077BCT052', time: '08:13:58 AM', method: 'Biometric Edge', status: 'Verified' },
+                      { name: 'Rohan Shrestha', roll: '077BCT061', time: '08:13:10 AM', method: 'Biometric Edge', status: 'Verified' },
+                      { name: 'Anjali Sharma', roll: '077BCT012', time: '08:12:45 AM', method: 'Biometric Edge', status: 'Verified' },
+                    ].map((entry) => (
+                      <div key={entry.roll} className="flex items-center justify-between py-2.5 text-xs">
+                        <div className="flex items-center gap-2">
+                          <CheckmarkFilled className="w-3.5 h-3.5 text-status-success flex-shrink-0" />
+                          <div>
+                            <div className="font-medium text-text-primary">{entry.name}</div>
+                            <div className="text-xs font-mono text-text-muted">{entry.roll}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-mono text-text-secondary">{entry.time}</div>
+                          <span className="text-xs text-text-muted font-mono">
+                            {entry.method}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-Absent Footer */}
+              <div className="mt-6 pt-3 border-t border-border-subtle flex items-center justify-between text-xs text-text-muted">
+                <div className="flex items-center gap-1.5">
+                  <Time className="w-3.5 h-3.5 text-action-primary" />
+                  <span>Grace Period: <strong className="text-text-primary font-mono">14m 20s remaining</strong></span>
+                </div>
+                <span className="text-xs font-mono">Auto-Absent: ENABLED</span>
               </div>
             </div>
           </div>
         </div>
       </section>
+      <div className="w-full h-px bg-border-subtle" />
 
-      {/* Stats Section */}
-      <section className="relative z-10 py-6 -mt-16">
-        <div className="container mx-auto px-6">
+      {/* 3. Three-Tier Academic Role Workflows */}
+      <section id="roles" className="py-14 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <div className="text-xs font-mono uppercase tracking-wider text-action-primary font-semibold mb-1">
+              Access Hierarchies
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text-primary">
+              Role-Tailored Operational Portals
+            </h2>
+            <p className="text-xs sm:text-sm text-text-secondary mt-2 max-w-prose mx-auto">
+              Granular capabilities designed for department administrators, teaching faculty, and enrolled students.
+            </p>
+
+            {/* Segmented Switcher - Clean track without card border/shadow */}
+            <div className="inline-flex p-1 rounded-lg bg-surface-subtle mt-6">
+              <button
+                type="button"
+                onClick={() => setSelectedRole('admin')}
+                className={`btn px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  selectedRole === 'admin'
+                    ? 'bg-action-primary text-white shadow-xs'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Department Admin
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('faculty')}
+                className={`btn px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  selectedRole === 'faculty'
+                    ? 'bg-action-primary text-white shadow-xs'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Faculty / Teacher
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedRole('student')}
+                className={`btn px-4 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  selectedRole === 'student'
+                    ? 'bg-action-primary text-white shadow-xs'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                Enrolled Student
+              </button>
+            </div>
+          </div>
+
+          {/* Role Detail Cards - Flattened icon-in-flow headers */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-slate-900/60 backdrop-blur-lg border-slate-700/50 p-6 rounded-xl flex items-center gap-4 hover:bg-slate-800/60 transition-all transform hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(0,0,0,0.2)]">
-              <div className="h-12 w-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 text-white shadow-lg">
-                <Zap className="h-6 w-6" />
+            {/* Card 1: Admin */}
+            <div className={`p-6 rounded-xl border transition-all ${
+              selectedRole === 'admin' 
+                ? 'border-action-primary bg-surface-default shadow-xs ring-1 ring-action-primary/20' 
+                : 'border-border-subtle bg-surface-default hover:border-border-default'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Dashboard className="w-5 h-5 text-action-primary flex-shrink-0" />
+                <h3 className="text-base font-semibold text-text-primary">Department Administration</h3>
               </div>
-              <div>
-                <p className="text-sm font-medium text-blue-200/70">Processing Speed</p>
-                <p className="text-3xl font-bold text-white">0.5<span className="text-lg text-blue-300 ml-1">sec</span></p>
-              </div>
-            </Card>
-            
-            <Card className="bg-slate-900/60 backdrop-blur-lg border-slate-700/50 p-6 rounded-xl flex items-center gap-4 hover:bg-slate-800/60 transition-all transform hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(0,0,0,0.2)]">
-              <div className="h-12 w-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-lg">
-                <Shield className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-200/70">Accuracy Rate</p>
-                <p className="text-3xl font-bold text-white">99.8<span className="text-lg text-blue-300 ml-1">%</span></p>
-              </div>
-            </Card>
-            
-            <Card className="bg-slate-900/60 backdrop-blur-lg border-slate-700/50 p-6 rounded-xl flex items-center gap-4 hover:bg-slate-800/60 transition-all transform hover:-translate-y-1 hover:shadow-[0_10px_20px_rgba(0,0,0,0.2)]">
-              <div className="h-12 w-12 flex items-center justify-center rounded-xl bg-gradient-to-br from-teal-400 to-emerald-500 text-white shadow-lg">
-                <Clock className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-200/70">Time Saved</p>
-                <p className="text-3xl font-bold text-white">85<span className="text-lg text-blue-300 ml-1">%</span></p>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/30 via-transparent to-transparent opacity-40 pointer-events-none"></div>
-        
-        <div className="container mx-auto px-6 relative">
-          <div className="text-center mb-16 max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-              Why Choose AttendAI?
-            </h2>
-            <p className="text-lg md:text-xl text-blue-200/80">
-              Our platform combines cutting-edge facial recognition with intuitive attendance management tools that will transform your classroom experience.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8">
-            <FeatureCard
-              icon={<Camera size={24} className="text-teal-400" />}
-              title="Smart Recognition"
-              description="Identify students in seconds with our AI-powered facial recognition system that works even with masks."
-              className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_30px_-10px_rgba(0,0,0,0.3)]"
-            />
-            <FeatureCard
-              icon={<BarChart size={24} className="text-teal-400" />}
-              title="Advanced Analytics"
-              description="Track attendance patterns with comprehensive charts, reports, and predictive insights to improve engagement."
-              className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_30px_-10px_rgba(0,0,0,0.3)]"
-            />
-            <FeatureCard
-              icon={<UserPlus size={24} className="text-teal-400" />}
-              title="Seamless Management"
-              description="Add and manage students quickly with our intuitive interface. Import from existing systems with one click."
-              className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_30px_-10px_rgba(0,0,0,0.3)]"
-            />
-            <FeatureCard
-              icon={<Book size={24} className="text-teal-400" />}
-              title="Class Integration"
-              description="Organize students by classes, courses, and semesters with smart grouping and automatic updates."
-              className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_20px_30px_-10px_rgba(0,0,0,0.3)]"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="py-24 relative overflow-hidden bg-gradient-to-b from-slate-950 to-blue-950">
-        <div className="container mx-auto px-6 relative">
-          <div className="text-center mb-16 max-w-3xl mx-auto">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-              How It Works
-            </h2>
-            <p className="text-lg md:text-xl text-blue-200/80">
-              From setup to daily use, our platform makes attendance tracking effortless and engaging.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-16">
-            <div className="relative">
-              <div className="absolute left-12 top-0 h-full w-0.5 bg-gradient-to-b from-blue-500 to-teal-400 hidden md:block"></div>
-              <div className="relative z-10">
-                <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-white flex items-center justify-center mx-auto mb-8 text-3xl font-bold shadow-[0_0_20px_rgba(56,189,248,0.4)]">
-                  1
-                </div>
-                <div className="text-center bg-slate-900/60 backdrop-blur-md rounded-2xl p-8 border border-slate-700/50 hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-                  <h3 className="text-2xl font-bold mb-4 text-blue-100">Register Students</h3>
-                  <p className="text-blue-200/80 text-lg">
-                    Add student profiles with photos for facial recognition training. Import from CSV or existing systems.
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <div className="absolute left-12 top-0 h-full w-0.5 bg-gradient-to-b from-blue-500 to-teal-400 hidden md:block"></div>
-              <div className="relative z-10">
-                <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-white flex items-center justify-center mx-auto mb-8 text-3xl font-bold shadow-[0_0_20px_rgba(56,189,248,0.4)]">
-                  2
-                </div>
-                <div className="text-center bg-slate-900/60 backdrop-blur-md rounded-2xl p-8 border border-slate-700/50 hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-                  <h3 className="text-2xl font-bold mb-4 text-blue-100">Take Attendance</h3>
-                  <p className="text-blue-200/80 text-lg">
-                    Students scan their faces on a camera or device. The system automatically identifies and records attendance.
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="relative">
-              <div className="relative z-10">
-                <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-white flex items-center justify-center mx-auto mb-8 text-3xl font-bold shadow-[0_0_20px_rgba(56,189,248,0.4)]">
-                  3
-                </div>
-                <div className="text-center bg-slate-900/60 backdrop-blur-md rounded-2xl p-8 border border-slate-700/50 hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-                  <h3 className="text-2xl font-bold mb-4 text-blue-100">Access Insights</h3>
-                  <p className="text-blue-200/80 text-lg">
-                    View detailed attendance reports, analytics, and insights on the dashboard. Export data with one click.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials Section */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-teal-900/20 via-transparent to-transparent opacity-30 pointer-events-none"></div>
-        
-        <div className="container mx-auto px-6 relative">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-              What Educators Say
-            </h2>
-            <p className="text-lg md:text-xl text-blue-200/80 max-w-3xl mx-auto">
-              Hear from educators who have transformed their attendance management with AttendAI.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <Card className="bg-slate-900/40 backdrop-blur-md border-slate-700/50 p-8 rounded-2xl hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-              <div className="flex items-center mb-6">
-                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-white font-bold text-xl">
-                  RB
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-lg font-semibold text-white">Ram Bahadur Lama</h4>
-                  <p className="text-blue-300/70">University Professor</p>
-                </div>
-              </div>
-              <p className="text-blue-100 mb-4">
-                "AttendAI has completely transformed how we take attendance in large lecture halls. What used to take 10 minutes now happens automatically as students enter the room."
+              <div className="text-[11px] font-mono uppercase tracking-wider text-text-muted mb-3">Administrative Control</div>
+              <p className="text-xs text-text-secondary leading-relaxed mb-5 max-w-prose">
+                Centralized oversight over faculty rosters, batch assignments, timetable definitions, and automated absence policies.
               </p>
-              <div className="flex text-yellow-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              </div>
-            </Card>
-            
-            <Card className="bg-slate-900/40 backdrop-blur-md border-slate-700/50 p-8 rounded-2xl hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-              <div className="flex items-center mb-6">
-                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-white font-bold text-xl">
-                  AP
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-lg font-semibold text-white">Arjun Prasad KC</h4>
-                  <p className="text-blue-300/70">High School Principal</p>
-                </div>
-              </div>
-              <p className="text-blue-100 mb-4">
-                "The analytics have given us unprecedented insights into attendance patterns. We've been able to identify at-risk students and intervene much earlier."
-              </p>
-              <div className="flex text-yellow-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              </div>
-            </Card>
-            
-            <Card className="bg-slate-900/40 backdrop-blur-md border-slate-700/50 p-8 rounded-2xl hover:border-blue-500/30 transition-all hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-              <div className="flex items-center mb-6">
-                <div className="h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center text-white font-bold text-xl">
-                  SP
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-lg font-semibold text-white">Sita Poudel</h4>
-                  <p className="text-blue-300/70">College Administrator</p>
-                </div>
-              </div>
-              <p className="text-blue-100 mb-4">
-                "The implementation was seamless, and the support team was exceptional. We've saved hundreds of administrative hours in just one semester."
-              </p>
-              <div className="flex text-yellow-400">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118l-2.8-2.034c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                </svg>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-24 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-teal-400/10 pointer-events-none"></div>
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent"></div>
-        
-        <div className="container mx-auto px-6 relative">
-          <div className="max-w-4xl mx-auto bg-slate-900/70 backdrop-blur-xl p-10 md:p-16 rounded-3xl border border-slate-700/50 shadow-[0_0_50px_rgba(0,0,0,0.3)]">
-            <div className="text-center mb-10">
-              <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-                Ready to Transform Your Classroom?
-              </h2>
-              <p className="text-lg md:text-xl text-blue-200/80 max-w-2xl mx-auto">
-                Join educators worldwide who are saving time and improving accuracy with AttendAI.
-              </p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row justify-center gap-6">
-              <Link to="/login" className="w-full sm:w-auto">
-                <Button size="lg" className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white font-medium px-8 py-6 text-lg rounded-xl shadow-[0_0_20px_rgba(56,189,248,0.3)] hover:shadow-[0_0_25px_rgba(56,189,248,0.5)] transition-all duration-300 w-full">
-                  Start Free Trial <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
-              </Link>
-              <Link to="/about" className="w-full sm:w-auto">
-                <Button variant="outline" size="lg" className="bg-blue-950/30 text-blue-100 border-blue-400/30 hover:bg-blue-900/40 hover:border-blue-400/50 font-medium px-8 py-6 text-lg rounded-xl transition-all duration-300 w-full">
-                  Request Demo
+              <ul className="space-y-2.5 text-xs text-text-secondary mb-6">
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Configure semesters, subjects, and teacher-class assignments</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Manage automated absence cron triggers and grace thresholds</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Execute biometric facial model batch re-indexes</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Generate department-wide accreditation audit reports</span>
+                </li>
+              </ul>
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="w-full text-xs h-8">
+                  <span>Open Admin Portal</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
                 </Button>
               </Link>
             </div>
+
+            {/* Card 2: Faculty */}
+            <div className={`p-6 rounded-xl border transition-all ${
+              selectedRole === 'faculty' 
+                ? 'border-action-primary bg-surface-default shadow-xs ring-1 ring-action-primary/20' 
+                : 'border-border-subtle bg-surface-default hover:border-border-default'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <Education className="w-5 h-5 text-action-primary flex-shrink-0" />
+                <h3 className="text-base font-semibold text-text-primary">Faculty & Instructors</h3>
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-text-muted mb-3">Course Instruction</div>
+              <p className="text-xs text-text-secondary leading-relaxed mb-5 max-w-prose">
+                Turnkey classroom attendance execution with real-time biometric tracking, manual exception handling, and analytics.
+              </p>
+              <ul className="space-y-2.5 text-xs text-text-secondary mb-6">
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Launch scheduled lecture sessions with 1-click verification</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Live visual verification HUD with instant student match confirmation</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Manual override & medical leave adjustment with audit remarks</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Student engagement telemetry and chronic absence flags</span>
+                </li>
+              </ul>
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="w-full text-xs h-8">
+                  <span>Open Teacher Portal</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+
+            {/* Card 3: Student */}
+            <div className={`p-6 rounded-xl border transition-all ${
+              selectedRole === 'student' 
+                ? 'border-action-primary bg-surface-default shadow-xs ring-1 ring-action-primary/20' 
+                : 'border-border-subtle bg-surface-default hover:border-border-default'
+            }`}>
+              <div className="flex items-center gap-2 mb-2">
+                <User className="w-5 h-5 text-action-primary flex-shrink-0" />
+                <h3 className="text-base font-semibold text-text-primary">Enrolled Students</h3>
+              </div>
+              <div className="text-[11px] font-mono uppercase tracking-wider text-text-muted mb-3">Self-Service Portal</div>
+              <p className="text-xs text-text-secondary leading-relaxed mb-5 max-w-prose">
+                Self-service biometric registration, daily attendance ledger visibility, and institutional requirement compliance.
+              </p>
+              <ul className="space-y-2.5 text-xs text-text-secondary mb-6">
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Multi-angle biometric onboarding with real-time quality validation</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Subject-by-subject attendance progress against the 75% quorum</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Personal lecture history log with verification timestamps</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckmarkOutline className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
+                  <span>Self-service mobile attendance check-in for registered locations</span>
+                </li>
+              </ul>
+              <Link to="/login">
+                <Button variant="outline" size="sm" className="w-full text-xs h-8">
+                  <span>Open Student Portal</span>
+                  <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="w-full h-px bg-border-subtle" />
+
+      {/* 4. Technical Pipeline Architecture */}
+      <section id="architecture" className="py-14 sm:py-20 bg-surface-canvas">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mb-12">
+            <div className="text-xs font-mono uppercase tracking-wider text-action-primary font-semibold mb-1">
+              Engineering Specification
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text-primary">
+              The AttendAI Biometric Pipeline
+            </h2>
+            <p className="text-xs sm:text-sm text-text-secondary mt-2 max-w-prose">
+              A dual-stage edge-and-server architecture designed for zero biometric cloud leak and sub-second matching.
+            </p>
+          </div>
+
+          {/* 4 Pipeline Stages - Using h3 for valid heading hierarchy */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-lg bg-surface-default border border-border-subtle shadow-2xs relative">
+              <div className="text-xs font-mono text-action-primary font-bold mb-2">01 / ENROLLMENT</div>
+              <h3 className="text-sm font-semibold text-text-primary mb-1.5">Triangulation & Vectorization</h3>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Students register 3 distinct face angles. The backend computes normalized 512-dimension ArcFace vectors saved in PostgreSQL with pgvector.
+              </p>
+              <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs font-mono text-text-muted">
+                <span>Model: InsightFace</span>
+                <span>Storage: Local DB</span>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface-default border border-border-subtle shadow-2xs relative">
+              <div className="text-xs font-mono text-action-primary font-bold mb-2">02 / EDGE DETECTION</div>
+              <h3 className="text-sm font-semibold text-text-primary mb-1.5">MediaPipe Client Telemetry</h3>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                In-browser WebAssembly detects 468 facial mesh landmarks directly on the client camera feed, filtering out invalid angles before network transmission.
+              </p>
+              <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs font-mono text-text-muted">
+                <span>Latency: &lt; 120ms</span>
+                <span>Hardware: Local GPU</span>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface-default border border-border-subtle shadow-2xs relative">
+              <div className="text-xs font-mono text-action-primary font-bold mb-2">03 / VERIFICATION</div>
+              <h3 className="text-sm font-semibold text-text-primary mb-1.5">Cosine Matrix Matching</h3>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Extracted vector is compared against the specific lecture roster using normalized cosine distance matrices with anti-spoof liveness validation.
+              </p>
+              <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs font-mono text-text-muted">
+                <span>Threshold: τ = 0.65</span>
+                <span>Speed: ~40ms</span>
+              </div>
+            </div>
+
+            <div className="p-5 rounded-lg bg-surface-default border border-border-subtle shadow-2xs relative">
+              <div className="text-xs font-mono text-action-primary font-bold mb-2">04 / LEDGER & CRON</div>
+              <h3 className="text-sm font-semibold text-text-primary mb-1.5">Transactional Persistence</h3>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Attendance records are committed with immutable UTC stamps. Once the lecture cutoff passes, the automated cron scheduler marks missing students absent.
+              </p>
+              <div className="mt-4 pt-3 border-t border-border-subtle flex items-center justify-between text-xs font-mono text-text-muted">
+                <span>Engine: FastAPI</span>
+                <span>Cron: Configurable</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="w-full h-px bg-border-subtle" />
+
+      {/* 5. Enterprise Security & Compliance Grid - In-flow icons, valid h3 headings */}
+      <section className="py-14 sm:py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-2xl mb-12">
+            <div className="text-xs font-mono uppercase tracking-wider text-action-primary font-semibold mb-1">
+              Institutional Standards
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-semibold tracking-tight text-text-primary">
+              Security, Privacy & Infrastructure Governance
+            </h2>
+            <p className="text-xs sm:text-sm text-text-secondary mt-2 max-w-prose">
+              Designed to satisfy higher-education IT requirements and regulatory compliance standards.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="p-5 rounded-lg border border-border-subtle bg-surface-default shadow-2xs">
+              <div className="flex items-center gap-2 mb-2">
+                <Security className="w-4 h-4 text-action-primary flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-text-primary">On-Premises Privacy</h3>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed max-w-prose">
+                Biometric embeddings remain strictly inside your departmental servers without transmission to public commercial AI vendors.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg border border-border-subtle bg-surface-default shadow-2xs">
+              <div className="flex items-center gap-2 mb-2">
+                <Time className="w-4 h-4 text-action-primary flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-text-primary">Statutory Audit Logs</h3>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed max-w-prose">
+                Every verified check-in records UTC timestamp, hardware identifier, verification mode, and confidence scores for compliance audits.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg border border-border-subtle bg-surface-default shadow-2xs">
+              <div className="flex items-center gap-2 mb-2">
+                <SettingsAdjust className="w-4 h-4 text-action-primary flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-text-primary">Automated Auto-Absent</h3>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed max-w-prose">
+                Configurable grace windows automatically mark absent records when the lecture window closes, preventing administrative backlogs.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-lg border border-border-subtle bg-surface-default shadow-2xs">
+              <div className="flex items-center gap-2 mb-2">
+                <Locked className="w-4 h-4 text-action-primary flex-shrink-0" />
+                <h3 className="text-sm font-semibold text-text-primary">JWT Role Enforcement</h3>
+              </div>
+              <p className="text-xs text-text-secondary leading-relaxed max-w-prose">
+                Endpoints are guarded with cryptographically signed JSON Web Tokens, enforcing strict principle of least privilege between roles.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div className="w-full h-px bg-border-subtle" />
+
+      {/* 6. Institutional Call-to-Action - Clean full-width institutional ribbon */}
+      <section className="py-16 sm:py-24 bg-surface-default text-center">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-medium border border-border-subtle bg-surface-canvas text-text-secondary mb-4">
+            <Education className="w-3.5 h-3.5 text-action-primary" />
+            <span>Higher Education Attendance Platform</span>
+          </span>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold tracking-tight text-text-primary mb-3">
+            Deploy Modern Biometric Attendance in Your Department
+          </h2>
+          <p className="text-xs sm:text-sm text-text-secondary max-w-prose mx-auto mb-8 leading-relaxed">
+            Equip instructors and students with seamless facial recognition attendance, accurate automated ledgers, and institutional analytics.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link to="/login" className="w-full sm:w-auto">
+              <Button size="default" className="w-full sm:w-auto h-10 px-6 text-xs font-semibold gap-2 shadow-2xs">
+                <span>Sign In to Institutional Portal</span>
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link to="/about" className="w-full sm:w-auto">
+              <Button variant="outline" size="default" className="w-full sm:w-auto h-10 px-6 text-xs font-medium gap-2">
+                <Information className="w-4 h-4" />
+                <span>About AttendAI Architecture</span>
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -418,3 +636,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+

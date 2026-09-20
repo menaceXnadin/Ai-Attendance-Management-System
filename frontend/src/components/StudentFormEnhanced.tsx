@@ -23,6 +23,7 @@ import {
   Hash
 } from 'lucide-react';
 import { api } from '@/integrations/api/client';
+import type { Faculty } from '@/integrations/api/types';
 
 interface StudentFormProps {
   onSubmit: (data: StudentFormData) => void;
@@ -83,7 +84,7 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
 
   React.useEffect(() => {
     if (!initialData && watchedFacultyId && watchedBatch) {
-      const selectedFaculty = faculties.find((f: any) => f.id === Number(watchedFacultyId));
+      const selectedFaculty = faculties.find((f: Faculty) => f.id === Number(watchedFacultyId));
       if (selectedFaculty && selectedFaculty.code) {
         // Use the faculty code directly from the database!
         const preview = `${selectedFaculty.code}${watchedBatch}XXX`;

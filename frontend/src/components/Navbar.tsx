@@ -1,18 +1,24 @@
-
 import * as React from 'react';
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Menu, X, User, LogOut, Home, Book, Info, LayoutDashboard, Camera } from 'lucide-react';
+import { 
+  Menu, 
+  Close, 
+  User, 
+  Logout, 
+  Home, 
+  Information, 
+  Dashboard 
+} from '@carbon/icons-react';
 import logo from '@/assets/main.png';
 import { useAuth } from '@/contexts/useAuth';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
-const Navbar = () => {
+const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const { user, signOut } = useAuth();
-  const location = useLocation();
-  const showBlog = location.pathname !== '/';
 
   useEffect(() => {
     const handleScroll = () => {
@@ -24,80 +30,84 @@ const Navbar = () => {
 
   const toggleMenu = () => setIsMenuOpen((open) => !open);
 
-  const styles = {
-    background: isScrolled ? 'bg-slate-900/90 backdrop-blur-lg shadow-lg' : 'bg-transparent',
-    textColor: 'text-blue-100',
-    hoverColor: 'hover:text-teal-300',
-    logoGradient: 'from-white to-blue-200',
-    logoHoverGradient: 'group-hover:from-blue-300 group-hover:to-teal-300',
-    buttonBorder: 'border-blue-400/30',
-    buttonHoverBorder: 'hover:border-teal-400/50',
-    mobileMenuBg: 'bg-slate-900/95',
+  const getDashboardLink = () => {
+    if (user?.role === 'admin') return '/app';
+    if (user?.role === 'faculty' || user?.role === 'teacher') return '/teacher';
+    return '/student';
   };
 
   return (
-    <nav className={`sticky top-0 z-50 transition-all duration-300 ${styles.background}`}>
+    <nav className={`sticky top-0 z-50 transition-all duration-200 ${
+      isScrolled 
+        ? 'bg-surface-default/95 backdrop-blur-md border-b border-border-subtle shadow-xs' 
+        : 'bg-surface-default border-b border-border-subtle'
+    }`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-20 items-center">
+        <div className="flex justify-between h-16 items-center">
           <div className="flex-shrink-0 flex items-center">
-            <Link to="/" className="flex items-center group">
-              {/* Plain logo image — no rounded mask or gradient wrapper */}
-              <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
-              <span className={`ml-3 text-xl font-bold bg-gradient-to-r ${styles.logoGradient} bg-clip-text text-transparent ${styles.logoHoverGradient} transition-all duration-300`}>AttendAI</span>
+            <Link to="/" className="flex items-center gap-2.5">
+              <img src={logo} alt="AttendAI" className="h-8 w-8 object-contain" />
+              <span className="text-lg font-bold text-text-primary tracking-tight">AttendAI</span>
             </Link>
           </div>
 
           {/* Desktop navigation */}
-          <div className="hidden md:flex items-center space-x-2">
-            <Link to="/" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
-              <Home size={18} />
+          <div className="hidden md:flex items-center space-x-1">
+            <Link 
+              to="/" 
+              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas rounded-md transition-colors flex items-center gap-1.5"
+            >
+              <Home className="w-3.5 h-3.5" />
               <span>Home</span>
             </Link>
-            {/* {showBlog && (
-              <Link to="/blog" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
-                <Book size={18} />
-                <span>Blog</span>
-              </Link>
-            )} */}
-            <Link to="/about" className={`px-3 py-2 ${styles.textColor} ${styles.hoverColor} flex items-center gap-1.5 transition-colors`}>
-              <Info size={18} />
+            <Link 
+              to="/about" 
+              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas rounded-md transition-colors flex items-center gap-1.5"
+            >
+              <Information className="w-3.5 h-3.5" />
               <span>About</span>
             </Link>
+
+            <div className="h-4 w-px bg-border-subtle mx-2" />
+
+            <ThemeToggle className="mr-1" />
+
             {user ? (
-              <>
-                <Link to="/app">
-                  <Button variant="outline" className={`ml-4 ${styles.buttonBorder} ${styles.buttonHoverBorder} ${styles.textColor} ${styles.hoverColor} hover:bg-blue-900/50 transition-all duration-300 flex gap-2 items-center`}>
-                    <LayoutDashboard size={18} />
+              <div className="flex items-center gap-2">
+                <Link to={getDashboardLink()}>
+                  <Button variant="default" size="sm" className="text-xs h-8 flex items-center gap-1.5">
+                    <Dashboard className="w-3.5 h-3.5" />
                     <span>Dashboard</span>
                   </Button>
                 </Link>
                 <Button 
                   variant="ghost" 
-                  className={`flex gap-2 items-center ${styles.textColor} hover:text-red-300 hover:bg-red-950/20 transition-all duration-300`}
+                  size="sm"
+                  className="text-xs h-8 flex items-center gap-1.5 text-text-muted hover:text-status-error"
                   onClick={signOut}
                 >
-                  <LogOut size={18} />
+                  <Logout className="w-3.5 h-3.5" />
                   <span>Logout</span>
                 </Button>
-              </>
+              </div>
             ) : (
-              <>
-                <Link to="/login">
-                  <Button className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:shadow-[0_0_20px_rgba(56,189,248,0.5)] transition-all duration-300 border-0">
-                    Login
-                  </Button>
-                </Link>
-              </>
+              <Link to="/login">
+                <Button size="sm" className="text-xs h-8">
+                  Sign In
+                </Button>
+              </Link>
             )}
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center gap-1">
+            <ThemeToggle />
             <button
               onClick={toggleMenu}
-              className={`inline-flex items-center justify-center p-2 rounded-md ${styles.textColor} ${styles.hoverColor} focus:outline-none transition-colors`}
+              className="inline-flex items-center justify-center p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-canvas focus:outline-none transition-colors"
+              aria-label="Toggle navigation menu"
             >
-              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              {isMenuOpen ? <Close className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
         </div>
@@ -105,67 +115,58 @@ const Navbar = () => {
 
       {/* Mobile menu */}
       {isMenuOpen && (
-        <div className={`md:hidden ${styles.mobileMenuBg} backdrop-blur-lg shadow-lg rounded-b-xl border border-slate-700/50 animate-fade-in-up overflow-hidden`}>
-          <div className="px-4 pt-3 pb-4 space-y-2">
+        <div className="md:hidden bg-surface-default border-b border-border-subtle shadow-card">
+          <div className="px-4 pt-2 pb-4 space-y-1">
             <Link
               to="/"
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas transition-colors"
               onClick={toggleMenu}
             >
-              <Home size={18} />
+              <Home className="w-4 h-4" />
               <span>Home</span>
             </Link>
-            {showBlog && (
-              <Link
-                to="/blog"
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
-                onClick={toggleMenu}
-              >
-                <Book size={18} />
-                <span>Blog</span>
-              </Link>
-            )}
             <Link
               to="/about"
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas transition-colors"
               onClick={toggleMenu}
             >
-              <Info size={18} />
+              <Information className="w-4 h-4" />
               <span>About</span>
             </Link>
-            {user ? (
-              <>
-                <Link
-                  to="/app"
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-blue-800/20 ${styles.hoverColor} transition-colors`}
-                  onClick={toggleMenu}
-                >
-                  <LayoutDashboard size={18} />
-                  <span>Dashboard</span>
-                </Link>
-                <button
-                  onClick={() => {
-                    signOut();
-                    toggleMenu();
-                  }}
-                  className={`flex w-full items-center gap-2 px-3 py-2.5 rounded-lg text-base font-medium ${styles.textColor} hover:bg-red-950/20 hover:text-red-300 transition-colors`}
-                >
-                  <LogOut size={18} />
-                  <span>Logout</span>
-                </button>
-              </>
-            ) : (
-              <>
+
+            <div className="pt-2 border-t border-border-subtle mt-2">
+              {user ? (
+                <>
+                  <Link
+                    to={getDashboardLink()}
+                    className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-action-primary hover:bg-surface-canvas transition-colors"
+                    onClick={toggleMenu}
+                  >
+                    <Dashboard className="w-4 h-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                  <button
+                    onClick={() => {
+                      signOut();
+                      toggleMenu();
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-status-error hover:bg-status-error/10 transition-colors"
+                  >
+                    <Logout className="w-4 h-4" />
+                    <span>Logout</span>
+                  </button>
+                </>
+              ) : (
                 <Link
                   to="/login"
-                  className="flex items-center justify-center gap-2 px-3 py-3 mt-2 rounded-lg text-base font-medium bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white shadow-md transition-all"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium bg-action-primary text-white transition-colors"
                   onClick={toggleMenu}
                 >
-                  <User size={18} />
-                  <span>Login</span>
+                  <User className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
                 </Link>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}

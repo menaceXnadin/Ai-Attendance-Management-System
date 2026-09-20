@@ -3,7 +3,7 @@
 // You can override via Vite env: VITE_MEDIAPIPE_ASSET_BASE=/mediapipe
 
 export const mediapipeAssetBase =
-  (import.meta as any).env?.VITE_MEDIAPIPE_ASSET_BASE ||
+  (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_MEDIAPIPE_ASSET_BASE ||
   'https://cdn.jsdelivr.net/npm/@mediapipe/face_detection@0.4.1646425229';
 
 export const mediapipeLocateFile = (file: string) => `${mediapipeAssetBase}/${file}`;

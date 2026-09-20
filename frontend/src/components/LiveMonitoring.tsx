@@ -59,9 +59,9 @@ const LiveMonitoring: React.FC = () => {
   const attendanceRate = totalStudents > 0 ? Math.round((presentToday / totalStudents) * 100) : 0;
   
   const getStatusColor = (value: number, threshold: number) => {
-    if (value >= threshold) return 'text-green-400';
-    if (value >= threshold * 0.7) return 'text-yellow-400';
-    return 'text-red-400';
+    if (value >= threshold) return 'text-status-success';
+    if (value >= threshold * 0.7) return 'text-status-warning';
+    return 'text-status-error';
   };
 
   if (isLoading) {
@@ -69,8 +69,8 @@ const LiveMonitoring: React.FC = () => {
       <div className="space-y-6">
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <div className="h-12 w-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-slate-400">Loading system metrics...</p>
+            <div className="h-10 w-10 border-2 border-action-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+            <p className="text-xs text-text-muted">Loading system metrics...</p>
           </div>
         </div>
       </div>
@@ -82,14 +82,14 @@ const LiveMonitoring: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Live System Monitor</h2>
-          <p className="text-slate-400">Real-time system performance and health metrics</p>
+          <h2 className="text-xl font-bold text-text-primary">Live System Monitor</h2>
+          <p className="text-xs text-text-muted">Real-time system performance and health metrics</p>
         </div>
         <Badge 
-          variant="outline" 
-          className="bg-green-500/20 text-green-300 border-green-400/30"
+          variant="success"
+          className="text-xs"
         >
-          <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse mr-2"></div>
+          <div className="h-2 w-2 rounded-full bg-status-success animate-pulse mr-1.5"></div>
           Live
         </Badge>
       </div>
@@ -97,78 +97,74 @@ const LiveMonitoring: React.FC = () => {
       {/* Real-time Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Students */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
+        <Card className="bg-surface-default border-border-subtle shadow-card overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-400">Total Students</p>
-                <div className="text-2xl font-bold text-blue-400">
+                <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Total Students</p>
+                <div className="text-2xl font-bold text-text-primary tabular-nums mt-0.5">
                   {totalStudents}
                 </div>
-                <p className="text-xs text-slate-500">Registered users</p>
+                <p className="text-[11px] text-text-muted">Registered users</p>
               </div>
-              <div className="h-12 w-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
-                <Users className="h-6 w-6 text-blue-400" />
+              <div className="h-10 w-10 rounded-lg bg-action-primary-subtle flex items-center justify-center">
+                <Users className="h-5 w-5 text-action-primary" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Present Today */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
+        <Card className="bg-surface-default border-border-subtle shadow-card overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-400">Present Today</p>
-                <div className="text-2xl font-bold text-green-400">
+                <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Present Today</p>
+                <div className="text-2xl font-bold text-status-success tabular-nums mt-0.5">
                   {presentToday}
                 </div>
-                <p className="text-xs text-slate-500">{attendanceRate}% attendance rate</p>
+                <p className="text-[11px] text-text-muted">{attendanceRate}% attendance rate</p>
               </div>
-              <div className="h-12 w-12 rounded-lg bg-green-500/20 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-green-400" />
+              <div className="h-10 w-10 rounded-lg bg-status-success-subtle flex items-center justify-center">
+                <CheckCircle className="h-5 w-5 text-status-success" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* System Uptime */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+        <Card className="bg-surface-default border-border-subtle shadow-card overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-400">System Uptime</p>
-                <div className={`text-2xl font-bold ${getStatusColor(systemHealth?.uptime_percentage || 0, 99)}`}>
+                <p className="text-xs font-medium text-text-muted uppercase tracking-wider">System Uptime</p>
+                <div className={`text-2xl font-bold tabular-nums mt-0.5 ${getStatusColor(systemHealth?.uptime_percentage || 0, 99)}`}>
                   {systemHealth?.uptime_percentage ? `${systemHealth.uptime_percentage}%` : '--'}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-[11px] text-text-muted">
                   {systemHealth?.uptime_hours ? `${systemHealth.uptime_hours.toFixed(1)} hours` : 'Calculating...'}
                 </p>
               </div>
-              <div className="h-12 w-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <Activity className="h-6 w-6 text-purple-400" />
+              <div className="h-10 w-10 rounded-lg bg-status-info-subtle flex items-center justify-center">
+                <Activity className="h-5 w-5 text-status-info" />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* API Response Time */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-500"></div>
+        <Card className="bg-surface-default border-border-subtle shadow-card overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-400">API Response</p>
-                <div className={`text-2xl font-bold ${getStatusColor(200 - (realtimeMetrics?.responseTime || 0), 150)}`}>
+                <p className="text-xs font-medium text-text-muted uppercase tracking-wider">API Response</p>
+                <div className={`text-2xl font-bold tabular-nums mt-0.5 ${getStatusColor(200 - (realtimeMetrics?.responseTime || 0), 150)}`}>
                   {realtimeMetrics?.responseTime ? `${realtimeMetrics.responseTime}ms` : '--'}
                 </div>
-                <p className="text-xs text-slate-500">Average response time</p>
+                <p className="text-[11px] text-text-muted">Average response time</p>
               </div>
-              <div className="h-12 w-12 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                <Zap className="h-6 w-6 text-orange-400" />
+              <div className="h-10 w-10 rounded-lg bg-status-warning-subtle flex items-center justify-center">
+                <Zap className="h-5 w-5 text-status-warning" />
               </div>
             </div>
           </CardContent>
@@ -178,23 +174,19 @@ const LiveMonitoring: React.FC = () => {
       {/* Detailed System Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Database Health */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Database className="h-5 w-5 text-blue-400" />
+        <Card className="bg-surface-default border-border-subtle shadow-card">
+          <CardHeader className="pb-3 border-b border-border-subtle">
+            <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
+              <Database className="h-4 w-4 text-action-primary" />
               Database Performance
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="pt-4 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Connection Status</span>
+              <span className="text-xs font-medium text-text-secondary">Connection Status</span>
               <Badge 
-                variant="outline"
-                className={
-                  systemHealth?.database?.status === 'connected'
-                    ? 'bg-green-500/20 text-green-300 border-green-500/50'
-                    : 'bg-red-500/20 text-red-300 border-red-500/50'
-                }
+                variant={systemHealth?.database?.status === 'connected' ? 'success' : 'destructive'}
+                className="text-[11px]"
               >
                 {systemHealth?.database?.status === 'connected' ? (
                   <>
@@ -207,23 +199,23 @@ const LiveMonitoring: React.FC = () => {
               </Badge>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Response Time</span>
-                <span className="text-sm font-medium text-white">
+                <span className="text-xs text-text-muted">Response Time</span>
+                <span className="text-xs font-semibold text-text-primary tabular-nums">
                   {systemHealth?.database?.response_time_ms ? `${systemHealth.database.response_time_ms}ms` : '--'}
                 </span>
               </div>
               <Progress 
                 value={systemHealth?.database?.response_time_ms ? Math.min((systemHealth.database.response_time_ms / 100) * 100, 100) : 0} 
-                className="h-2" 
+                className="h-1.5 bg-surface-subtle" 
               />
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Active Sessions</span>
-                <span className="text-sm font-medium text-white">
+                <span className="text-xs text-text-muted">Active Sessions</span>
+                <span className="text-xs font-semibold text-text-primary tabular-nums">
                   {systemHealth?.api?.active_sessions || 0}
                 </span>
               </div>
@@ -232,45 +224,45 @@ const LiveMonitoring: React.FC = () => {
         </Card>
 
         {/* System Resources */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Server className="h-5 w-5 text-green-400" />
+        <Card className="bg-surface-default border-border-subtle shadow-card">
+          <CardHeader className="pb-3 border-b border-border-subtle">
+            <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
+              <Server className="h-4 w-4 text-status-success" />
               System Resources
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-3">
+          <CardContent className="pt-4 space-y-4">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Memory Usage</span>
-                <span className="text-sm font-medium text-white">
+                <span className="text-xs text-text-muted">Memory Usage</span>
+                <span className="text-xs font-semibold text-text-primary tabular-nums">
                   {realtimeMetrics?.memory_usage ? `${realtimeMetrics.memory_usage}%` : '--'}
                 </span>
               </div>
               <Progress 
                 value={realtimeMetrics?.memory_usage || 0} 
-                className="h-2" 
+                className="h-1.5 bg-surface-subtle" 
               />
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">CPU Usage</span>
-                <span className="text-sm font-medium text-white">
+                <span className="text-xs text-text-muted">CPU Usage</span>
+                <span className="text-xs font-semibold text-text-primary tabular-nums">
                   {realtimeMetrics?.system_load ? `${realtimeMetrics.system_load}%` : '--'}
                 </span>
               </div>
               <Progress 
                 value={realtimeMetrics?.system_load || 0} 
-                className="h-2" 
+                className="h-1.5 bg-surface-subtle" 
               />
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-slate-700">
-              <span className="text-sm text-slate-300">System Status</span>
+            <div className="flex items-center justify-between pt-2 border-t border-border-subtle">
+              <span className="text-xs font-medium text-text-secondary">System Status</span>
               <Badge 
-                variant="outline"
-                className="bg-green-500/20 text-green-300 border-green-500/50"
+                variant="success"
+                className="text-[11px]"
               >
                 <CheckCircle className="h-3 w-3 mr-1" />
                 Healthy
@@ -281,31 +273,31 @@ const LiveMonitoring: React.FC = () => {
       </div>
 
       {/* Service Status */}
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-lg text-white flex items-center gap-2">
-            <Activity className="h-5 w-5 text-purple-400" />
+      <Card className="bg-surface-default border-border-subtle shadow-card">
+        <CardHeader className="pb-3 border-b border-border-subtle">
+          <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
+            <Activity className="h-4 w-4 text-action-primary" />
             Service Status
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-              <span className="text-slate-300">Database</span>
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <span className="text-xs font-medium text-text-primary">Database</span>
               <Badge 
-                variant="outline"
-                className="bg-green-500/20 text-green-300 border-green-500/50"
+                variant="success"
+                className="text-[11px]"
               >
                 <CheckCircle className="h-3 w-3 mr-1" />
                 {systemHealth?.database?.status === 'connected' ? 'Connected' : 'Active'}
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-              <span className="text-slate-300">API Server</span>
+            <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <span className="text-xs font-medium text-text-primary">API Server</span>
               <Badge 
-                variant="outline"
-                className="bg-green-500/20 text-green-300 border-green-500/50"
+                variant="success"
+                className="text-[11px]"
               >
                 <CheckCircle className="h-3 w-3 mr-1" />
                 {systemHealth?.api?.status || 'Active'}
@@ -316,36 +308,36 @@ const LiveMonitoring: React.FC = () => {
       </Card>
 
       {/* Real-time Activity Summary */}
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-lg text-white flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-blue-400" />
+      <Card className="bg-surface-default border-border-subtle shadow-card">
+        <CardHeader className="pb-3 border-b border-border-subtle">
+          <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 text-action-primary" />
             Today's Activity Summary
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="text-center p-4 bg-slate-800/50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-400 mb-1">{totalStudents}</div>
-              <div className="text-sm text-slate-400">Total Students</div>
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="text-center p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <div className="text-xl font-bold text-text-primary tabular-nums mb-0.5">{totalStudents}</div>
+              <div className="text-xs text-text-muted">Total Students</div>
             </div>
             
-            <div className="text-center p-4 bg-slate-800/50 rounded-lg">
-              <div className="text-2xl font-bold text-green-400 mb-1">{presentToday}</div>
-              <div className="text-sm text-slate-400">Present Today</div>
+            <div className="text-center p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <div className="text-xl font-bold text-status-success tabular-nums mb-0.5">{presentToday}</div>
+              <div className="text-xs text-text-muted">Present Today</div>
             </div>
             
-            <div className="text-center p-4 bg-slate-800/50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-400 mb-1">{attendanceRate}%</div>
-              <div className="text-sm text-slate-400">Attendance Rate</div>
+            <div className="text-center p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <div className="text-xl font-bold text-action-primary tabular-nums mb-0.5">{attendanceRate}%</div>
+              <div className="text-xs text-text-muted">Attendance Rate</div>
             </div>
             
-            <div className="text-center p-4 bg-slate-800/50 rounded-lg">
-              <div className="flex items-center justify-center gap-2 text-green-400 mb-1">
-                <Clock className="h-5 w-5" />
-                <span className="text-2xl font-bold">{systemHealth?.uptime_hours?.toFixed(0) || '--'}</span>
+            <div className="text-center p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
+              <div className="flex items-center justify-center gap-1.5 text-text-primary mb-0.5">
+                <Clock className="h-4 w-4 text-text-muted" />
+                <span className="text-xl font-bold tabular-nums">{systemHealth?.uptime_hours?.toFixed(0) || '--'}</span>
               </div>
-              <div className="text-sm text-slate-400">Uptime (hours)</div>
+              <div className="text-xs text-text-muted">Uptime (hours)</div>
             </div>
           </div>
         </CardContent>

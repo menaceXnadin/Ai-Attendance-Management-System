@@ -14,11 +14,11 @@ const StudentMarkAttendancePage = () => {
   return (
     <StudentSidebar>
       <div className="px-6 py-6">
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
+        <Card className="bg-surface-default border-border-subtle shadow-card overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-white">Face Verification Test</CardTitle>
-            <CardDescription className="text-blue-200/80">
-              Test if your face matches the stored data
+            <CardTitle className="text-lg text-text-primary">Face Verification Test</CardTitle>
+            <CardDescription className="text-text-muted">
+              Test if your face matches the stored biometric data
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

@@ -84,6 +84,32 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add OPTIONS handler FIRST - before any authentication or CORS checks
+@app.middleware("http")
+async def handle_options_requests(request, call_next):
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response
+        response = Response()
+        # Allow the specific origin that made the request
+        origin = request.headers.get("origin")
+        if origin in [
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response
+    
+    response = await call_next(request)
+    return response
+
 # Add CORS middleware with more permissive settings
 app.add_middleware(
     CORSMiddleware,

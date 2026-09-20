@@ -186,14 +186,15 @@ const NotificationCenter: React.FC = () => {
     <div className="relative">
       {/* Notification Bell */}
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon-sm"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative border-slate-600 text-slate-300 hover:bg-slate-800"
+        className="relative text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
+        aria-label="Open notifications"
       >
         <Bell className="h-4 w-4" />
         {unreadCount > 0 && (
-          <Badge className="absolute -top-2 -right-2 h-5 w-5 flex items-center justify-center p-0 bg-red-500 text-white text-xs">
+          <Badge className="absolute -top-1 -right-1 h-4 w-4 min-w-4 flex items-center justify-center p-0 bg-status-error text-white text-[10px] font-semibold border-0">
             {unreadCount}
           </Badge>
         )}
@@ -201,91 +202,88 @@ const NotificationCenter: React.FC = () => {
 
       {/* Notification Panel */}
       {isOpen && (
-        <div className="absolute right-0 top-12 w-96 z-[999]">
-          <Card className="bg-slate-900/95 backdrop-blur-md border-slate-700/50 shadow-2xl">
-            <CardHeader className="pb-3">
+        <div className="absolute right-0 top-11 w-96 z-[999]">
+          <Card className="bg-surface-default border border-border-default shadow-lg overflow-hidden">
+            <CardHeader className="p-3.5 border-b border-border-subtle">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-lg text-white flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-blue-400" />
+                <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
+                  <Bell className="h-4 w-4 text-action-primary" />
                   Notifications
                 </CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                   {unreadCount > 0 && (
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={handleMarkAllAsRead}
-                      className="text-xs border-slate-600 text-slate-300 hover:bg-slate-800"
+                      className="text-xs h-7 px-2 text-action-primary hover:bg-action-primary-subtle"
                     >
                       Mark all read
                     </Button>
                   )}
                   <Button
-                    variant="outline"
-                    size="sm"
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => setIsOpen(false)}
-                    className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                    className="h-7 w-7 text-text-muted hover:text-text-primary"
+                    aria-label="Close notification panel"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="p-0 max-h-96 overflow-y-auto">
               {notifications.length === 0 ? (
-                <div className="p-6 text-center text-slate-400">
-                  <Bell className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p>No notifications</p>
+                <div className="p-8 text-center text-text-muted">
+                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-30 text-text-muted" />
+                  <p className="text-xs">No notifications</p>
                 </div>
               ) : error ? (
-                <div className="p-6 text-center text-red-400">
-                  <AlertTriangle className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                  <p>Error loading notifications:</p>
-                  <p className="text-sm text-slate-400">{error}</p>
+                <div className="p-6 text-center text-status-error">
+                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-60" />
+                  <p className="text-xs font-medium">Error loading notifications:</p>
+                  <p className="text-xs text-text-muted mt-0.5">{error}</p>
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="divide-y divide-border-subtle">
                   {notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`p-4 border-l-4 mx-2 mb-2 rounded-r-lg transition-all hover:bg-slate-800/50 ${
-                        notification.read ? 'opacity-60' : ''
-                      } ${
-                        notification.type === 'warning' ? 'border-amber-500 bg-amber-500/10' :
-                        notification.type === 'success' ? 'border-green-500 bg-green-500/10' :
-                        notification.type === 'error' ? 'border-red-500 bg-red-500/10' :
-                        notification.type === 'announcement' ? 'border-purple-500 bg-purple-500/10' :
-                        'border-blue-500 bg-blue-500/10'
+                      className={`p-3 transition-colors hover:bg-surface-subtle cursor-pointer ${
+                        notification.read ? 'opacity-70 bg-surface-canvas/40' : 'bg-surface-default'
                       }`}
                       onClick={() => !notification.read && handleMarkAsRead(notification.id)}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          {getNotificationIcon(notification.type)}
-                          <div className="flex-1">
-                            <h4 className="font-medium text-white text-sm">
-                              {notification.title}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <div className="mt-0.5 shrink-0">
+                            {getNotificationIcon(notification.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-text-primary text-xs flex items-center gap-1.5">
+                              <span className="truncate">{notification.title}</span>
                               {!notification.read && (
-                                <span className="ml-2 h-2 w-2 bg-blue-500 rounded-full inline-block"></span>
+                                <span className="h-1.5 w-1.5 rounded-full bg-action-primary shrink-0"></span>
                               )}
                             </h4>
-                            <p className="text-slate-300 text-xs mt-1">
+                            <p className="text-text-secondary text-xs mt-0.5 leading-relaxed break-words">
                               {notification.message}
                             </p>
-                            <div className="flex items-center gap-3 mt-2">
-                              <div className="flex items-center gap-1 text-slate-400 text-xs">
+                            <div className="flex items-center gap-3 mt-1.5">
+                              <div className="flex items-center gap-1 text-text-muted text-[11px]">
                                 <Clock className="h-3 w-3" />
                                 {formatTimestamp(notification.timestamp)}
                               </div>
                               {notification.actionable && (
                                 <Button
                                   size="sm"
-                                  variant="outline"
+                                  variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     notification.onAction?.();
                                   }}
-                                  className="text-xs h-6 border-slate-600 text-slate-300 hover:bg-slate-700"
+                                  className="text-xs h-6 px-2 text-action-primary hover:bg-action-primary-subtle"
                                 >
                                   {notification.actionText}
                                 </Button>
@@ -293,16 +291,16 @@ const NotificationCenter: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                        {/* Only show delete button for admins */}
                         {isAdmin && (
                           <Button
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon-sm"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleRemoveNotification(notification.id);
                             }}
-                            className="ml-2 h-6 w-6 p-0 border-slate-600 text-slate-400 hover:bg-slate-700 hover:text-white"
+                            className="h-6 w-6 p-0 text-text-muted hover:text-status-error shrink-0"
+                            aria-label="Delete notification"
                           >
                             <X className="h-3 w-3" />
                           </Button>

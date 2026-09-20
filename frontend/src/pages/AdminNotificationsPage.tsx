@@ -23,7 +23,7 @@ const AdminNotificationsPage: React.FC = () => {
           </TabsTrigger>
           <TabsTrigger 
             value="view" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white data-[state=inactive]:text-slate-300"
+            className="data-[state=active]:bg-action-primary data-[state=active]:text-white data-[state=inactive]:text-slate-300"
           >
             <Bell className="h-4 w-4 mr-2" />
             All Notifications

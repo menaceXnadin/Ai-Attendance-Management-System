@@ -126,7 +126,7 @@ const MergedAnalytics: React.FC = () => {
                     <span className="text-sm text-slate-300">Attendance Rate</span>
                     <div className="text-2xl font-bold text-yellow-400 mt-1">{analytics.attendanceRate}%</div>
                   </div>
-                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <div className="h-10 w-10 rounded-lg bg-action-primary flex items-center justify-center">
                     <Target className="h-6 w-6 text-white" />
                   </div>
                 </div>
@@ -187,14 +187,14 @@ const MergedAnalytics: React.FC = () => {
               </div>
               {/* Avg. Arrival Time (Weekly) */}
               <div className="relative rounded-xl bg-[#151c27] border border-[#232b3b] p-3 flex flex-col min-h-[100px] h-[110px] shadow-md" style={{overflow: 'hidden'}}>
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-purple-400 to-pink-500 rounded-t-xl" />
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-t-xl" />
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <span className="text-sm text-slate-300">Avg. Arrival Time</span>
-                    <div className="text-2xl font-bold text-purple-400 mt-1">{analytics.averageArrivalTime}</div>
+                    <div className="text-2xl font-bold text-action-primary mt-1">{analytics.averageArrivalTime}</div>
                     <span className="text-xs text-slate-400">across all classes</span>
                   </div>
-                  <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                  <div className="h-10 w-10 rounded-lg bg-action-primary flex items-center justify-center">
                     <Clock className="h-6 w-6 text-white" />
                   </div>
                 </div>
