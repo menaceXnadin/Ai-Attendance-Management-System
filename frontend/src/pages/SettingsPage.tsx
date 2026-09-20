@@ -84,7 +84,7 @@ const SettingsPage = () => {
 
         {/* Tabs Section */}
         <Tabs defaultValue="general" className="space-y-6">
-          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 p-2">
+          <div className="bg-card text-card-foreground rounded-2xl border border-border shadow-sm p-2">
             <TabsList className="w-full grid grid-cols-2 md:grid-cols-5 gap-2 bg-transparent">
               <TabsTrigger 
                 value="general" 
@@ -125,7 +125,7 @@ const SettingsPage = () => {
           </div>
         
         <TabsContent value="general" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+          <Card className="border-border shadow-sm bg-card text-card-foreground overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 pointer-events-none" />
             <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
               <div className="flex items-center gap-3">
@@ -234,7 +234,7 @@ const SettingsPage = () => {
                       <Button 
                         variant="ghost" 
                         size="sm"
-                        className="gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm hover:bg-purple-50 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 group-hover:border-purple-400 dark:group-hover:border-purple-600 shadow-sm hover:shadow-md transition-all duration-200"
+                        className="gap-2 bg-surface-default hover:bg-purple-50 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 group-hover:border-purple-400 dark:group-hover:border-purple-600 shadow-sm hover:shadow-md transition-all duration-200"
                       >
                         Configure
                         <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-200" />
@@ -303,7 +303,7 @@ const SettingsPage = () => {
         </TabsContent>
         
         <TabsContent value="notifications" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+          <Card className="border-border shadow-sm bg-card text-card-foreground overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5 pointer-events-none" />
             <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
               <div className="flex items-center gap-3">
@@ -369,7 +369,7 @@ const SettingsPage = () => {
         </TabsContent>
         
         <TabsContent value="reports" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+          <Card className="border-border shadow-sm bg-card text-card-foreground overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-teal-500/5 pointer-events-none" />
             <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
               <div className="flex items-center gap-3">
@@ -488,7 +488,7 @@ const SettingsPage = () => {
         </TabsContent>
         
         <TabsContent value="account" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
+          <Card className="border-border shadow-sm bg-card text-card-foreground overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-pink-500/5 pointer-events-none" />
             <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
               <div className="flex items-center gap-3">

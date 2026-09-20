@@ -198,6 +198,21 @@
   }
 }
 
+@layer utilities {
+  .bg-surface-default {
+    background-color: var(--surface-default);
+  }
+  .bg-surface-subtle {
+    background-color: var(--surface-subtle);
+  }
+  .bg-surface-canvas {
+    background-color: var(--surface-canvas);
+  }
+  .bg-surface-raised {
+    background-color: var(--surface-raised);
+  }
+}
+
 /* Subtle, accessible scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

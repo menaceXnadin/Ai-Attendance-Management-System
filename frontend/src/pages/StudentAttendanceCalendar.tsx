@@ -335,7 +335,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
     gradientFrom: string;
     gradientTo: string;
   }> = ({ title, current, longest, gradientFrom, gradientTo }) => (
-    <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden relative">
+    <Card className="bg-card text-card-foreground border-border shadow-sm overflow-hidden relative">
       <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${gradientFrom} ${gradientTo}`}></div>
       <CardHeader className="pb-2 pt-3">
         <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
@@ -384,7 +384,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
+          <Card className="bg-card text-card-foreground border-border shadow-sm overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
             <CardHeader className="pb-1.5 sm:pb-2 pt-2 sm:pt-3 px-2 sm:px-4">
               <CardTitle className="text-[10px] sm:text-xs text-slate-400 flex items-center gap-1">
@@ -403,7 +403,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
+          <Card className="bg-card text-card-foreground border-border shadow-sm overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
             <CardHeader className="pb-2 pt-3">
               <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
@@ -431,7 +431,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
             gradientTo="to-cyan-500"
           />
 
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
+          <Card className="bg-card text-card-foreground border-border shadow-sm overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-500"></div>
             <CardHeader className="pb-2 pt-3">
               <CardTitle className="text-xs text-slate-400 flex items-center gap-1">
@@ -459,7 +459,7 @@ const StudentAttendanceCalendar = ({ studentId: propStudentId, hideBackButton = 
         </div>
 
         {/* Calendar View */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+        <Card className="bg-card text-card-foreground border-border shadow-sm">
           <CardHeader className="pb-3 pt-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg text-white flex items-center gap-2">

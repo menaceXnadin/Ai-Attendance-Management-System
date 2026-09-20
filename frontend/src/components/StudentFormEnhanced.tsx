@@ -105,7 +105,7 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
   return (
     <div className="w-full">
       <div className="max-w-5xl mx-auto">
-        <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-sm bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm overflow-hidden">
+        <Card className="border border-border shadow-sm bg-card text-card-foreground overflow-hidden">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-900/50 px-8 py-6">
             <div className="flex items-start gap-4">
               <div className="p-3 bg-blue-500/10 dark:bg-blue-500/20 rounded-xl border border-blue-500/20 transition-all duration-300 hover:scale-105 hover:bg-blue-500/15">

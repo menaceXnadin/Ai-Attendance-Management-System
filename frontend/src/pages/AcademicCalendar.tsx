@@ -1307,7 +1307,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
         {/* Card 3: Today */}
         <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Today\'s Schedule</p>
+            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Today's Schedule</p>
             <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
               {stats.classes_today || 0}
             </p>
@@ -1915,7 +1915,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 {/* Event Details Modal */}
       {showEventModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-start space-x-4">
@@ -2010,7 +2010,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Create Event Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -2182,7 +2182,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Edit Event Modal */}
       {showEditModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-text-primary">Edit Event</h2>
@@ -2333,7 +2333,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-md w-full">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-md w-full">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-text-primary">Calendar Settings</h2>
@@ -2402,7 +2402,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Edit Session Modal */}
       {showEditSessionModal && selectedSession && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold text-text-primary">Edit Session</h2>
@@ -2569,7 +2569,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Session Management Modal */}
       {showSessionModal && selectedEvent && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
@@ -2702,7 +2702,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       {/* Create Session Modal */}
       {showCreateSessionModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>

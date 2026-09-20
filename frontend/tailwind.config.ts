@@ -1,6 +1,15 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
+function withOpacity(varName: string) {
+	return ({ opacityValue }: { opacityValue?: string }) => {
+		if (opacityValue && !opacityValue.startsWith("var(")) {
+			return `color-mix(in srgb, var(${varName}) calc(${opacityValue} * 100%), transparent)`;
+		}
+		return `var(${varName})`;
+	};
+}
+
 export default {
 	darkMode: ["class"],
 	content: [
@@ -36,19 +45,23 @@ export default {
 			colors: {
 				border: {
 					DEFAULT: 'hsl(var(--border))',
-					subtle: 'var(--border-subtle)',
-					default: 'var(--border-default)',
-					strong: 'var(--border-strong)',
+					subtle: withOpacity('--border-subtle'),
+					default: withOpacity('--border-default'),
+					strong: withOpacity('--border-strong'),
 				},
-				'border-subtle': 'var(--border-subtle)',
-				'border-default': 'var(--border-default)',
-				'border-strong': 'var(--border-strong)',
+				'border-subtle': withOpacity('--border-subtle'),
+				'border-default': withOpacity('--border-default'),
+				'border-strong': withOpacity('--border-strong'),
 				text: {
-					primary: 'var(--text-primary)',
-					secondary: 'var(--text-secondary)',
-					muted: 'var(--text-muted)',
-					inverse: 'var(--text-inverse)',
+					primary: withOpacity('--text-primary'),
+					secondary: withOpacity('--text-secondary'),
+					muted: withOpacity('--text-muted'),
+					inverse: withOpacity('--text-inverse'),
 				},
+				'text-primary': withOpacity('--text-primary'),
+				'text-secondary': withOpacity('--text-secondary'),
+				'text-muted': withOpacity('--text-muted'),
+				'text-inverse': withOpacity('--text-inverse'),
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
@@ -92,41 +105,52 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				surface: {
-					canvas: 'var(--surface-canvas)',
-					DEFAULT: 'var(--surface-default)',
-					subtle: 'var(--surface-subtle)',
-					raised: 'var(--surface-raised)',
+					canvas: withOpacity('--surface-canvas'),
+					DEFAULT: withOpacity('--surface-default'),
+					default: withOpacity('--surface-default'),
+					subtle: withOpacity('--surface-subtle'),
+					raised: withOpacity('--surface-raised'),
 				},
+				'surface-canvas': withOpacity('--surface-canvas'),
+				'surface-default': withOpacity('--surface-default'),
+				'surface-subtle': withOpacity('--surface-subtle'),
+				'surface-raised': withOpacity('--surface-raised'),
 				action: {
-					primary: 'var(--action-primary)',
-					'primary-hover': 'var(--action-primary-hover)',
-					'primary-subtle': 'var(--action-primary-subtle)',
-					secondary: 'var(--action-secondary)',
+					DEFAULT: withOpacity('--action-primary'),
+					default: withOpacity('--action-primary'),
+					primary: withOpacity('--action-primary'),
+					'primary-hover': withOpacity('--action-primary-hover'),
+					'primary-subtle': withOpacity('--action-primary-subtle'),
+					secondary: withOpacity('--action-secondary'),
 				},
+				'action-primary': withOpacity('--action-primary'),
+				'action-primary-hover': withOpacity('--action-primary-hover'),
+				'action-primary-subtle': withOpacity('--action-primary-subtle'),
+				'action-secondary': withOpacity('--action-secondary'),
 				'border-token': {
-					subtle: 'var(--border-subtle)',
-					DEFAULT: 'var(--border-default)',
-					strong: 'var(--border-strong)',
+					subtle: withOpacity('--border-subtle'),
+					DEFAULT: withOpacity('--border-default'),
+					strong: withOpacity('--border-strong'),
 				},
 				nav: {
-					surface: 'var(--nav-surface)',
-					hover: 'var(--nav-hover)',
-					active: 'var(--nav-active)',
-					text: 'var(--nav-text)',
+					surface: withOpacity('--nav-surface'),
+					hover: withOpacity('--nav-hover'),
+					active: withOpacity('--nav-active'),
+					text: withOpacity('--nav-text'),
 				},
 				status: {
-					success: 'var(--status-success)',
-					'success-subtle': 'var(--status-success-subtle)',
-					'success-border': 'var(--status-success-border)',
-					warning: 'var(--status-warning)',
-					'warning-subtle': 'var(--status-warning-subtle)',
-					'warning-border': 'var(--status-warning-border)',
-					error: 'var(--status-error)',
-					'error-subtle': 'var(--status-error-subtle)',
-					'error-border': 'var(--status-error-border)',
-					info: 'var(--status-info)',
-					'info-subtle': 'var(--status-info-subtle)',
-					'info-border': 'var(--status-info-border)',
+					success: withOpacity('--status-success'),
+					'success-subtle': withOpacity('--status-success-subtle'),
+					'success-border': withOpacity('--status-success-border'),
+					warning: withOpacity('--status-warning'),
+					'warning-subtle': withOpacity('--status-warning-subtle'),
+					'warning-border': withOpacity('--status-warning-border'),
+					error: withOpacity('--status-error'),
+					'error-subtle': withOpacity('--status-error-subtle'),
+					'error-border': withOpacity('--status-error-border'),
+					info: withOpacity('--status-info'),
+					'info-subtle': withOpacity('--status-info-subtle'),
+					'info-border': withOpacity('--status-info-border'),
 				},
 				brand: {
 					50: "#e6f5f7",
