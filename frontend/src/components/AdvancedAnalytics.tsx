@@ -221,12 +221,12 @@ const AdvancedAnalytics: React.FC<AdvancedAnalyticsProps> = ({ data }) => {
         </Card>
 
         <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-400">Avg. Arrival Time</p>
-                <div className="text-2xl font-bold text-purple-400">
+                <div className="text-2xl font-bold text-action-primary">
                   {averageArrivalTime}
                 </div>
                 <p className="text-xs text-slate-500">

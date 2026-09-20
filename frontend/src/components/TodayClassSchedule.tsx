@@ -3,20 +3,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Clock, 
-  BookOpen, 
-  CheckCircle, 
-  Scan,
-  AlertTriangle,
+  Time as Clock, 
+  Book as BookOpen, 
+  CheckmarkFilled as CheckCircle, 
+  ScanAlt as Scan,
+  WarningAlt as AlertTriangle,
   Calendar,
   Timer,
-  PlayCircle,
-  Pause,
-  CheckSquare,
-  Lock,
-  Shield,
-  XCircle
-} from 'lucide-react';
+  PlayFilled as PlayCircle,
+  PauseFilled as Pause,
+  CheckboxChecked as CheckSquare,
+  Locked as Lock,
+  Security as Shield,
+  CloseFilled as XCircle
+} from '@carbon/icons-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
@@ -145,7 +145,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     }
     // Return empty schedule if no real schedules are available
     return [];
-  }, [realSchedules, studentData]);
+  }, [realSchedules]);
 
   // Calculate status based on current time and attendance rules
   const calculateSubjectStatus = React.useCallback((schedule: SubjectSchedule[]): SubjectSchedule[] => {
@@ -346,7 +346,7 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
     // Use enhanced calculation that prioritizes database records
     const scheduleWithStatus = calculateSubjectStatusWithDB(baseSchedule);
     return scheduleWithStatus;
-  }, [generateTodayScheduleFromDB, calculateSubjectStatusWithDB, todayAttendance]);
+  }, [generateTodayScheduleFromDB, calculateSubjectStatusWithDB]);
 
   const handleMarkAttendance = (subjectId: number) => {
     // Time restrictions enabled - subject to school hours and class periods
@@ -463,25 +463,23 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
 
   if (todaySchedule.length === 0) {
     return (
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-xl text-white flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-              <Calendar className="h-4 w-4 text-white" />
-            </div>
+      <Card className="border border-border-subtle bg-surface-default shadow-card">
+        <CardHeader className="border-b border-border-subtle pb-4">
+          <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2.5">
+            <Calendar className="w-5 h-5 text-action-primary" />
             Today's Class Schedule
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <div className="text-center py-8">
-            <div className="h-16 w-16 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-4">
-              <Calendar className="h-8 w-8 text-slate-400" />
+            <div className="h-12 w-12 rounded-full bg-surface-canvas border border-border-subtle flex items-center justify-center mx-auto mb-3 text-text-muted">
+              <Calendar className="w-6 h-6" />
             </div>
-            <h3 className="text-lg font-medium text-white mb-2">No Classes Scheduled</h3>
-            <p className="text-slate-400">
+            <h3 className="text-sm font-semibold text-text-primary mb-1">No Classes Scheduled</h3>
+            <p className="text-xs text-text-muted max-w-sm mx-auto">
               {new Date().getDay() === 5 || new Date().getDay() === 6 
-                ? "It's weekend - no classes scheduled." 
-                : "No class schedules available for today. Please contact your admin to set up class schedules."}
+                ? "It's weekend – no instructional periods scheduled for today." 
+                : "No class schedules assigned for today. Contact your course administrator if this is unexpected."}
             </p>
           </div>
         </CardContent>
@@ -492,20 +490,18 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   if (showFaceRecognition && activeSubjectId) {
     const activeSubject = todaySchedule.find(s => s.subjectId === activeSubjectId);
     return (
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-xl text-white flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-teal-400 flex items-center justify-center">
-              <Scan className="h-4 w-4 text-white" />
-            </div>
-            Marking Attendance - {activeSubject?.subjectName}
+      <Card className="border border-border-subtle bg-surface-default shadow-card">
+        <CardHeader className="border-b border-border-subtle pb-4">
+          <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
+            <Scan className="w-5 h-5 text-action-primary" />
+            Marking Attendance – {activeSubject?.subjectName}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse"></div>
-              <span className="text-white font-medium">Face Recognition Active</span>
+        <CardContent className="pt-6">
+          <div className="bg-surface-canvas rounded-lg p-4 border border-border-subtle">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-2.5 h-2.5 bg-status-error rounded-full animate-pulse"></div>
+              <span className="text-xs font-semibold text-text-primary">Biometric Face Verification Active</span>
             </div>
             <FaceRecognition 
               onCapture={handleFaceCapture} 
@@ -522,18 +518,15 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
   }
 
   return (
-    <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-teal-400 to-purple-500"></div>
-      <CardHeader className="pb-4">
+    <Card className="border border-border-subtle bg-surface-default shadow-card">
+      <CardHeader className="border-b border-border-subtle pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CardTitle className="text-lg sm:text-xl text-white flex items-center gap-3">
-            <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center">
-              <Calendar className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-white" />
-            </div>
-            <span className="truncate">Today's Class Schedule</span>
+          <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2.5">
+            <Calendar className="w-5 h-5 text-action-primary" />
+            <span>Today's Class Schedule</span>
           </CardTitle>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30 text-[10px] sm:text-xs px-2 py-1">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="text-xs px-2.5 py-0.5">
               {new Date().toLocaleDateString('en-US', { 
                 weekday: 'short', 
                 month: 'short', 
@@ -543,52 +536,48 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 sm:space-y-4">
-        {/* Time restrictions enabled - verification controlled by school hours and periods */}
-
+      <CardContent className="pt-6 space-y-4">
         {/* Time Restriction Status */}
-        <div className={`border rounded-xl p-4 ${
+        <div className={`border rounded-lg p-4 ${
           isFaceVerificationAllowed 
-            ? 'bg-green-500/10 border-green-400/30' 
-            : 'bg-red-500/10 border-red-400/30'
+            ? 'bg-status-success/5 border-status-success/30' 
+            : 'bg-status-error/5 border-status-error/30'
         }`}>
           <div className="flex items-center gap-3">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
               isFaceVerificationAllowed 
-                ? 'bg-green-500/20' 
-                : 'bg-red-500/20'
+                ? 'bg-status-success/15 text-status-success' 
+                : 'bg-status-error/15 text-status-error'
             }`}>
               {isFaceVerificationAllowed ? (
-                <Shield className="h-4 w-4 text-green-400" />
+                <Shield className="w-4 h-4" />
               ) : (
-                <Lock className="h-4 w-4 text-red-400" />
+                <Lock className="w-4 h-4" />
               )}
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <p className={`font-medium ${
-                  isFaceVerificationAllowed ? 'text-green-300' : 'text-red-300'
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className={`text-xs font-semibold ${
+                  isFaceVerificationAllowed ? 'text-status-success' : 'text-status-error'
                 }`}>
                   {isFaceVerificationAllowed ? 'Face Verification Available' : 'Face Verification Restricted'}
                 </p>
                 {currentPeriod && (
-                  <Badge className="bg-blue-500/20 text-blue-300 border-blue-400/30 text-xs">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     {currentPeriod.name}
                   </Badge>
                 )}
               </div>
-              <p className={`text-sm ${
-                isFaceVerificationAllowed ? 'text-green-200/80' : 'text-red-200/80'
-              }`}>
+              <p className="text-xs text-text-secondary">
                 {restrictionReason}
               </p>
               {currentPeriod && isFaceVerificationAllowed && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-[11px] text-text-muted mt-1">
                   {getTimeRemainingInPeriod(currentPeriod)}
                 </p>
               )}
               {timeUntilNext && !isFaceVerificationAllowed && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-[11px] text-text-muted mt-1">
                   Next opportunity in {timeUntilNext}
                 </p>
               )}
@@ -598,31 +587,29 @@ const TodayClassSchedule: React.FC<TodayClassScheduleProps> = ({
         {todaySchedule.map((subject, index) => (
           <div
             key={`${subject.subjectId}-${subject.startTime}-${index}`}
-            className="group bg-slate-800/30 border border-slate-700/50 rounded-xl p-3 sm:p-4 hover:border-slate-600/50 transition-all"
+            className="p-4 rounded-lg bg-surface-canvas border border-border-subtle hover:border-border-strong transition-colors"
           >
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-4">
-              <div className="flex items-start gap-3 sm:gap-4 flex-1">
-                <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-blue-500 to-teal-400 flex items-center justify-center flex-shrink-0">
-                  <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-surface-default border border-border-subtle flex items-center justify-center flex-shrink-0 text-action-primary">
+                  <BookOpen className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-white text-sm sm:text-base truncate max-w-[160px] sm:max-w-none">
+                    <h3 className="font-semibold text-text-primary text-sm truncate">
                       {subject.subjectName}
                     </h3>
                     <Badge 
-                      className={`${getStatusColor(subject.status)} flex items-center gap-1 text-[10px] sm:text-xs px-2 py-0.5 sm:py-1`}
+                      className={`${getStatusColor(subject.status)} flex items-center gap-1 text-[10px] px-2 py-0.5`}
                     >
                       {getStatusIcon(subject.status)}
-                      <span className="truncate max-w-[70px]">{subject.status}</span>
+                      <span className="truncate">{subject.status}</span>
                     </Badge>
                   </div>
-                  <p className="text-[11px] sm:text-sm text-slate-400 mb-1 sm:mb-2 truncate">{subject.subjectCode}</p>
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] sm:text-sm text-slate-300">
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {formatTime(subject.startTime)} - {formatTime(subject.endTime)}
-                    </div>
+                  <p className="text-xs text-text-muted mb-1 truncate">{subject.subjectCode}</p>
+                  <div className="flex items-center gap-1 text-xs text-text-secondary">
+                    <Clock className="w-3.5 h-3.5 text-text-muted" />
+                    <span>{formatTime(subject.startTime)} – {formatTime(subject.endTime)}</span>
                   </div>
                 </div>
               </div>

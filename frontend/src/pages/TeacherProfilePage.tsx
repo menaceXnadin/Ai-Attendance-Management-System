@@ -116,48 +116,48 @@ const TeacherProfilePage: React.FC = () => {
 
   return (
     <TeacherSidebar>
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Teacher Profile</h1>
-          <p className="text-slate-400">View and manage your profile information</p>
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary mb-1">Teacher Profile</h1>
+          <p className="text-xs sm:text-sm text-text-muted">View and manage your academic account profile</p>
         </div>
 
         {/* Profile Card */}
-        <Card className="mb-8 bg-gradient-to-br from-slate-900/90 to-slate-800/90 border-slate-700/80 backdrop-blur-sm">
-          <CardContent className="p-8">
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+        <Card className="bg-surface-default border-border-subtle shadow-card">
+          <CardContent className="p-6 sm:p-8">
+            <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
               {/* Avatar */}
-              <Avatar className="h-32 w-32 border-4 border-blue-500/30 shadow-2xl">
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-3xl font-bold">
+              <Avatar className="h-24 w-24 border-2 border-action-primary/30 shadow-md">
+                <AvatarFallback className="bg-action-primary text-white text-2xl font-bold">
                   {teacher.name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'T'}
                 </AvatarFallback>
               </Avatar>
 
               {/* Info */}
               <div className="flex-1 text-center md:text-left">
-                <div className="flex items-center justify-center md:justify-start gap-3 mb-3">
-                  <h2 className="text-3xl font-bold text-white">
+                <div className="flex items-center justify-center md:justify-start gap-3 mb-2">
+                  <h2 className="text-2xl font-bold text-text-primary">
                     {teacher.name || user?.name || 'Teacher'}
                   </h2>
-                  <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
+                  <Badge variant="success" className="text-xs">
                     <CheckCircle className="h-3 w-3 mr-1" />
                     Active
                   </Badge>
                 </div>
-                <p className="text-slate-400 text-lg mb-4">{teacher.email || user?.email}</p>
+                <p className="text-text-muted text-sm mb-4">{teacher.email || user?.email}</p>
                 
                 <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                  <Badge variant="outline" className="bg-blue-500/10 text-blue-300 border-blue-400/30">
-                    <Award className="h-3 w-3 mr-1" />
+                  <Badge variant="secondary" className="text-xs">
+                    <Award className="h-3 w-3 mr-1 text-action-primary" />
                     Teacher
                   </Badge>
-                  <Badge variant="outline" className="bg-purple-500/10 text-purple-300 border-purple-400/30">
-                    <MapPin className="h-3 w-3 mr-1" />
+                  <Badge variant="secondary" className="text-xs">
+                    <MapPin className="h-3 w-3 mr-1 text-action-primary" />
                     {teacher.faculty_name || 'Faculty'}
                   </Badge>
-                  <Badge variant="outline" className="bg-cyan-500/10 text-cyan-300 border-cyan-400/30">
-                    <IdCard className="h-3 w-3 mr-1" />
+                  <Badge variant="secondary" className="text-xs font-mono">
+                    <IdCard className="h-3 w-3 mr-1 text-action-primary" />
                     {teacher.teacher_id || 'ID'}
                   </Badge>
                 </div>
@@ -166,36 +166,34 @@ const TeacherProfilePage: React.FC = () => {
           </CardContent>
         </Card>
 
-
-
         {/* Profile Information Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {profileInfo.map((info, index) => (
-            <Card key={index} className="bg-slate-900/70 border-slate-700/80 backdrop-blur-sm hover:border-slate-600/80 transition-all">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-slate-400 flex items-center gap-2">
-                  <info.icon className={`h-4 w-4 ${info.color}`} />
+            <Card key={index} className="bg-surface-default border-border-subtle shadow-card hover:border-border-default transition-colors">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xs font-medium text-text-muted uppercase tracking-wider flex items-center gap-2">
+                  <info.icon className="h-3.5 w-3.5 text-action-primary" />
                   {info.label}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-lg font-semibold text-white break-words">{info.value}</p>
+                <p className="text-base font-semibold text-text-primary break-words">{info.value}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
         {/* Additional Info Note */}
-        <Card className="mt-8 bg-blue-500/10 border-blue-400/30 backdrop-blur-sm">
-          <CardContent className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="h-10 w-10 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                <Settings className="h-5 w-5 text-blue-400" />
+        <Card className="bg-surface-canvas border-border-subtle shadow-xs">
+          <CardContent className="p-4 sm:p-5">
+            <div className="flex items-start gap-3.5">
+              <div className="h-9 w-9 rounded-lg bg-action-primary-subtle flex items-center justify-center shrink-0">
+                <Settings className="h-4 w-4 text-action-primary" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-white mb-2">Need to update your information?</h3>
-                <p className="text-slate-400">
-                  To update your profile information, please contact the system administrator or your faculty office.
+                <h3 className="text-sm font-semibold text-text-primary mb-0.5">Need to update your profile?</h3>
+                <p className="text-xs text-text-muted leading-relaxed">
+                  To update your official details or course allocations, please contact the institutional administration or your department dean.
                 </p>
               </div>
             </div>

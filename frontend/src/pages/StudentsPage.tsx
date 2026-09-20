@@ -3,7 +3,7 @@ import StudentFormEnhanced, { StudentFormData } from '@/components/StudentFormEn
 import StudentList from '@/components/StudentList';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, X, GraduationCap, Users, User, SlidersHorizontal } from 'lucide-react';
+import { Search, Close, Education, UserMultiple, Add, Filter } from '@carbon/icons-react';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 import { StudentCreateData } from '@/integrations/api/types';
@@ -148,7 +148,7 @@ const StudentsPage = () => {
     }
 
     // Sorting
-    const compare = (a: any, b: any) => {
+    const compare = (a: StudentFormData, b: StudentFormData) => {
       let res = 0;
       if (sortBy === 'name') {
         res = (a.full_name || '').localeCompare(b.full_name || '');
@@ -432,15 +432,14 @@ const StudentsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 md:p-6 lg:p-8">
-      <div className="max-w-[1800px] mx-auto space-y-6">
-      {/* Modern Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-        <div className="space-y-1">
-          <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-800 to-slate-900 dark:from-slate-50 dark:via-blue-200 dark:to-slate-50 bg-clip-text text-transparent">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="space-y-0.5">
+          <h1 className="text-page-title font-semibold text-text-primary">
             Student Management
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
+          <p className="text-xs text-text-muted">
             {activeTab === 'list' 
               ? `Manage and monitor ${students.length} registered students`
               : selectedStudent ? 'Update student information' : 'Register a new student'}
@@ -449,24 +448,26 @@ const StudentsPage = () => {
         {activeTab === 'list' ? (
           <Button 
             onClick={handleAddNewClick} 
-            className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 px-6 h-11"
+            size="default"
+            className="gap-2"
           >
-            <User className="h-4 w-4 mr-2" />
+            <Add size={16} aria-hidden="true" />
             Add New Student
           </Button>
         ) : (
           <Button 
             variant="outline" 
+            size="default"
             onClick={() => { setActiveTab('list'); }}
-            className="border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-300 px-6 h-11"
+            className="gap-2"
           >
-            <X className="h-4 w-4 mr-2" />
+            <Close size={16} aria-hidden="true" />
             Back to List
           </Button>
         )}
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="hidden">
           <TabsTrigger value="list">Students List</TabsTrigger>
           <TabsTrigger value="form">
@@ -474,249 +475,233 @@ const StudentsPage = () => {
           </TabsTrigger>
         </TabsList>
         
-        <TabsContent value="list" className="space-y-6">
-          {/* Enhanced Search and Filter Section */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 p-6 space-y-5">
-            {/* Enhanced Search Bar */}
-            <div className="relative group">
-              <div className="absolute left-4 top-1/2 transform -translate-y-1/2 transition-colors duration-200">
-                <Search className={`h-5 w-5 ${searchStudentId ? 'text-blue-500' : 'text-slate-400'} transition-colors duration-200`} />
+        <TabsContent value="list" className="space-y-4">
+          {/* Search and Filter Section */}
+          <div className="rounded-lg border border-border bg-surface-default p-4 space-y-4">
+            {/* Search Bar */}
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
+                <Search size={16} aria-hidden="true" />
               </div>
               <input
                 type="text"
                 placeholder="Search by name, student ID, email, phone, faculty, or batch..."
-                className="w-full border-2 rounded-lg px-12 py-3.5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 text-base font-medium"
+                className="w-full rounded-md border border-border bg-surface-default pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary transition-colors"
                 value={searchStudentId}
                 onChange={e => { setSearchStudentId(e.target.value); }}
               />
               {searchStudentId && (
                 <button
+                  type="button"
                   onClick={() => { setSearchStudentId(''); }}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full p-2 transition-all duration-200 hover:scale-110"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-1 rounded"
+                  aria-label="Clear search"
                 >
-                  <X className="h-4 w-4" />
+                  <Close size={14} aria-hidden="true" />
                 </button>
               )}
             </div>
 
             {searchStudentId && (
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 px-1 animate-in fade-in slide-in-from-top-2 duration-300">
-                <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse"></div>
+              <div className="flex items-center gap-2 text-xs text-text-muted px-1">
                 <span className="font-medium">Searching across: Name • Student ID • Email • Phone • Faculty • Batch</span>
               </div>
             )}
 
-            {/* Advanced Filters - Redesigned */}
-            <Accordion type="single" collapsible className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-md rounded-xl border border-slate-700/50 shadow-xl overflow-hidden">
+            {/* Advanced Filters */}
+            <Accordion type="single" collapsible className="rounded-lg border border-border bg-surface-subtle/40 overflow-hidden">
               <AccordionItem value="advanced" className="border-none">
-                  <AccordionTrigger className="px-6 py-4 hover:no-underline group/trigger">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 group-hover/trigger:border-blue-400/50 transition-all duration-300 group-hover/trigger:scale-110">
-                        <SlidersHorizontal className="h-4 w-4 text-blue-400 group-hover/trigger:rotate-180 transition-transform duration-500" />
-                      </div>
-                      <div>
-                        <span className="text-lg font-semibold text-slate-100 group-hover/trigger:text-white transition-colors duration-200">Advanced Filters</span>
-                        <p className="text-xs text-slate-400 mt-0.5">Refine your student search</p>
-                      </div>
+                <AccordionTrigger className="px-4 py-2.5 hover:no-underline text-xs font-medium text-text-secondary uppercase tracking-wider">
+                  <div className="flex items-center gap-2">
+                    <Filter size={14} className="text-action-primary" aria-hidden="true" />
+                    <span>Advanced Filters</span>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="px-4 pb-4">
+                  <div className="space-y-4 pt-1">
+                    {/* Faculty Filter */}
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
+                        <Education size={14} aria-hidden="true" />
+                        Faculty
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border bg-surface-default px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
+                        value={selectedFaculty}
+                        onChange={e => { setSelectedFaculty(e.target.value); }}
+                      >
+                        <option value="">All Faculties</option>
+                        {faculties.map(faculty => (
+                          <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
+                        ))}
+                      </select>
                     </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-6 pb-6">
-                    <div className="space-y-6">
-                      {/* Faculty Filter */}
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 hover:border-slate-600/70 transition-all duration-300">
-                        <label className="flex items-center gap-2 text-sm font-semibold text-slate-200 mb-3">
-                          <GraduationCap className="h-4 w-4 text-green-400" />
-                          Faculty
+
+                    {/* Academic Filters Grid */}
+                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                      {/* Semesters */}
+                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
+                        <p className="text-xs font-semibold text-text-secondary">
+                          Semester
+                        </p>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {Array.from({ length: 8 }, (_, i) => i + 1).map(num => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => {
+                                setSelectedSemesters(prev => 
+                                  prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+                                );
+                              }}
+                              className={`py-1 rounded text-xs font-medium border transition-colors ${
+                                selectedSemesters.includes(num)
+                                  ? 'bg-action-primary text-white border-action-primary'
+                                  : 'border-border text-text-secondary hover:bg-surface-subtle'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Years */}
+                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
+                        <p className="text-xs font-semibold text-text-secondary">
+                          Year
+                        </p>
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {Array.from({ length: 4 }, (_, i) => i + 1).map(num => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => {
+                                setSelectedYears(prev => 
+                                  prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+                                );
+                              }}
+                              className={`py-1 rounded text-xs font-medium border transition-colors ${
+                                selectedYears.includes(num)
+                                  ? 'bg-action-primary text-white border-action-primary'
+                                  : 'border-border text-text-secondary hover:bg-surface-subtle'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Batch */}
+                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
+                        <label className="text-xs font-semibold text-text-secondary block">
+                          Batch
                         </label>
                         <select
-                          className="w-full border rounded-lg px-4 py-2.5 bg-slate-900/80 text-white border-slate-600/50 focus:border-green-500/70 focus:ring-2 focus:ring-green-500/20 hover:border-slate-500/70 transition-all duration-200 cursor-pointer shadow-sm"
-                          value={selectedFaculty}
-                          onChange={e => { setSelectedFaculty(e.target.value); }}
+                          className="w-full rounded border border-border bg-surface-default px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
+                          value={selectedBatch}
+                          onChange={(e) => setSelectedBatch(e.target.value)}
                         >
-                          <option value="">All Faculties</option>
-                          {faculties.map(faculty => (
-                            <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
+                          <option value="">All Batches</option>
+                          {batchOptions.map(b => (
+                            <option key={b} value={b}>{b}</option>
                           ))}
                         </select>
                       </div>
 
-                      {/* Academic Filters Grid */}
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                        {/* Semesters */}
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 hover:border-purple-500/30 transition-all duration-300 group/semester">
-                          <p className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-purple-400 group-hover/semester:animate-pulse"></span>
-                            Semester
-                          </p>
-                          <div className="grid grid-cols-4 gap-2">
-                            {Array.from({ length: 8 }, (_, i) => i + 1).map(num => (
-                              <button
-                                key={num}
-                                onClick={() => {
-                                  setSelectedSemesters(prev => 
-                                    prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
-                                  );
-                                }}
-                                className={`p-2 rounded-md border transition-all duration-200 cursor-pointer text-xs font-medium ${
-                                  selectedSemesters.includes(num)
-                                    ? 'bg-purple-500/20 border-purple-400/50 text-purple-200'
-                                    : 'border-slate-600/40 text-slate-300 hover:border-purple-400/50 hover:bg-purple-500/10 hover:text-white'
-                                }`}
-                              >
-                                {num}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Years */}
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 hover:border-amber-500/30 transition-all duration-300 group/year">
-                          <p className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 group-hover/year:animate-pulse"></span>
-                            Year
-                          </p>
-                          <div className="grid grid-cols-4 gap-2">
-                            {Array.from({ length: 4 }, (_, i) => i + 1).map(num => (
-                              <button
-                                key={num}
-                                onClick={() => {
-                                  setSelectedYears(prev => 
-                                    prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
-                                  );
-                                }}
-                                className={`p-2 rounded-md border transition-all duration-200 cursor-pointer text-xs font-medium ${
-                                  selectedYears.includes(num)
-                                    ? 'bg-amber-500/20 border-amber-400/50 text-amber-200'
-                                    : 'border-slate-600/40 text-slate-300 hover:border-amber-400/50 hover:bg-amber-500/10 hover:text-white'
-                                }`}
-                              >
-                                {num}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Batch */}
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 hover:border-sky-500/30 transition-all duration-300 group/batch">
-                          <label className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-sky-400 group-hover/batch:animate-pulse"></span>
-                            Batch
-                          </label>
-                          <select
-                            className="w-full border rounded-lg px-3 py-2 bg-slate-900/80 text-white border-slate-600/50 focus:border-sky-500/70 focus:ring-2 focus:ring-sky-500/20 hover:border-slate-500/70 transition-all duration-200 cursor-pointer text-sm"
-                            value={selectedBatch}
-                            onChange={(e) => setSelectedBatch(e.target.value)}
-                          >
-                            <option value="">All Batches</option>
-                            {batchOptions.map(b => (
-                              <option key={b} value={b}>{b}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Email presence */}
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-slate-800/60 to-slate-900/60 border border-slate-700/50 hover:border-pink-500/30 transition-all duration-300 group/email">
-                          <label className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-pink-400 group-hover/email:animate-pulse"></span>
-                            Email Status
-                          </label>
-                          <select
-                            className="w-full border rounded-lg px-3 py-2 bg-slate-900/80 text-white border-slate-600/50 focus:border-pink-500/70 focus:ring-2 focus:ring-pink-500/20 hover:border-slate-500/70 transition-all duration-200 cursor-pointer text-sm"
-                            value={hasEmail}
-                            onChange={(e) => setHasEmail(e.target.value as any)}
-                          >
-                            <option value="any">Any</option>
-                            <option value="yes">Has Email</option>
-                            <option value="no">Missing Email</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Clear filters action */}
-                      <div className="flex justify-end pt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedFaculty('');
-                            setSelectedSemesters([]);
-                            setSelectedYears([]);
-                            setSelectedBatch('');
-                            setHasEmail('any');
-                          }}
-                          className="border-slate-600/50 hover:border-red-500/50 hover:bg-red-500/10 hover:text-red-300 transition-all duration-300 group/clear"
+                      {/* Email presence */}
+                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
+                        <label className="text-xs font-semibold text-text-secondary block">
+                          Email Status
+                        </label>
+                        <select
+                          className="w-full rounded border border-border bg-surface-default px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
+                          value={hasEmail}
+                          onChange={(e) => setHasEmail(e.target.value as 'any' | 'yes' | 'no')}
                         >
-                          <X className="h-4 w-4 mr-2 group-hover/clear:rotate-90 transition-transform duration-300" />
-                          Clear All Filters
-                        </Button>
+                          <option value="any">Any</option>
+                          <option value="yes">Has Email</option>
+                          <option value="no">Missing Email</option>
+                        </select>
                       </div>
                     </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+
+                    {/* Clear filters action */}
+                    <div className="flex justify-end pt-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedFaculty('');
+                          setSelectedSemesters([]);
+                          setSelectedYears([]);
+                          setSelectedBatch('');
+                          setHasEmail('any');
+                        }}
+                        className="text-xs text-text-muted hover:text-status-error gap-1.5"
+                      >
+                        <Close size={14} aria-hidden="true" />
+                        Clear All Filters
+                      </Button>
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
 
             {/* Active Filters Display */}
             {(selectedFaculty || searchStudentId.trim() || selectedSemesters.length || selectedYears.length || selectedBatch || hasEmail !== 'any') && (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-300 pt-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Active Filters</span>
-                  <div className="h-px flex-1 bg-gradient-to-r from-slate-300 dark:from-slate-700 to-transparent"></div>
-                </div>
-                <div className="flex flex-wrap gap-2 items-center">
+              <div className="pt-2">
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mr-1">Active Filters:</span>
                   {searchStudentId.trim() && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-2 border-blue-200 dark:border-blue-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 group">
-                      <Search className="h-3.5 w-3.5" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
                       <span>"{searchStudentId}"</span>
-                      <button
-                        onClick={() => { setSearchStudentId(''); }}
-                        className="hover:text-blue-900 dark:hover:text-blue-100 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-full p-1 transition-all duration-200"
-                      >
-                        <X className="h-3 w-3" />
+                      <button onClick={() => setSearchStudentId('')} className="hover:text-status-error ml-0.5" aria-label="Remove search filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   {selectedFaculty && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-2 border-emerald-200 dark:border-emerald-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105 group">
-                      <GraduationCap className="h-3.5 w-3.5" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
                       <span>{faculties.find(f => f.id === Number(selectedFaculty))?.name}</span>
-                      <button
-                        onClick={() => { setSelectedFaculty(''); }}
-                        className="hover:text-emerald-900 dark:hover:text-emerald-100 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 rounded-full p-1 transition-all duration-200"
-                      >
-                        <X className="h-3 w-3" />
+                      <button onClick={() => setSelectedFaculty('')} className="hover:text-status-error ml-0.5" aria-label="Remove faculty filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   {selectedSemesters.length > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border-2 border-purple-200 dark:border-purple-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
                       <span>Sem: {selectedSemesters.sort((a,b)=>a-b).join(', ')}</span>
-                      <button onClick={() => setSelectedSemesters([])} className="hover:text-purple-900 dark:hover:text-purple-100 hover:bg-purple-100 dark:hover:bg-purple-500/20 rounded-full p-1 transition-all duration-200">
-                        <X className="h-3 w-3" />
+                      <button onClick={() => setSelectedSemesters([])} className="hover:text-status-error ml-0.5" aria-label="Remove semester filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   {selectedYears.length > 0 && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-2 border-amber-200 dark:border-amber-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
                       <span>Year: {selectedYears.sort((a,b)=>a-b).join(', ')}</span>
-                      <button onClick={() => setSelectedYears([])} className="hover:text-amber-900 dark:hover:text-amber-100 hover:bg-amber-100 dark:hover:bg-amber-500/20 rounded-full p-1 transition-all duration-200">
-                        <X className="h-3 w-3" />
+                      <button onClick={() => setSelectedYears([])} className="hover:text-status-error ml-0.5" aria-label="Remove year filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   {selectedBatch && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 border-2 border-sky-200 dark:border-sky-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
                       <span>Batch: {selectedBatch}</span>
-                      <button onClick={() => setSelectedBatch('')} className="hover:text-sky-900 dark:hover:text-sky-100 hover:bg-sky-100 dark:hover:bg-sky-500/20 rounded-full p-1 transition-all duration-200">
-                        <X className="h-3 w-3" />
+                      <button onClick={() => setSelectedBatch('')} className="hover:text-status-error ml-0.5" aria-label="Remove batch filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   {hasEmail !== 'any' && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-pink-50 dark:bg-pink-500/10 text-pink-700 dark:text-pink-300 border-2 border-pink-200 dark:border-pink-500/30 rounded-lg text-sm font-medium shadow-sm hover:shadow-md transition-all duration-200 hover:scale-105">
-                      <span>{hasEmail === 'yes' ? '✓ Has Email' : '✗ Missing Email'}</span>
-                      <button onClick={() => setHasEmail('any')} className="hover:text-pink-900 dark:hover:text-pink-100 hover:bg-pink-100 dark:hover:bg-pink-500/20 rounded-full p-1 transition-all duration-200">
-                        <X className="h-3 w-3" />
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
+                      <span>{hasEmail === 'yes' ? 'Has Email' : 'Missing Email'}</span>
+                      <button onClick={() => setHasEmail('any')} className="hover:text-status-error ml-0.5" aria-label="Remove email filter">
+                        <Close size={12} aria-hidden="true" />
                       </button>
-                    </div>
+                    </span>
                   )}
                   <Button
                     variant="ghost"
@@ -729,85 +714,37 @@ const StudentsPage = () => {
                       setSelectedBatch('');
                       setHasEmail('any');
                     }}
-                    className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200 ml-2 font-medium"
+                    className="h-6 px-2 text-xs text-text-muted hover:text-text-primary"
                   >
-                    <X className="h-3.5 w-3.5 mr-1.5" />
-                    Clear All
+                    Reset All
                   </Button>
                 </div>
               </div>
             )}
           </div>
+
           {/* Results Section */}
-          {selectedFaculty || searchStudentId.trim() ? (
-            filteredStudents.length > 0 ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-                      <Users className="h-4 w-4 text-blue-500" />
-                      <span>Showing <span className="font-bold text-blue-600 dark:text-blue-400">{filteredStudents.length}</span> student{filteredStudents.length !== 1 ? 's' : ''}</span>
-                    </div>
-                    {(selectedFaculty || searchStudentId.trim()) && (
-                      <div className="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
-                    )}
-                    {selectedFaculty && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        from <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{faculties.find(f => f.id === Number(selectedFaculty))?.name}</span>
-                      </span>
-                    )}
-                    {searchStudentId.trim() && (
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        matching <span className="text-blue-600 dark:text-blue-400 font-semibold">"{searchStudentId}"</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <StudentList 
-                  students={filteredStudents} 
-                  onEdit={handleEditStudent}
-                  onDelete={handleDeleteStudent}
-                  isLoading={isLoading}
-                  sortBy={sortBy}
-                  sortDir={sortDir}
-                  onSortChange={handleSort}
-                />
-              </div>
-            ) : (
-              <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 p-12 text-center">
-                <div className="max-w-md mx-auto space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
-                    <Search className="h-8 w-8 text-slate-400 dark:text-slate-600" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">No students found</h3>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                      {selectedFaculty && `No students found for the selected faculty`}
-                      {searchStudentId.trim() && ` matching "${searchStudentId}"`}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-500 pt-2">Try adjusting your search criteria or filters.</p>
-                  </div>
-                </div>
-              </div>
-            )
-          ) : (
-            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 p-12 text-center">
-              <div className="max-w-md mx-auto space-y-4">
-                <div className="w-16 h-16 mx-auto bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center border-2 border-slate-200 dark:border-slate-700">
-                  <Users className="h-8 w-8 text-slate-600 dark:text-slate-400" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Ready to search</h3>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    Use the search bar above to find students by name, ID, email, or select a faculty to filter results.
-                  </p>
-                </div>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <UserMultiple size={16} className="text-action-primary" aria-hidden="true" />
+                <span>Showing <strong className="text-text-primary tabular-nums">{filteredStudents.length}</strong> of <strong className="text-text-primary tabular-nums">{students.length}</strong> students</span>
               </div>
             </div>
-          )}
+
+            <StudentList 
+              students={filteredStudents} 
+              onEdit={handleEditStudent}
+              onDelete={handleDeleteStudent}
+              isLoading={isLoading}
+              sortBy={sortBy}
+              sortDir={sortDir}
+              onSortChange={handleSort}
+            />
+          </div>
         </TabsContent>
         
-        <TabsContent value="form" className="mt-6">
+        <TabsContent value="form" className="mt-4">
           <StudentFormEnhanced 
             onSubmit={onSubmit}
             initialData={selectedStudent}
@@ -815,7 +752,6 @@ const StudentsPage = () => {
           />
         </TabsContent>
       </Tabs>
-      </div>
     </div>
   );
 };

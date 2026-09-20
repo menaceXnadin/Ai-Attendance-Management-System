@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Lock, CheckCircle, AlertCircle, Shield, Check, X } from 'lucide-react';
+import { Locked, CheckmarkFilled, WarningFilled, Security, Checkmark, Close, Renew } from '@carbon/icons-react';
 import { apiClient } from '@/integrations/api/client';
 
 interface ResetPasswordFormData {
@@ -30,7 +30,7 @@ const ResetPasswordPage: React.FC = () => {
 
   // Password strength validation
   const passwordChecks = {
-    length: newPassword?.length >= 8,
+    length: (newPassword?.length || 0) >= 8,
     uppercase: /[A-Z]/.test(newPassword || ''),
     lowercase: /[a-z]/.test(newPassword || ''),
     number: /\d/.test(newPassword || ''),
@@ -99,68 +99,49 @@ const ResetPasswordPage: React.FC = () => {
   // Show error if token is invalid
   if (tokenValid === false) {
     return (
-      <div className="min-h-screen flex flex-col bg-gradient-to-b from-slate-950 to-blue-950 relative overflow-hidden">
-        {/* Background decorative elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-red-500 rounded-full opacity-10 blur-3xl animate-pulse"></div>
-          <div className="absolute top-60 -left-20 w-60 h-60 bg-orange-400 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        </div>
-        
+      <div className="min-h-screen flex flex-col bg-surface-canvas text-text-primary">
         <Navbar />
         
-        <main className="flex-grow flex items-center justify-center px-4 py-12 relative z-10">
+        <main className="flex-grow flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-md">
-            <Card className="bg-slate-900/80 border border-slate-700/50 shadow-2xl backdrop-blur-md">
-              <CardHeader className="space-y-6 pb-8">
-                <div className="flex items-center justify-center">
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-red-500 rounded-2xl blur-xl opacity-30 animate-pulse"></div>
-                    <div className="relative p-4 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl shadow-lg">
-                      <AlertCircle className="h-10 w-10 text-white" strokeWidth={2.5} />
-                    </div>
+            <Card className="border border-border-subtle bg-surface-default shadow-card rounded-lg">
+              <CardHeader className="border-b border-border-subtle pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-status-error/10 border border-status-error/30 text-status-error">
+                    <WarningFilled className="w-6 h-6" />
                   </div>
-                </div>
-                
-                <div className="space-y-2 text-center">
-                  <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-                    Invalid Reset Link
-                  </CardTitle>
-                  <CardDescription className="text-base text-blue-300">
-                    This password reset link is invalid or has expired
-                  </CardDescription>
+                  <div>
+                    <CardTitle className="text-base font-semibold text-text-primary">
+                      Invalid or Expired Link
+                    </CardTitle>
+                    <CardDescription className="text-xs text-text-muted">
+                      This password reset authorization is no longer valid
+                    </CardDescription>
+                  </div>
                 </div>
               </CardHeader>
               
-              <CardContent className="space-y-6 pb-8">
-                <div className="bg-red-950/30 border border-red-700/30 rounded-xl p-6 space-y-3">
-                  <h3 className="font-semibold text-blue-200">What went wrong?</h3>
-                  <ul className="space-y-2 text-sm text-blue-300/90">
-                    <li className="flex items-start gap-2">
-                      <span className="text-red-400 mt-0.5">•</span>
-                      <span>The link may have been already used</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-red-400 mt-0.5">•</span>
-                      <span>Reset links expire after 1 hour for security</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-red-400 mt-0.5">•</span>
-                      <span>The link may have been copied incorrectly</span>
-                    </li>
+              <CardContent className="pt-6 space-y-4">
+                <div className="p-4 rounded-lg bg-surface-canvas border border-border-subtle space-y-2 text-xs">
+                  <h3 className="font-semibold text-text-primary">Possible Reasons:</h3>
+                  <ul className="space-y-1.5 text-text-secondary list-disc pl-4">
+                    <li>The reset token has already been consumed.</li>
+                    <li>The link expired (valid for 60 minutes after issuance).</li>
+                    <li>The link URL was modified or copied incompletely.</li>
                   </ul>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2 pt-2">
                   <Button 
                     onClick={() => navigate('/forgot-password')} 
-                    className="w-full h-11 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 shadow-lg shadow-red-500/30 transition-all duration-200 text-white font-medium"
+                    className="w-full"
                   >
                     Request New Reset Link
                   </Button>
                   <Button 
                     onClick={() => navigate('/login')} 
                     variant="outline" 
-                    className="w-full h-11 text-blue-300 border-slate-600 hover:bg-slate-800/50 hover:text-teal-300"
+                    className="w-full"
                   >
                     Back to Login
                   </Button>
@@ -176,83 +157,67 @@ const ResetPasswordPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-slate-950 to-blue-950 relative overflow-hidden">
-      {/* Background decorative elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full opacity-10 blur-3xl animate-pulse"></div>
-        <div className="absolute top-60 -left-20 w-60 h-60 bg-teal-400 rounded-full opacity-10 blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-      </div>
-      
+    <div className="min-h-screen flex flex-col bg-surface-canvas text-text-primary">
       <Navbar />
       
-      <main className="flex-grow flex items-center justify-center px-4 py-12 relative z-10">
+      <main className="flex-grow flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">
-          <Card className="bg-slate-900/80 border border-slate-700/50 shadow-2xl backdrop-blur-md">
-            <CardHeader className="space-y-6 pb-8">
-              <div className="flex items-center justify-center">
-                <div className="relative">
-                  <div className={`absolute inset-0 rounded-2xl blur-xl opacity-30 animate-pulse ${
-                    resetSuccess ? 'bg-teal-400' : 'bg-teal-400'
-                  }`}></div>
-                  <div className={`relative p-4 rounded-2xl shadow-lg ${
-                    resetSuccess 
-                      ? 'bg-gradient-to-br from-blue-500 to-teal-400' 
-                      : 'bg-gradient-to-br from-blue-500 to-teal-400'
-                  }`}>
-                    {resetSuccess ? (
-                      <CheckCircle className="h-10 w-10 text-white" strokeWidth={2.5} />
-                    ) : (
-                      <Lock className="h-10 w-10 text-white" strokeWidth={2.5} />
-                    )}
-                  </div>
+          {/* Header */}
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-text-primary tracking-tight">AttendAI Security</h1>
+            <p className="text-sm text-text-secondary mt-1">
+              Create and confirm your updated institutional password
+            </p>
+          </div>
+
+          <Card className="border border-border-subtle bg-surface-default shadow-card rounded-lg">
+            <CardHeader className="border-b border-border-subtle pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-lg bg-surface-canvas border border-border-subtle text-action-primary">
+                  {resetSuccess ? (
+                    <CheckmarkFilled className="w-6 h-6 text-status-success" />
+                  ) : (
+                    <Locked className="w-6 h-6 text-action-primary" />
+                  )}
                 </div>
-              </div>
-              
-              <div className="space-y-2 text-center">
-                <CardTitle className="text-2xl font-bold bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-                  {resetSuccess ? 'Password Changed!' : 'Create New Password'}
-                </CardTitle>
-                <CardDescription className="text-base text-blue-300">
-                  {resetSuccess 
-                    ? "Your password has been successfully updated"
-                    : "Choose a strong password to secure your account"
-                  }
-                </CardDescription>
+                <div>
+                  <CardTitle className="text-base font-semibold text-text-primary">
+                    {resetSuccess ? 'Password Updated' : 'Create New Password'}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-text-muted">
+                    {resetSuccess 
+                      ? 'Your security credentials have been updated'
+                      : 'Choose a strong password meeting security standards'
+                    }
+                  </CardDescription>
+                </div>
               </div>
             </CardHeader>
 
             {resetSuccess ? (
-              <CardContent className="space-y-6 pb-8">
-                <div className="bg-blue-950/50 border border-teal-700/30 rounded-xl p-6 space-y-4">
-                  <div className="flex items-center justify-center">
-                    <div className="p-3 bg-teal-950/50 rounded-full border border-teal-700/50">
-                      <Check className="h-8 w-8 text-teal-400" />
-                    </div>
+              <CardContent className="pt-6 space-y-5">
+                <div className="p-4 rounded-lg bg-status-success/5 border border-status-success/30 text-center space-y-2">
+                  <div className="inline-flex p-2 bg-status-success/10 rounded-full text-status-success mb-1">
+                    <Checkmark className="w-6 h-6" />
                   </div>
-                  <div className="text-center space-y-2">
-                    <h3 className="font-semibold text-blue-200">All set!</h3>
-                    <p className="text-sm text-blue-300">
-                      You can now sign in with your new password
-                    </p>
-                    <div className="flex items-center justify-center gap-1 text-sm text-blue-300/80 pt-2">
-                      <span className="inline-block h-1.5 w-1.5 bg-teal-400 rounded-full animate-pulse"></span>
-                      <span>Redirecting to login...</span>
-                    </div>
-                  </div>
+                  <h3 className="font-semibold text-sm text-text-primary">Password Reset Complete</h3>
+                  <p className="text-xs text-text-secondary">
+                    You can now sign in using your new credentials. Redirecting to login shortly...
+                  </p>
                 </div>
                 
                 <Button 
                   onClick={() => navigate('/login')} 
-                  className="w-full h-11 bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 shadow-lg shadow-teal-500/30 transition-all duration-200 text-white font-medium"
+                  className="w-full"
                 >
                   Continue to Login
                 </Button>
               </CardContent>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)}>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="newPassword" className="text-sm font-medium text-blue-300">
+                <CardContent className="pt-6 space-y-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newPassword" className="text-xs font-medium text-text-secondary">
                       New Password
                     </Label>
                     <PasswordInput
@@ -269,88 +234,51 @@ const ResetPasswordPage: React.FC = () => {
                           message: 'Password must contain uppercase, lowercase, and number',
                         },
                       })}
-                      className={`h-11 bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-400 transition-all duration-200 ${
-                        errors.newPassword 
-                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500' 
-                          : 'focus:border-teal-400 focus:ring-teal-400'
-                      }`}
                     />
                     {errors.newPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1 animate-in slide-in-from-left-1">
-                        <X className="h-4 w-4" /> {errors.newPassword.message}
+                      <p className="text-xs text-status-error flex items-center gap-1">
+                        <Close className="w-3.5 h-3.5" /> {errors.newPassword.message}
                       </p>
                     )}
                   </div>
 
                   {newPassword && (
-                    <div className="bg-blue-950/50 border border-slate-600 rounded-xl p-4 space-y-3 animate-in slide-in-from-top-2">
-                      <h4 className="text-sm font-semibold text-blue-200 flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-teal-400" />
-                        Password Strength
+                    <div className="p-3 rounded-lg bg-surface-canvas border border-border-subtle space-y-2">
+                      <h4 className="text-xs font-semibold text-text-primary flex items-center gap-1.5">
+                        <Security className="w-3.5 h-3.5 text-action-primary" />
+                        Password Requirements
                       </h4>
-                      <div className="space-y-2">
-                        <div className={`flex items-center gap-2 text-sm transition-colors ${
-                          passwordChecks.length ? 'text-teal-400' : 'text-slate-400'
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className={`flex items-center gap-1.5 ${
+                          passwordChecks.length ? 'text-status-success' : 'text-text-muted'
                         }`}>
-                          <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${
-                            passwordChecks.length ? 'bg-teal-950/50 border border-teal-700/50' : 'bg-slate-800/50 border border-slate-700'
-                          }`}>
-                            {passwordChecks.length ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              <span className="h-2 w-2 bg-slate-500 rounded-full"></span>
-                            )}
-                          </div>
-                          <span>At least 8 characters</span>
+                          <Checkmark className="w-3.5 h-3.5 flex-shrink-0" />
+                          <span>8+ characters</span>
                         </div>
-                        <div className={`flex items-center gap-2 text-sm transition-colors ${
-                          passwordChecks.uppercase ? 'text-teal-400' : 'text-slate-400'
+                        <div className={`flex items-center gap-1.5 ${
+                          passwordChecks.uppercase ? 'text-status-success' : 'text-text-muted'
                         }`}>
-                          <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${
-                            passwordChecks.uppercase ? 'bg-teal-950/50 border border-teal-700/50' : 'bg-slate-800/50 border border-slate-700'
-                          }`}>
-                            {passwordChecks.uppercase ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              <span className="h-2 w-2 bg-slate-500 rounded-full"></span>
-                            )}
-                          </div>
+                          <Checkmark className="w-3.5 h-3.5 flex-shrink-0" />
                           <span>Uppercase letter</span>
                         </div>
-                        <div className={`flex items-center gap-2 text-sm transition-colors ${
-                          passwordChecks.lowercase ? 'text-teal-400' : 'text-slate-400'
+                        <div className={`flex items-center gap-1.5 ${
+                          passwordChecks.lowercase ? 'text-status-success' : 'text-text-muted'
                         }`}>
-                          <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${
-                            passwordChecks.lowercase ? 'bg-teal-950/50 border border-teal-700/50' : 'bg-slate-800/50 border border-slate-700'
-                          }`}>
-                            {passwordChecks.lowercase ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              <span className="h-2 w-2 bg-slate-500 rounded-full"></span>
-                            )}
-                          </div>
+                          <Checkmark className="w-3.5 h-3.5 flex-shrink-0" />
                           <span>Lowercase letter</span>
                         </div>
-                        <div className={`flex items-center gap-2 text-sm transition-colors ${
-                          passwordChecks.number ? 'text-teal-400' : 'text-slate-400'
+                        <div className={`flex items-center gap-1.5 ${
+                          passwordChecks.number ? 'text-status-success' : 'text-text-muted'
                         }`}>
-                          <div className={`flex-shrink-0 h-5 w-5 rounded-full flex items-center justify-center ${
-                            passwordChecks.number ? 'bg-teal-950/50 border border-teal-700/50' : 'bg-slate-800/50 border border-slate-700'
-                          }`}>
-                            {passwordChecks.number ? (
-                              <Check className="h-3 w-3" />
-                            ) : (
-                              <span className="h-2 w-2 bg-slate-500 rounded-full"></span>
-                            )}
-                          </div>
+                          <Checkmark className="w-3.5 h-3.5 flex-shrink-0" />
                           <span>Number</span>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <Label htmlFor="confirmPassword" className="text-sm font-medium text-blue-300">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="confirmPassword" className="text-xs font-medium text-text-secondary">
                       Confirm Password
                     </Label>
                     <PasswordInput
@@ -360,29 +288,24 @@ const ResetPasswordPage: React.FC = () => {
                         required: 'Please confirm your password',
                         validate: (value) => value === newPassword || 'Passwords do not match',
                       })}
-                      className={`h-11 bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-400 transition-all duration-200 ${
-                        errors.confirmPassword 
-                          ? 'border-red-400 focus:border-red-500 focus:ring-red-500' 
-                          : 'focus:border-teal-400 focus:ring-teal-400'
-                      }`}
                     />
                     {errors.confirmPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1 animate-in slide-in-from-left-1">
-                        <X className="h-4 w-4" /> {errors.confirmPassword.message}
+                      <p className="text-xs text-status-error flex items-center gap-1">
+                        <Close className="w-3.5 h-3.5" /> {errors.confirmPassword.message}
                       </p>
                     )}
                   </div>
                 </CardContent>
 
-                <CardFooter className="flex flex-col space-y-3 pb-8">
+                <CardFooter className="border-t border-border-subtle pt-4 flex flex-col space-y-2">
                   <Button 
                     type="submit" 
-                    className="w-full h-11 bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 shadow-lg shadow-teal-500/30 transition-all duration-200 disabled:opacity-50 text-white font-medium"
+                    className="w-full"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
                       <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                        <Renew className="w-4 h-4 animate-spin" />
                         Updating Password...
                       </span>
                     ) : (
@@ -393,7 +316,7 @@ const ResetPasswordPage: React.FC = () => {
                   <Button 
                     type="button" 
                     variant="ghost" 
-                    className="w-full h-11 text-blue-300 hover:bg-slate-800/50 hover:text-teal-300 transition-colors"
+                    className="w-full text-text-secondary hover:text-text-primary"
                     onClick={() => navigate('/login')}
                   >
                     Cancel
@@ -403,8 +326,8 @@ const ResetPasswordPage: React.FC = () => {
             )}
           </Card>
 
-          <p className="text-center text-sm text-blue-300 mt-6">
-            Remember your password? <Link to="/login" className="text-teal-400 hover:text-teal-300 font-medium transition-colors">Sign in</Link>
+          <p className="text-center text-xs text-text-muted mt-6">
+            Remember your credentials? <Link to="/login" className="text-action-primary hover:underline font-medium">Sign in</Link>
           </p>
         </div>
       </main>

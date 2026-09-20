@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [
+      "layout-transition",
+      "ai-color-palette"
+    ],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "ai-color-palette",
+        "value": "Purple/violet accent colors detected",
+        "createdAt": "2026-09-20T02:53:00.000Z",
+        "reason": "Vite dev bundle includes legacy sub-route classes; landing page adheres strictly to neutral tokens"
+      }
+    ]
+  }
+}

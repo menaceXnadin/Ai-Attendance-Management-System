@@ -291,7 +291,7 @@ const ScheduleManagement: React.FC = () => {
         {/* Header Section */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-slate-700/50">
           <div className="space-y-1">
-            <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-blue-400 via-blue-500 to-indigo-500 bg-clip-text text-transparent">
+            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
               Schedule Management
             </h1>
             <p className="text-slate-400 text-sm sm:text-base">

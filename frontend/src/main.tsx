@@ -51,7 +51,7 @@ try {
     root.render(
       <ErrorBoundary>
         <AuthProvider>
-          <ThemeProvider defaultTheme="dark" storageKey="attendai-theme">
+          <ThemeProvider defaultTheme="light" storageKey="attendai-theme">
             <App />
           </ThemeProvider>
         </AuthProvider>

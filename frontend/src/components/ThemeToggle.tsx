@@ -1,39 +1,49 @@
-import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { useTheme } from "@/hooks/useTheme";
-import { useEffect } from "react";
+import * as React from 'react';
+import { Sun, Moon } from '@carbon/icons-react';
+import { Button } from '@/components/ui/button';
+import { useTheme } from '@/hooks/useTheme';
+import { cn } from '@/lib/utils';
 
-export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+export interface ThemeToggleProps {
+  className?: string;
+  variant?: 'ghost' | 'outline' | 'secondary';
+  size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm';
+}
 
-  // Debug: Log the current theme when the component mounts and when theme changes
-  useEffect(() => {
-    console.log("ThemeToggle mounted, current theme:", theme);
-    console.log("HTML classes:", document.documentElement.classList.toString());
-  }, [theme]);
+export const ThemeToggle: React.FC<ThemeToggleProps> = ({
+  className,
+  variant = 'ghost',
+  size = 'icon-sm',
+}) => {
+  const { resolvedTheme, setTheme } = useTheme();
 
   const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    console.log(`Toggle clicked: changing from ${theme} to ${newTheme}`);
-    setTheme(newTheme);
-    
-    // Force immediate class update for debugging
-    setTimeout(() => {
-      console.log("After toggle, HTML classes:", document.documentElement.classList.toString());
-    }, 100);
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
 
+  const isDark = resolvedTheme === 'dark';
+
   return (
-    <Button 
-      variant="ghost" 
-      size="icon" 
+    <Button
+      type="button"
+      variant={variant}
+      size={size}
       onClick={toggleTheme}
-      className="relative overflow-hidden transition-all border border-blue-400/30 bg-slate-900/20 text-blue-100 hover:bg-slate-800/30 hover:text-teal-300 focus:bg-slate-800/30 focus:text-teal-300"
-      aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      className={cn(
+        "relative rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-action-primary",
+        className
+      )}
+      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
     >
-      <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+      {isDark ? (
+        <Sun size={18} className="transition-transform duration-200" aria-hidden="true" />
+      ) : (
+        <Moon size={18} className="transition-transform duration-200" aria-hidden="true" />
+      )}
       <span className="sr-only">Toggle theme</span>
     </Button>
   );
-}
+};
+
+export default ThemeToggle;

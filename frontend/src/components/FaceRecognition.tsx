@@ -102,9 +102,9 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
 
       // Explicitly initialize the solution before first send
       try {
-        // @ts-expect-error initialize exists on MediaPipe solutions
-        if (typeof (faceDetection as any).initialize === 'function') {
-          await (faceDetection as any).initialize();
+        const maybeInit = faceDetection as unknown as { initialize?: () => Promise<void> };
+        if (typeof maybeInit.initialize === 'function') {
+          await maybeInit.initialize();
         }
       } catch (e) {
         console.warn('FaceDetection.initialize() failed or unavailable, continuing:', e);
@@ -183,7 +183,11 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
         mpCameraRef.current = null;
       }
       if (faceDetectionRef.current) {
-        try { faceDetectionRef.current.close(); } catch {}
+        try { 
+          faceDetectionRef.current.close(); 
+        } catch { 
+          // Ignore close error during teardown
+        }
         faceDetectionRef.current = null;
       }
       setFaceBox(null);
@@ -232,7 +236,7 @@ const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecog
       ctx.stroke();
       ctx.restore();
     }
-  }, [faceBox]);
+  }, [faceBox, boxColor]);
 
   // Real capture: use backend verification
   const captureImage = async () => {

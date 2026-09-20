@@ -5,7 +5,23 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
-import { Loader2, Users, BookOpen, GraduationCap, CheckCircle, XCircle, Clock, Save, UserCheck, UserX, Search, X, User, Hash, Mail, Ban } from 'lucide-react';
+import { 
+  UserMultiple, 
+  Book, 
+  Education, 
+  CheckmarkFilled, 
+  CloseFilled, 
+  Time, 
+  Save, 
+  UserFollow, 
+  UserAdmin, 
+  Search, 
+  Close, 
+  User, 
+  Email, 
+  Stop, 
+  Renew 
+} from '@carbon/icons-react';
 import { api } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -50,6 +66,8 @@ interface AttendanceRecord {
   date: string;
   subjectId?: string | number;
   status: AttendanceStatus;
+  cancellation_reason?: string;
+  notes?: string;
 }
 
 interface StudentSubjectBreakdown {
@@ -104,6 +122,8 @@ const normalizeAttendanceRecord = (record: unknown, fallbackDate: string): Atten
     date,
     subjectId,
     status,
+    cancellation_reason: typeof data.cancellation_reason === 'string' ? data.cancellation_reason : undefined,
+    notes: typeof data.notes === 'string' ? data.notes : undefined,
   };
 };
 
@@ -397,7 +417,7 @@ const EnhancedAttendanceManagement = () => {
         if (record.subjectId !== undefined) {
           acc[String(record.subjectId)] = {
             status: record.status as AttendanceStatus,
-            cancellation_reason: (record as any).cancellation_reason || (record as any).notes
+            cancellation_reason: record.cancellation_reason || record.notes
           };
           // Debug log removed
         }
@@ -520,29 +540,28 @@ const EnhancedAttendanceManagement = () => {
   const getStatusIcon = (status: AttendanceStatus) => {
     switch (status) {
       case 'present':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckmarkFilled size={14} className="text-status-success" />;
       case 'late':
-        return <Clock className="h-4 w-4 text-yellow-500" />;
+        return <Time size={14} className="text-status-warning" />;
       case 'system_inactive':
-        return <Clock className="h-4 w-4 text-purple-500" />;
       case 'no_data':
-        return <Clock className="h-4 w-4 text-slate-400" />;
+        return <Time size={14} className="text-text-muted" />;
       case 'cancelled':
-        return <Ban className="h-4 w-4 text-gray-400" />;
+        return <Stop size={14} className="text-text-muted" />;
       case 'absent':
       default:
-        return <XCircle className="h-4 w-4 text-red-500" />;
+        return <CloseFilled size={14} className="text-status-danger" />;
     }
   };
 
   const getStatusBadge = (status: AttendanceStatus) => {
     const variants: Record<AttendanceStatus, string> = {
-      present: 'bg-green-500/20 text-green-300 border-green-400/30',
-      late: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30',
-      absent: 'bg-red-500/20 text-red-300 border-red-400/30',
-      system_inactive: 'bg-purple-900/30 text-purple-300 border-purple-600/50 border-2 border-dashed',
-      no_data: 'bg-slate-500/20 text-slate-300 border-slate-400/30',
-      cancelled: 'bg-gray-600/30 text-gray-400 border-gray-500/30',
+      present: 'bg-status-success/10 text-status-success border-status-success/30',
+      late: 'bg-status-warning/10 text-status-warning border-status-warning/30',
+      absent: 'bg-status-danger/10 text-status-danger border-status-danger/30',
+      system_inactive: 'bg-surface-subtle text-text-muted border-border-default border-dashed',
+      no_data: 'bg-surface-subtle text-text-muted border-border-default',
+      cancelled: 'bg-surface-subtle text-text-muted border-border-default',
     };
     
     const statusLabel = status === 'system_inactive'
@@ -554,9 +573,9 @@ const EnhancedAttendanceManagement = () => {
           : status;
     
     return (
-      <Badge variant="outline" className={variants[status]}>
+      <Badge variant="outline" className={`text-xs gap-1 py-0.5 ${variants[status]}`}>
         {getStatusIcon(status)}
-        <span className="ml-1 capitalize">{statusLabel}</span>
+        <span className="capitalize">{statusLabel}</span>
       </Badge>
     );
   };
@@ -778,115 +797,104 @@ const EnhancedAttendanceManagement = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-white">Manual Attendance Management</h2>
-          <p className="text-blue-200/80 mt-1">
-            Mark attendance by subject (for entire classes) or by student (for individual records across all subjects)
+          <h2 className="text-2xl font-bold tracking-tight text-text-primary">Attendance Management</h2>
+          <p className="text-sm text-text-muted mt-1">
+            Review and adjust attendance records by subject course roster or by individual student profile
           </p>
         </div>
       </div>
 
-      {/* Quick Search - Prominent at the top */}
-      <Card className="bg-gradient-to-br from-blue-900/40 to-slate-900/60 backdrop-blur-md border-blue-500/30">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Search className="h-5 w-5 text-blue-400" />
+      {/* Quick Search */}
+      <Card className="border border-border-default bg-surface-default shadow-none">
+        <CardHeader className="py-4 border-b border-border-subtle">
+          <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
+            <Search size={16} className="text-action-primary" />
             Quick Student Search
           </CardTitle>
-          <p className="text-slate-300 text-sm">
-            Search students by name, student ID, email, or faculty - works across all faculties and semesters
+          <p className="text-xs text-text-muted">
+            Search students across all faculties and semesters by name, student ID, email, or department
           </p>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 space-y-3">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
             <Input
               type="text"
-              placeholder="Type student name, ID, email, or faculty to search..."
+              placeholder="Search by student name, ID, email, or faculty..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-12 pr-12 h-12 bg-slate-800 border-slate-600 text-white text-lg placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+              className="pl-9 pr-9 h-10 text-sm"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
               >
-                <X className="h-5 w-5" />
+                <Close size={14} />
               </button>
             )}
             {loading.quickSearch && (
-              <div className="absolute right-12 top-1/2 transform -translate-y-1/2">
-                <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <Renew size={14} className="animate-spin text-action-primary" />
               </div>
             )}
           </div>
 
           {/* Search Results */}
           {showQuickSearch && (
-            <div className="mt-4">
+            <div className="mt-3">
               {quickSearchResults.length === 0 && !loading.quickSearch ? (
-                <div className="text-center py-8 text-slate-400">
-                  <Users className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                  <p>No students found matching "{searchQuery}"</p>
-                  <p className="text-sm mt-1">Try different search terms or check spelling</p>
+                <div className="text-center py-6 text-text-muted">
+                  <UserMultiple size={28} className="mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No students found matching "{searchQuery}"</p>
+                  <p className="text-xs text-text-muted mt-0.5">Check spelling or try a different term</p>
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm text-slate-300 mb-2">
+                  <div className="flex items-center justify-between text-xs text-text-muted">
                     <span className="font-medium">
                       Found {quickSearchResults.length} student{quickSearchResults.length !== 1 ? 's' : ''}
                     </span>
                     {quickSearchResults.length === 50 && (
-                      <span className="text-xs text-blue-400">Showing first 50 results</span>
+                      <span className="text-action-primary">Showing top 50 results</span>
                     )}
                   </div>
                   
-                  <div className="max-h-96 overflow-y-auto space-y-2 rounded-lg border border-slate-700">
+                  <div className="max-h-72 overflow-y-auto rounded-md border border-border-default divide-y divide-border-subtle bg-surface-default">
                     {quickSearchResults.map((student) => (
                       <div
                         key={student.id}
                         onClick={() => {
-                          // Auto-fill the filters and switch to student view
                           if (student.faculty_id) {
                             setSelectedFaculty(student.faculty_id.toString());
                             setSelectedSemester(student.semester.toString());
                             setViewMode('student');
-                            // Wait a bit for faculties to load, then select student
                             setTimeout(() => {
                               setSelectedStudent(student.id.toString());
                               setSearchQuery('');
                               setShowQuickSearch(false);
-                            }, 500);
+                            }, 400);
                           }
                         }}
-                        className="p-4 bg-slate-800/50 hover:bg-slate-700/50 cursor-pointer transition-all border-b border-slate-700 last:border-b-0"
+                        className="p-3 hover:bg-surface-subtle cursor-pointer transition-colors"
                       >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3">
-                              <div className="h-10 w-10 rounded-full bg-blue-500/20 flex items-center justify-center">
-                                <User className="h-5 w-5 text-blue-400" />
-                              </div>
-                              <div>
-                                <h4 className="text-white font-medium">{student.name}</h4>
-                                <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
-                                  <span className="flex items-center gap-1">
-                                    <Hash className="h-3 w-3" />
-                                    {student.student_id}
-                                  </span>
-                                  <span className="flex items-center gap-1">
-                                    <Mail className="h-3 w-3" />
-                                    {student.email}
-                                  </span>
-                                </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-surface-subtle flex items-center justify-center text-action-primary">
+                              <User size={16} />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-text-primary">{student.name}</p>
+                              <div className="flex items-center gap-3 text-xs text-text-muted mt-0.5">
+                                <span className="font-mono">{student.student_id}</span>
+                                <span>{student.email}</span>
                               </div>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-1">
-                            <Badge variant="outline" className="bg-blue-500/20 text-blue-300">
-                              Semester {student.semester}
-                            </Badge>
-                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            Semester {student.semester}
+                          </Badge>
                         </div>
                       </div>
                     ))}
@@ -899,70 +907,63 @@ const EnhancedAttendanceManagement = () => {
       </Card>
 
       {/* Selection Controls */}
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <GraduationCap className="h-5 w-5 text-blue-400" />
+      <Card className="border border-border-default bg-surface-default shadow-none">
+        <CardHeader className="py-4 border-b border-border-subtle">
+          <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
+            <Education size={16} className="text-action-primary" />
             Attendance Filters
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 space-y-4">
           {/* View Mode Toggle */}
-          <div className="mb-6">
-            <label className="text-sm font-medium text-slate-300 mb-2 block">View Mode</label>
-            <div className="flex gap-2 items-center">
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2 block">View Mode</label>
+            <div className="flex flex-wrap gap-2 items-center">
               <Button
                 variant={viewMode === 'subject' ? 'default' : 'outline'}
+                size="sm"
                 onClick={() => handleViewModeChange('subject')}
-                className={viewMode === 'subject' 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                  : 'text-slate-300 border-slate-600 hover:bg-slate-800'
-                }
+                className="flex items-center gap-1.5"
               >
-                <BookOpen className="h-4 w-4 mr-2" />
-                By Subject
+                <Book size={14} />
+                <span>By Subject</span>
               </Button>
               <Button
                 variant={viewMode === 'student' ? 'default' : 'outline'}
+                size="sm"
                 onClick={() => handleViewModeChange('student')}
-                className={viewMode === 'student' 
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white' 
-                  : 'text-slate-300 border-slate-600 hover:bg-slate-800'
-                }
+                className="flex items-center gap-1.5"
               >
-                <Users className="h-4 w-4 mr-2" />
-                By Student
+                <UserMultiple size={14} />
+                <span>By Student</span>
               </Button>
               
-              {/* Refresh Button */}
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  console.log('Manual refresh triggered');
                   setRefreshCounter(prev => prev + 1);
                 }}
-                className="text-slate-300 border-slate-600 hover:bg-slate-800 ml-4"
-                title="Refresh dropdowns"
+                className="h-8 text-xs ml-auto flex items-center gap-1"
+                title="Refresh datasets"
               >
-                <Loader2 className="h-4 w-4" />
-                Refresh
+                <Renew size={14} />
+                <span>Refresh</span>
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             {/* Faculty Selection */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Faculty</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-secondary">Faculty</label>
               <Select value={selectedFaculty || undefined} onValueChange={handleFacultyChange}>
-                <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                <SelectTrigger className="h-9 text-xs">
                   <SelectValue placeholder="Select Faculty" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
+                <SelectContent>
                   {loading.faculties ? (
                     <SelectItem value="loading-faculties" disabled>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       Loading faculties...
                     </SelectItem>
                   ) : (
@@ -977,13 +978,13 @@ const EnhancedAttendanceManagement = () => {
             </div>
 
             {/* Semester Selection */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Semester</label>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-secondary">Semester</label>
               <Select value={selectedSemester || undefined} onValueChange={handleSemesterChange} disabled={!selectedFaculty}>
-                <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                <SelectTrigger className="h-9 text-xs disabled:opacity-50">
                   <SelectValue placeholder="Select Semester" />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-600">
+                <SelectContent>
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
                     <SelectItem key={sem} value={sem.toString()}>
                       Semester {sem}
@@ -995,16 +996,15 @@ const EnhancedAttendanceManagement = () => {
 
             {/* Subject Selection - Only show in subject view mode */}
             {viewMode === 'subject' && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Subject</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-text-secondary">Subject</label>
                 <Select value={selectedSubject || undefined} onValueChange={handleSubjectChange} disabled={!selectedSemester}>
-                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                  <SelectTrigger className="h-9 text-xs disabled:opacity-50">
                     <SelectValue placeholder="Select Subject" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-600">
+                  <SelectContent>
                     {loading.subjects ? (
                       <SelectItem value="loading-subjects" disabled>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         Loading subjects...
                       </SelectItem>
                     ) : (
@@ -1021,16 +1021,15 @@ const EnhancedAttendanceManagement = () => {
 
             {/* Student Selection - Only show in student view mode */}
             {viewMode === 'student' && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Student</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-text-secondary">Student</label>
                 <Select value={selectedStudent || undefined} onValueChange={handleStudentChange} disabled={!selectedSemester}>
-                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white">
+                  <SelectTrigger className="h-9 text-xs disabled:opacity-50">
                     <SelectValue placeholder="Select Student" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-600">
+                  <SelectContent>
                     {loading.allStudents ? (
                       <SelectItem value="loading-students" disabled>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         Loading students...
                       </SelectItem>
                     ) : allStudents.length === 0 ? (
@@ -1049,45 +1048,45 @@ const EnhancedAttendanceManagement = () => {
               </div>
             )}
 
-            {/* Date Selection - Show in both modes */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-300">Date</label>
+            {/* Date Selection */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-text-secondary">Attendance Date</label>
               <input
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-white"
+                className="w-full h-9 px-3 text-xs bg-surface-default border border-border-default rounded-md text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
               />
             </div>
           </div>
 
           {/* Selection Summary */}
           {selectedFaculty && selectedSemester && (
-            <div className="mt-4 p-4 bg-slate-800/50 rounded-lg">
-              <div className="flex items-center gap-4 text-sm text-slate-300">
+            <div className="p-3 bg-surface-subtle rounded-md border border-border-subtle">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-secondary">
                 <span>
-                  <strong>Faculty:</strong> {selectedFacultyName}
+                  <strong className="text-text-primary">Faculty:</strong> {selectedFacultyName}
                 </span>
                 <span>
-                  <strong>Semester:</strong> {selectedSemester}
+                  <strong className="text-text-primary">Semester:</strong> {selectedSemester}
                 </span>
                 {viewMode === 'subject' && selectedSubject && (
                   <>
                     <span>
-                      <strong>Subject:</strong> {selectedSubjectName}
+                      <strong className="text-text-primary">Subject:</strong> {selectedSubjectName}
                     </span>
                     <span>
-                      <strong>Date:</strong> {selectedDate}
+                      <strong className="text-text-primary">Date:</strong> {selectedDate}
                     </span>
                   </>
                 )}
                 {viewMode === 'student' && selectedStudent && (
                   <>
                     <span>
-                      <strong>Student:</strong> {allStudents.find(s => s.id.toString() === selectedStudent)?.name || 'Unknown'}
+                      <strong className="text-text-primary">Student:</strong> {allStudents.find(s => s.id.toString() === selectedStudent)?.name || 'Unknown'}
                     </span>
                     <span>
-                      <strong>Date:</strong> {selectedDate}
+                      <strong className="text-text-primary">Date:</strong> {selectedDate}
                     </span>
                   </>
                 )}
@@ -1099,427 +1098,387 @@ const EnhancedAttendanceManagement = () => {
 
       {/* Subject View - Students List */}
       {viewMode === 'subject' && selectedFaculty && selectedSemester && selectedSubject && (
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-white flex items-center gap-2">
-                <Users className="h-5 w-5 text-green-400" />
-                Student Attendance
+        <div className="bg-surface-default border border-border-default rounded-md overflow-hidden">
+          <div className="p-4 border-b border-border-default flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-text-primary">
+                  Student Attendance Roster
+                </h3>
                 {students.length > 0 && (
-                  <Badge variant="outline" className="ml-2 bg-blue-500/20 text-blue-300">
+                  <Badge variant="outline" className="text-xs">
                     {filteredStudents.length} {searchQuery && `of ${students.length}`} students
                   </Badge>
                 )}
-              </CardTitle>
-              
-              {/* Quick Stats & Actions */}
-              <div className="flex items-center gap-4">
-                {students.length > 0 && (
-                  <div className="flex gap-2">
-                    <Badge className="bg-green-500/20 text-green-300">
-                      Present: {attendanceStats.present || 0}
-                    </Badge>
-                    <Badge className="bg-yellow-500/20 text-yellow-300">
-                      Late: {attendanceStats.late || 0}
-                    </Badge>
-                    <Badge className="bg-red-500/20 text-red-300">
-                      Absent: {attendanceStats.absent || 0}
-                    </Badge>
-                  </div>
-                )}
-                
-                {/* Save Button */}
-                {hasUnsavedChanges && (
-                  <Button 
-                    onClick={saveAttendanceChanges}
-                    disabled={loading.saving}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {loading.saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Changes
-                      </>
-                    )}
-                  </Button>
-                )}
               </div>
+              <p className="text-xs text-text-muted mt-0.5">
+                Showing attendance state for {selectedSubjectName} on {selectedDate}
+              </p>
             </div>
             
-            {/* Search Bar for Student List */}
-            {students.length > 0 && (
-              <div className="pt-4 border-t border-slate-700">
-                <div className="relative max-w-md">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    type="text"
-                    placeholder="Search students by name, ID, or email..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-10 bg-slate-800 border-slate-600 text-white placeholder:text-slate-400"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-white"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
+            {/* Stats & Save */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {students.length > 0 && (
+                <div className="flex gap-1.5 text-xs">
+                  <span className="px-2 py-0.5 rounded bg-status-success/10 text-status-success border border-status-success/30 font-medium tabular-nums">
+                    Present: {attendanceStats.present || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-status-warning/10 text-status-warning border border-status-warning/30 font-medium tabular-nums">
+                    Late: {attendanceStats.late || 0}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-status-danger/10 text-status-danger border border-status-danger/30 font-medium tabular-nums">
+                    Absent: {attendanceStats.absent || 0}
+                  </span>
                 </div>
-              </div>
-            )}
-            
-            {/* Bulk Actions */}
-            {filteredStudents.length > 0 && (
-              <div className="flex items-center gap-2 pt-4 border-t border-slate-700">
-                <span className="text-sm text-slate-300 mr-2">Bulk Actions:</span>
-                <Button
-                  variant="outline"
+              )}
+              
+              {hasUnsavedChanges && (
+                <Button 
+                  onClick={saveAttendanceChanges}
+                  disabled={loading.saving}
                   size="sm"
-                  onClick={() => markAllStudents('present')}
-                  className="text-green-400 border-green-400/30 hover:bg-green-500/10"
+                  className="flex items-center gap-1.5"
                 >
-                  <UserCheck className="h-4 w-4 mr-1" />
-                  Mark All Present
+                  <Save size={14} />
+                  <span>{loading.saving ? 'Saving...' : 'Save Changes'}</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => markAllStudents('absent')}
-                  className="text-red-400 border-red-400/30 hover:bg-red-500/10"
-                >
-                  <UserX className="h-4 w-4 mr-1" />
-                  Mark All Absent
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => markAllStudents('late')}
-                  className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10"
-                >
-                  <Clock className="h-4 w-4 mr-1" />
-                  Mark All Late
-                </Button>
+              )}
+            </div>
+          </div>
+          
+          {/* Search Bar & Bulk Actions */}
+          {students.length > 0 && (
+            <div className="p-3 bg-surface-subtle/50 border-b border-border-subtle flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-72">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+                <Input
+                  type="text"
+                  placeholder="Filter student list..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-8 pr-7 h-8 text-xs bg-surface-default"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                  >
+                    <Close size={12} />
+                  </button>
+                )}
               </div>
-            )}
-          </CardHeader>
-          <CardContent>
-            {loading.students ? (
-              <div className="flex justify-center items-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-400 mr-3" />
-                <span className="text-slate-300">Loading students...</span>
-              </div>
-            ) : students.length === 0 ? (
-              <div className="text-center py-12">
-                <Users className="h-16 w-16 mx-auto mb-4 text-slate-500 opacity-50" />
-                <p className="text-slate-400 text-lg">No students found</p>
-                <p className="text-slate-500 text-sm">
-                  Try selecting different faculty, semester, or subject
-                </p>
-              </div>
-            ) : filteredStudents.length === 0 ? (
-              <div className="text-center py-12">
-                <Search className="h-16 w-16 mx-auto mb-4 text-slate-500 opacity-50" />
-                <p className="text-slate-400 text-lg">No students match your search</p>
-                <p className="text-slate-500 text-sm">
-                  Try adjusting your search term: "{searchQuery}"
-                </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSearchQuery('')}
-                  className="mt-4"
-                >
-                  Clear Search
-                </Button>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-700">
-                      <TableHead className="text-slate-300">Student ID</TableHead>
-                      <TableHead className="text-slate-300">Name</TableHead>
-                      <TableHead className="text-slate-300">Email</TableHead>
-                      <TableHead className="text-slate-300">Semester</TableHead>
-                      <TableHead className="text-slate-300">Status</TableHead>
-                      <TableHead className="text-slate-300 text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredStudents.map((student) => (
-                      <TableRow 
-                        key={student.id} 
-                        className={`border-slate-700 hover:bg-slate-800/30 ${
-                          student.hasChanges ? 'bg-blue-500/10 border-blue-500/30' : ''
-                        }`}
-                      >
-                        <TableCell className="text-white font-medium">
+              
+              {filteredStudents.length > 0 && (
+                <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                  <span className="text-xs text-text-muted mr-1">Bulk:</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAllStudents('present')}
+                    className="h-7 text-xs px-2 text-status-success hover:bg-status-success/10 hover:border-status-success"
+                  >
+                    <UserFollow size={12} className="mr-1" />
+                    All Present
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAllStudents('absent')}
+                    className="h-7 text-xs px-2 text-status-danger hover:bg-status-danger/10 hover:border-status-danger"
+                  >
+                    <UserAdmin size={12} className="mr-1" />
+                    All Absent
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => markAllStudents('late')}
+                    className="h-7 text-xs px-2 text-status-warning hover:bg-status-warning/10 hover:border-status-warning"
+                  >
+                    <Time size={12} className="mr-1" />
+                    All Late
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {loading.students ? (
+            <div className="p-8 text-center text-xs text-text-muted">
+              Loading student roster...
+            </div>
+          ) : students.length === 0 ? (
+            <div className="p-8 text-center text-xs text-text-muted">
+              No students enrolled in this course for Semester {selectedSemester}.
+            </div>
+          ) : filteredStudents.length === 0 ? (
+            <div className="p-6 text-center text-xs text-text-muted">
+              No students match "{searchQuery}".
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border-default bg-surface-subtle">
+                    <TableHead className="w-[120px] text-xs font-semibold text-text-muted uppercase">Student ID</TableHead>
+                    <TableHead className="text-xs font-semibold text-text-muted uppercase">Full Name</TableHead>
+                    <TableHead className="text-xs font-semibold text-text-muted uppercase">Email Address</TableHead>
+                    <TableHead className="w-[100px] text-xs font-semibold text-text-muted uppercase">Semester</TableHead>
+                    <TableHead className="w-[130px] text-xs font-semibold text-text-muted uppercase">Status</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold text-text-muted uppercase">Mark</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStudents.map((student) => (
+                    <TableRow 
+                      key={student.id} 
+                      className={`h-11 border-b border-border-subtle hover:bg-surface-subtle/50 ${
+                        student.hasChanges ? 'bg-action-primary/5' : ''
+                      }`}
+                    >
+                      <TableCell className="font-mono text-xs text-text-secondary">
+                        <span className="px-1.5 py-0.5 rounded bg-surface-subtle border border-border-subtle">
                           {student.student_id}
-                        </TableCell>
-                        <TableCell className="text-white">
-                          {student.name}
-                          {student.hasChanges && (
-                            <Badge variant="outline" className="ml-2 text-xs bg-blue-500/20 text-blue-300">
-                              Modified
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-slate-300">
-                          {student.email}
-                        </TableCell>
-                        <TableCell className="text-slate-300">
-                          {student.semester}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(student.status)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markStudentAttendance(student.id, 'present')}
-                              disabled={student.status === 'present'}
-                              className="text-green-400 border-green-400/30 hover:bg-green-500/10 h-8 w-8 p-0"
-                              title="Mark Present"
-                            >
-                              <CheckCircle className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markStudentAttendance(student.id, 'late')}
-                              disabled={student.status === 'late'}
-                              className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10 h-8 w-8 p-0"
-                              title="Mark Late"
-                            >
-                              <Clock className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markStudentAttendance(student.id, 'absent')}
-                              disabled={student.status === 'absent'}
-                              className="text-red-400 border-red-400/30 hover:bg-red-500/10 h-8 w-8 p-0"
-                              title="Mark Absent"
-                            >
-                              <XCircle className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm font-medium text-text-primary">
+                        {student.name}
+                        {student.hasChanges && (
+                          <Badge variant="outline" className="ml-2 text-[10px] text-action-primary border-action-primary/30">
+                            Modified
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-text-muted">
+                        {student.email}
+                      </TableCell>
+                      <TableCell className="text-xs text-text-secondary">
+                        Semester {student.semester}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(student.status)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markStudentAttendance(student.id, 'present')}
+                            disabled={student.status === 'present'}
+                            className={`h-7 w-7 p-0 ${student.status === 'present' ? 'opacity-40' : 'text-status-success hover:bg-status-success/10'}`}
+                            title="Mark Present"
+                          >
+                            <CheckmarkFilled size={14} />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markStudentAttendance(student.id, 'late')}
+                            disabled={student.status === 'late'}
+                            className={`h-7 w-7 p-0 ${student.status === 'late' ? 'opacity-40' : 'text-status-warning hover:bg-status-warning/10'}`}
+                            title="Mark Late"
+                          >
+                            <Time size={14} />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markStudentAttendance(student.id, 'absent')}
+                            disabled={student.status === 'absent'}
+                            className={`h-7 w-7 p-0 ${student.status === 'absent' ? 'opacity-40' : 'text-status-danger hover:bg-status-danger/10'}`}
+                            title="Mark Absent"
+                          >
+                            <CloseFilled size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Student View - Manual Attendance for All Subjects */}
       {viewMode === 'student' && selectedFaculty && selectedSemester && selectedStudent && (
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-white flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-green-400" />
-                Subject Attendance
+        <div className="bg-surface-default border border-border-default rounded-md overflow-hidden">
+          <div className="p-4 border-b border-border-default flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-text-primary">
+                  Student Subject Attendance
+                </h3>
                 {subjects.length > 0 && (
-                  <Badge variant="outline" className="ml-2 bg-blue-500/20 text-blue-300">
+                  <Badge variant="outline" className="text-xs">
                     {subjects.length} subjects
                   </Badge>
                 )}
-              </CardTitle>
-              
-              {/* Quick Stats & Actions */}
-              <div className="flex items-center gap-4">
-                {subjects.length > 0 && (
-                  <div className="flex gap-2">
-                    <Badge className="bg-green-500/20 text-green-300">
-                      Present: {subjects.filter(s => s.todayStatus === 'present').length}
-                    </Badge>
-                    <Badge className="bg-yellow-500/20 text-yellow-300">
-                      Late: {subjects.filter(s => s.todayStatus === 'late').length}
-                    </Badge>
-                    <Badge className="bg-red-500/20 text-red-300">
-                      Absent: {subjects.filter(s => s.todayStatus === 'absent').length}
-                    </Badge>
-                    {subjects.some(s => s.todayStatus === 'cancelled') && (
-                      <Badge className="bg-gray-600/30 text-gray-400 border-gray-500/30">
-                        Cancelled: {subjects.filter(s => s.todayStatus === 'cancelled').length}
-                      </Badge>
-                    )}
-                    {subjects.some(s => s.todayStatus === 'system_inactive') && (
-                      <Badge className="bg-purple-900/30 text-purple-300 border-purple-600/50">
-                        System Inactive: {subjects.filter(s => s.todayStatus === 'system_inactive').length}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-                
-                {/* Save Button */}
-                {subjects.some(s => s.hasChanges) && (
-                  <Button 
-                    onClick={saveStudentAttendanceChanges}
-                    disabled={loading.saving}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    {loading.saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save Changes
-                      </>
-                    )}
-                  </Button>
-                )}
               </div>
+              <p className="text-xs text-text-muted mt-0.5">
+                Marking course attendance across curriculum for selected student
+              </p>
             </div>
             
-            {/* Bulk Actions */}
-            {subjects.length > 0 && (
-              <div className="flex items-center gap-2 pt-4 border-t border-slate-700">
-                <span className="text-sm text-slate-300 mr-2">Bulk Actions:</span>
-                <Button
-                  variant="outline"
+            {/* Stats & Save */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {subjects.length > 0 && (
+                <div className="flex gap-1.5 text-xs">
+                  <span className="px-2 py-0.5 rounded bg-status-success/10 text-status-success border border-status-success/30 font-medium tabular-nums">
+                    Present: {subjects.filter(s => s.todayStatus === 'present').length}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-status-warning/10 text-status-warning border border-status-warning/30 font-medium tabular-nums">
+                    Late: {subjects.filter(s => s.todayStatus === 'late').length}
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-status-danger/10 text-status-danger border border-status-danger/30 font-medium tabular-nums">
+                    Absent: {subjects.filter(s => s.todayStatus === 'absent').length}
+                  </span>
+                </div>
+              )}
+              
+              {subjects.some(s => s.hasChanges) && (
+                <Button 
+                  onClick={saveStudentAttendanceChanges}
+                  disabled={loading.saving}
                   size="sm"
-                  onClick={() => markAllSubjects('present')}
-                  className="text-green-400 border-green-400/30 hover:bg-green-500/10"
+                  className="flex items-center gap-1.5"
                 >
-                  <UserCheck className="h-4 w-4 mr-1" />
-                  Mark All Present
+                  <Save size={14} />
+                  <span>{loading.saving ? 'Saving...' : 'Save Changes'}</span>
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => markAllSubjects('absent')}
-                  className="text-red-400 border-red-400/30 hover:bg-red-500/10"
-                >
-                  <UserX className="h-4 w-4 mr-1" />
-                  Mark All Absent
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => markAllSubjects('late')}
-                  className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10"
-                >
-                  <Clock className="h-4 w-4 mr-1" />
-                  Mark All Late
-                </Button>
-              </div>
-            )}
-          </CardHeader>
-          <CardContent>
-            {loading.subjects ? (
-              <div className="flex justify-center items-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-blue-400 mr-3" />
-                <span className="text-slate-300">Loading subjects...</span>
-              </div>
-            ) : subjects.length === 0 ? (
-              <div className="text-center py-12">
-                <BookOpen className="h-16 w-16 mx-auto mb-4 text-slate-500 opacity-50" />
-                <p className="text-slate-400 text-lg">No subjects found</p>
-                <p className="text-slate-500 text-sm">
-                  This student may not be enrolled in any subjects
-                </p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-700">
-                      <TableHead className="text-slate-300">Subject Code</TableHead>
-                      <TableHead className="text-slate-300">Subject Name</TableHead>
-                      <TableHead className="text-slate-300">Credits</TableHead>
-                      <TableHead className="text-slate-300">Status</TableHead>
-                      <TableHead className="text-slate-300 text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subjects.map((subject) => (
-                      <TableRow 
-                        key={subject.id} 
-                        className={`border-slate-700 hover:bg-slate-800/30 ${
-                          subject.hasChanges ? 'bg-blue-500/10 border-blue-500/30' : ''
-                        }`}
-                      >
-                        <TableCell className="text-white font-medium">
+              )}
+            </div>
+          </div>
+          
+          {/* Bulk Actions */}
+          {subjects.length > 0 && (
+            <div className="p-3 bg-surface-subtle/50 border-b border-border-subtle flex items-center justify-end gap-1.5">
+              <span className="text-xs text-text-muted mr-1">Bulk:</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllSubjects('present')}
+                className="h-7 text-xs px-2 text-status-success hover:bg-status-success/10 hover:border-status-success"
+              >
+                <UserFollow size={12} className="mr-1" />
+                All Present
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllSubjects('absent')}
+                className="h-7 text-xs px-2 text-status-danger hover:bg-status-danger/10 hover:border-status-danger"
+              >
+                <UserAdmin size={12} className="mr-1" />
+                All Absent
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => markAllSubjects('late')}
+                className="h-7 text-xs px-2 text-status-warning hover:bg-status-warning/10 hover:border-status-warning"
+              >
+                <Time size={12} className="mr-1" />
+                All Late
+              </Button>
+            </div>
+          )}
+
+          {loading.subjects ? (
+            <div className="p-8 text-center text-xs text-text-muted">
+              Loading courses...
+            </div>
+          ) : subjects.length === 0 ? (
+            <div className="p-8 text-center text-xs text-text-muted">
+              This student is not enrolled in any courses for this semester.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border-default bg-surface-subtle">
+                    <TableHead className="w-[120px] text-xs font-semibold text-text-muted uppercase">Course Code</TableHead>
+                    <TableHead className="text-xs font-semibold text-text-muted uppercase">Subject Name</TableHead>
+                    <TableHead className="w-[100px] text-xs font-semibold text-text-muted uppercase">Credits</TableHead>
+                    <TableHead className="w-[140px] text-xs font-semibold text-text-muted uppercase">Status</TableHead>
+                    <TableHead className="w-[120px] text-right text-xs font-semibold text-text-muted uppercase">Mark</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {subjects.map((subject) => (
+                    <TableRow 
+                      key={subject.id} 
+                      className={`h-11 border-b border-border-subtle hover:bg-surface-subtle/50 ${
+                        subject.hasChanges ? 'bg-action-primary/5' : ''
+                      }`}
+                    >
+                      <TableCell className="font-mono text-xs text-text-secondary">
+                        <span className="px-1.5 py-0.5 rounded bg-surface-subtle border border-border-subtle">
                           {subject.code}
-                        </TableCell>
-                        <TableCell className="text-white">
-                          {subject.name}
-                          {subject.hasChanges && (
-                            <Badge variant="outline" className="ml-2 text-xs bg-blue-500/20 text-blue-300">
-                              Modified
-                            </Badge>
-                          )}
-                          {subject.todayStatus === 'cancelled' && subject.cancellation_reason && (
-                            <div className="text-xs text-gray-400 mt-1">
-                              Reason: {subject.cancellation_reason}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-slate-300">
-                          {subject.credits || 3}
-                        </TableCell>
-                        <TableCell>
-                          {getStatusBadge(subject.todayStatus || 'absent')}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markSubjectAttendance(subject.id, 'present')}
-                              disabled={subject.todayStatus === 'present' || subject.todayStatus === 'cancelled'}
-                              className="text-green-400 border-green-400/30 hover:bg-green-500/10 h-8 w-8 p-0"
-                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Present'}
-                            >
-                              <CheckCircle className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markSubjectAttendance(subject.id, 'late')}
-                              disabled={subject.todayStatus === 'late' || subject.todayStatus === 'cancelled'}
-                              className="text-yellow-400 border-yellow-400/30 hover:bg-yellow-500/10 h-8 w-8 p-0"
-                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Late'}
-                            >
-                              <Clock className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => markSubjectAttendance(subject.id, 'absent')}
-                              disabled={subject.todayStatus === 'absent' || subject.todayStatus === 'cancelled'}
-                              className="text-red-400 border-red-400/30 hover:bg-red-500/10 h-8 w-8 p-0"
-                              title={subject.todayStatus === 'cancelled' ? 'Class was cancelled' : 'Mark Absent'}
-                            >
-                              <XCircle className="h-3 w-3" />
-                            </Button>
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm font-medium text-text-primary">
+                        {subject.name}
+                        {subject.hasChanges && (
+                          <Badge variant="outline" className="ml-2 text-[10px] text-action-primary border-action-primary/30">
+                            Modified
+                          </Badge>
+                        )}
+                        {subject.todayStatus === 'cancelled' && subject.cancellation_reason && (
+                          <div className="text-xs text-text-muted mt-0.5">
+                            Reason: {subject.cancellation_reason}
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-text-secondary tabular-nums">
+                        {subject.credits || 3} hrs
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(subject.todayStatus || 'absent')}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markSubjectAttendance(subject.id, 'present')}
+                            disabled={subject.todayStatus === 'present' || subject.todayStatus === 'cancelled'}
+                            className={`h-7 w-7 p-0 ${subject.todayStatus === 'present' ? 'opacity-40' : 'text-status-success hover:bg-status-success/10'}`}
+                            title="Mark Present"
+                          >
+                            <CheckmarkFilled size={14} />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markSubjectAttendance(subject.id, 'late')}
+                            disabled={subject.todayStatus === 'late' || subject.todayStatus === 'cancelled'}
+                            className={`h-7 w-7 p-0 ${subject.todayStatus === 'late' ? 'opacity-40' : 'text-status-warning hover:bg-status-warning/10'}`}
+                            title="Mark Late"
+                          >
+                            <Time size={14} />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => markSubjectAttendance(subject.id, 'absent')}
+                            disabled={subject.todayStatus === 'absent' || subject.todayStatus === 'cancelled'}
+                            className={`h-7 w-7 p-0 ${subject.todayStatus === 'absent' ? 'opacity-40' : 'text-status-danger hover:bg-status-danger/10'}`}
+                            title="Mark Absent"
+                          >
+                            <CloseFilled size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -424,7 +424,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
                 </div>
               </div>
               <div>
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-100 to-cyan-100 bg-clip-text text-transparent flex items-center gap-3">
+                <h2 className="text-3xl font-bold text-white flex items-center gap-3">
                   Advanced Analytics Dashboard
                 </h2>
                 <p className="text-slate-400 mt-1 text-sm md:text-base">Real-time insights • Live data • Comprehensive metrics</p>
@@ -561,12 +561,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-sm font-medium text-slate-400 mb-1">Today</p>
-                  <div className={`text-4xl font-bold bg-gradient-to-br ${
-                    todayStatus.status === 'Excellent' ? 'from-blue-400 to-cyan-400' :
-                    todayStatus.status === 'Good' ? 'from-green-400 to-emerald-400' :
-                    todayStatus.status === 'Warning' ? 'from-yellow-400 to-orange-400' :
-                    'from-red-400 to-pink-400'
-                  } bg-clip-text text-transparent`}>
+                  <div className="text-4xl font-bold text-white">
                     {dashboardSummary?.today?.rate || 0}%
                   </div>
                 </div>
@@ -624,12 +619,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-sm font-medium text-slate-400 mb-1">This Week</p>
-                  <div className={`text-4xl font-bold bg-gradient-to-br ${
-                    weekStatus.status === 'Excellent' ? 'from-blue-400 to-cyan-400' :
-                    weekStatus.status === 'Good' ? 'from-green-400 to-emerald-400' :
-                    weekStatus.status === 'Warning' ? 'from-yellow-400 to-orange-400' :
-                    'from-red-400 to-pink-400'
-                  } bg-clip-text text-transparent`}>
+                  <div className="text-4xl font-bold text-white">
                     {dashboardSummary?.this_week?.rate || 0}%
                   </div>
                 </div>
@@ -681,12 +671,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <p className="text-sm font-medium text-slate-400 mb-1">This Month</p>
-                  <div className={`text-4xl font-bold bg-gradient-to-br ${
-                    monthStatus.status === 'Excellent' ? 'from-blue-400 to-cyan-400' :
-                    monthStatus.status === 'Good' ? 'from-green-400 to-emerald-400' :
-                    monthStatus.status === 'Warning' ? 'from-yellow-400 to-orange-400' :
-                    'from-red-400 to-pink-400'
-                  } bg-clip-text text-transparent`}>
+                  <div className="text-4xl font-bold text-white">
                     {dashboardSummary?.this_month?.rate || 0}%
                   </div>
                 </div>
@@ -733,7 +718,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
                 </div>
                 <div className="flex-1">
                   <p className="text-sm text-slate-400 font-medium">Total Students</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
+                  <p className="text-3xl font-bold text-white">
                     {dashboardSummary?.system?.total_students || 0}
                   </p>
                 </div>
@@ -755,7 +740,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
                 </div>
                 <div className="flex-1">
                   <p className="text-sm text-slate-400 font-medium">Total Subjects</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-white to-green-100 bg-clip-text text-transparent">
+                  <p className="text-3xl font-bold text-white">
                     {dashboardSummary?.system?.total_subjects || 0}
                   </p>
                 </div>
@@ -777,7 +762,7 @@ const AdvancedAnalyticsDashboard: React.FC<AdvancedAnalyticsDashboardProps> = ({
                 </div>
                 <div className="flex-1">
                   <p className="text-sm text-slate-400 font-medium">Records (30d)</p>
-                  <p className="text-3xl font-bold bg-gradient-to-r from-white to-purple-100 bg-clip-text text-transparent">
+                  <p className="text-3xl font-bold text-white">
                     {dashboardSummary?.this_month?.total_records || 0}
                   </p>
                 </div>

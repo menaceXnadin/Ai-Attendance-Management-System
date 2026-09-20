@@ -92,7 +92,7 @@ const AttendancePage = () => {
       <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-blue-100 to-blue-200 bg-clip-text text-transparent">
+          <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
             Attendance Management
           </h1>
           <p className="text-blue-200/80 mt-2">

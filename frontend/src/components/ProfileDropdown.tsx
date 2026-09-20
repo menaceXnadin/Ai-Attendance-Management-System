@@ -12,30 +12,28 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ name, onViewProfile, 
   return (
     <div className="relative">
       <button
-        className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-white focus:outline-none"
+        className="flex items-center justify-center w-8 h-8 rounded-full bg-action-primary text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-action-primary focus:ring-offset-2"
         onClick={() => setOpen((v) => !v)}
         aria-label="Open profile menu"
       >
         <span className="sr-only">Open profile menu</span>
-        <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
-          <circle cx="12" cy="8" r="4" fill="#fff" fillOpacity="0.7" />
-          <circle cx="12" cy="17" r="6" fill="#fff" fillOpacity="0.3" />
-        </svg>
+        {name ? name.charAt(0).toUpperCase() : 'U'}
       </button>
       {open && (
-        <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-700 rounded-xl shadow-lg z-50">
-          <div className="px-4 py-3 border-b border-slate-700">
-            <span className="block text-sm text-slate-300">Welcome back,</span>
-            <span className="block font-semibold text-white">{name}</span>
+        <div className="absolute right-0 mt-2 w-48 bg-surface-default border border-border-default rounded-md shadow-lg z-50 py-1">
+          <div className="px-3.5 py-2.5 border-b border-border-subtle">
+            <span className="block text-[11px] text-text-muted">Welcome back,</span>
+            <span className="block text-xs font-semibold text-text-primary truncate">{name}</span>
           </div>
           <button
-            className="w-full text-left px-4 py-2 hover:bg-slate-800 text-slate-200"
+            className="w-full text-left px-3.5 py-2 text-xs text-text-primary hover:bg-surface-subtle transition-colors"
             onClick={() => { setOpen(false); onViewProfile(); }}
           >
             View Profile
           </button>
+          <div className="border-t border-border-subtle my-1" />
           <button
-            className="w-full text-left px-4 py-2 hover:bg-slate-800 text-red-400 border-t border-slate-700"
+            className="w-full text-left px-3.5 py-2 text-xs text-status-error hover:bg-status-error-subtle transition-colors"
             onClick={() => { setOpen(false); onSignOut(); }}
           >
             Sign Out

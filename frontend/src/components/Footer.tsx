@@ -1,130 +1,115 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { Facebook, Twitter, Linkedin, Mail, Phone, MapPin, ArrowRight } from 'lucide-react';
+import { 
+  LogoFacebook, 
+  LogoTwitter, 
+  LogoLinkedin, 
+  Email, 
+  Phone, 
+  Location, 
+  ArrowRight 
+} from '@carbon/icons-react';
 import { Button } from '@/components/ui/button';
 import logo from '@/assets/main.png';
 
-const Footer = () => {
+const Footer: React.FC = () => {
   return (
-    <footer className="bg-gradient-to-b from-slate-950 to-blue-950 pt-20 pb-10 relative overflow-hidden">
-      {/* Background decoration elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-blue-500/20 to-transparent"></div>
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-500 rounded-full opacity-5 blur-3xl"></div>
-        <div className="absolute bottom-60 -left-20 w-60 h-60 bg-teal-400 rounded-full opacity-5 blur-3xl"></div>
-      </div>
-
-      <div className="container mx-auto px-6 relative z-10">
-        {/* Newsletter Section */}
-        <div className="mb-20">
-          <div className="bg-slate-900/60 backdrop-blur-md rounded-2xl p-8 md:p-12 border border-slate-700/50 shadow-lg max-w-5xl mx-auto">
-            <div className="grid md:grid-cols-2 gap-10 items-center">
-              <div>
-                <h3 className="text-2xl md:text-3xl font-bold mb-4 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">
-                  Join Our Newsletter
-                </h3>
-                <p className="text-blue-200/80 mb-0">
-                  Stay updated with the latest features, tips, and educational insights from AttendAI.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input 
-                  type="email" 
-                  placeholder="Enter your email" 
-                  className="flex-grow px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/70 text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50"
-                />
-                <Button className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 text-white shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:shadow-[0_0_20px_rgba(56,189,248,0.5)] transition-all duration-300 border-0">
-                  Subscribe <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </div>
+    <footer className="bg-surface-default border-t border-border-subtle pt-16 pb-12 text-text-secondary">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Newsletter Section - Clean divided layout without card nesting */}
+        <div className="mb-14 pb-12 border-b border-border-subtle">
+          <div className="grid md:grid-cols-2 gap-6 items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-text-primary mb-1">
+                Institutional Updates & Release Notes
+              </h3>
+              <p className="text-xs text-text-muted max-w-md">
+                Stay updated with platform patches, security improvements, and attendance telemetry enhancements.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 max-w-md md:ml-auto w-full">
+              <input 
+                type="email" 
+                placeholder="department@institution.edu" 
+                className="flex-1 px-3 py-2 rounded-md bg-surface-canvas border border-border-subtle text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
+              />
+              <Button size="sm" className="text-xs h-9 flex items-center justify-center gap-1.5 flex-shrink-0">
+                <span>Subscribe</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
-          <div className="col-span-1 md:col-span-4">
-            <Link to="/" className="flex items-center group">
-            
-              <img src={logo} alt="AttendAI" className="h-10 w-10 object-contain" style={{ filter: 'drop-shadow(0 0 8px rgba(56,189,248,0.6))' }} />
-              <span className="ml-3 text-xl font-bold bg-gradient-to-r from-white to-blue-300 bg-clip-text text-transparent">AttendAI</span>
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+          <div className="col-span-1 md:col-span-4 space-y-4">
+            <Link to="/" className="flex items-center gap-2.5">
+              <img src={logo} alt="AttendAI" className="h-7 w-7 object-contain" />
+              <span className="text-base font-bold text-text-primary tracking-tight">AttendAI</span>
             </Link>
-            <p className="mt-5 text-blue-200/80 max-w-md">
-              Revolutionizing classroom attendance with AI-powered facial recognition technology that saves time and improves accuracy for educators worldwide.
+            <p className="text-xs text-text-muted leading-relaxed max-w-sm">
+              Enterprise classroom attendance management engine powered by high-accuracy biometric facial verification and institutional analytics.
             </p>
-            <div className="mt-6 flex items-center space-x-5">
-              <a href="#" className="text-blue-300 hover:text-teal-300 transition-colors">
-                <span className="sr-only">Facebook</span>
-                <Facebook size={20} />
+            <div className="flex items-center space-x-3 pt-1">
+              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="Facebook">
+                <LogoFacebook className="w-4 h-4" />
               </a>
-              <a href="#" className="text-blue-300 hover:text-teal-300 transition-colors">
-                <span className="sr-only">Twitter</span>
-                <Twitter size={20} />
+              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="Twitter">
+                <LogoTwitter className="w-4 h-4" />
               </a>
-              <a href="#" className="text-blue-300 hover:text-teal-300 transition-colors">
-                <span className="sr-only">LinkedIn</span>
-                <Linkedin size={20} />
+              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="LinkedIn">
+                <LogoLinkedin className="w-4 h-4" />
               </a>
             </div>
           </div>
           
           <div className="col-span-1 md:col-span-2">
-            <h3 className="text-base font-semibold text-white tracking-wider uppercase mb-5 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">Features</h3>
-            <ul className="space-y-3">
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Facial Recognition</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Attendance Reports</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Student Management</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Analytics Dashboard</Link></li>
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Platform</h3>
+            <ul className="space-y-2 text-xs">
+              <li><Link to="/app" className="text-text-muted hover:text-text-primary transition-colors">Admin Portal</Link></li>
+              <li><Link to="/teacher" className="text-text-muted hover:text-text-primary transition-colors">Teacher Portal</Link></li>
+              <li><Link to="/student" className="text-text-muted hover:text-text-primary transition-colors">Student Portal</Link></li>
+              <li><Link to="/app/calendar" className="text-text-muted hover:text-text-primary transition-colors">Academic Calendar</Link></li>
             </ul>
           </div>
           
           <div className="col-span-1 md:col-span-2">
-            <h3 className="text-base font-semibold text-white tracking-wider uppercase mb-5 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">Support</h3>
-            <ul className="space-y-3">
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Help Center</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Documentation</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Contact Us</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">FAQ</Link></li>
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Support</h3>
+            <ul className="space-y-2 text-xs">
+              <li><Link to="/about" className="text-text-muted hover:text-text-primary transition-colors">About AttendAI</Link></li>
+              <li><Link to="/status" className="text-text-muted hover:text-text-primary transition-colors">System Telemetry</Link></li>
+              <li><Link to="/forgot-password" className="text-text-muted hover:text-text-primary transition-colors">Account Recovery</Link></li>
+              <li><Link to="/login" className="text-text-muted hover:text-text-primary transition-colors">Portal Authentication</Link></li>
             </ul>
           </div>
           
-          <div className="col-span-1 md:col-span-2">
-            <h3 className="text-base font-semibold text-white tracking-wider uppercase mb-5 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">Legal</h3>
-            <ul className="space-y-3">
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Privacy Policy</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Terms of Service</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">Data Processing</Link></li>
-              <li><Link to="/" className="text-blue-200/80 hover:text-teal-300 transition-colors">GDPR Compliance</Link></li>
-            </ul>
-          </div>
-          
-          <div className="col-span-1 md:col-span-2">
-            <h3 className="text-base font-semibold text-white tracking-wider uppercase mb-5 bg-gradient-to-r from-blue-300 to-teal-300 bg-clip-text text-transparent">Contact</h3>
-            <ul className="space-y-3">
-              <li className="flex items-center gap-2 text-blue-200/80">
-                <Mail size={16} className="text-teal-400" />
-                <span>support@attendai.com</span>
+          <div className="col-span-1 md:col-span-4">
+            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Institutional Contact</h3>
+            <ul className="space-y-2 text-xs text-text-muted">
+              <li className="flex items-center gap-2">
+                <Email className="w-3.5 h-3.5 text-action-primary flex-shrink-0" />
+                <span>support@attendai.edu</span>
               </li>
-              <li className="flex items-center gap-2 text-blue-200/80">
-                <Phone size={16} className="text-teal-400" />
-                <span>+977 9862748653</span>
+              <li className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-action-primary flex-shrink-0" />
+                <span>+977 (01) 554-1234</span>
               </li>
-              <li className="flex items-start gap-2 text-blue-200/80">
-                <MapPin size={16} className="text-teal-400 mt-1" />
-                <span>PatanDhoka, Lalitpur<br />Nepal</span>
+              <li className="flex items-start gap-2">
+                <Location className="w-3.5 h-3.5 text-action-primary flex-shrink-0 mt-0.5" />
+                <span>Department of Computer Engineering, Lalitpur, Nepal</span>
               </li>
             </ul>
           </div>
         </div>
         
-        <div className="mt-16 pt-8 border-t border-slate-700/40 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-sm text-blue-200/70">
-            &copy; {new Date().getFullYear()} AttendAI. All rights reserved.
+        <div className="mt-12 pt-6 border-t border-border-subtle flex flex-col sm:flex-row justify-between items-center text-xs text-text-muted gap-4">
+          <p>
+            &copy; {new Date().getFullYear()} AttendAI Engineering System. All rights reserved.
           </p>
-          <div className="mt-4 md:mt-0 text-sm text-blue-200/70 flex flex-wrap gap-6">
-            <Link to="/" className="hover:text-teal-300 transition-colors">Privacy</Link>
-            <Link to="/" className="hover:text-teal-300 transition-colors">Terms</Link>
-            <Link to="/" className="hover:text-teal-300 transition-colors">Cookies</Link>
-            <Link to="/" className="hover:text-teal-300 transition-colors">Sitemap</Link>
+          <div className="flex flex-wrap gap-4">
+            <Link to="/" className="hover:text-text-primary transition-colors">Institutional Privacy Policy</Link>
+            <Link to="/" className="hover:text-text-primary transition-colors">Terms of Service</Link>
+            <Link to="/" className="hover:text-text-primary transition-colors">Security Architecture</Link>
           </div>
         </div>
       </div>

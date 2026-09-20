@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/useAuth';
-import type { AttendanceFilters, Student, Subject } from '@/integrations/api/types';
+import type { AttendanceFilters, Student, Subject, Schedule } from '@/integrations/api/types';
 
 export interface AttendanceRecord {
   id: string;
@@ -38,23 +38,32 @@ export const useAttendanceData = () => {
     sessionStorage.setItem('attendanceActiveTab', tab);
   };
 
-  // Fetch faculties for the faculty filter
-  const { data: faculties = [], isLoading: facultiesLoading } = useQuery({
+  // Fetch faculties
+  const { data: faculties = [], isLoading: facultiesLoading, error: facultiesError } = useQuery({
     queryKey: ['faculties'],
     queryFn: async () => {
       try {
-        const data = await api.faculties.getAll();
-        return data.map(faculty => ({
-          id: faculty.id.toString(),
-          name: faculty.name
-        }));
+        return await api.faculties.getAll();
       } catch (error) {
-        console.error('Error fetching faculties:', error);
-        throw error;
+        console.error('Failed to fetch faculties:', error);
+        return [];
       }
     },
-    enabled: !!user && !!localStorage.getItem('authToken'),
-    refetchOnWindowFocus: false
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch subjects
+  const { data: subjects = [], isLoading: subjectsLoading, error: subjectsError } = useQuery({
+    queryKey: ['subjects'],
+    queryFn: async () => {
+      try {
+        return await api.subjects.getAll();
+      } catch (error) {
+        console.error('Failed to fetch subjects:', error);
+        return [];
+      }
+    },
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   // Fetch classes (subjects with semester info from schedules)
@@ -68,7 +77,7 @@ export const useAttendanceData = () => {
         // Create a map to deduplicate subjects and track their semesters
         const subjectMap = new Map();
         
-        schedules.forEach((schedule: any) => {
+        schedules.forEach((schedule: Schedule) => {
           const key = schedule.subject_id;
           if (!subjectMap.has(key)) {
             subjectMap.set(key, {

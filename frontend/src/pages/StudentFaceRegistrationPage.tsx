@@ -59,17 +59,17 @@ const StudentFaceRegistrationPage = () => {
       <div className="p-6 space-y-6">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Face Registration Status Card */}
-          <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80">
+          <Card className="bg-surface-default border-border-subtle shadow-card">
             <CardHeader>
-              <CardTitle className="text-2xl text-white flex items-center gap-3">
+              <CardTitle className="text-xl text-text-primary flex items-center gap-3">
                 {isFaceRegistered ? (
                   <>
-                    <CheckCircle className="h-8 w-8 text-emerald-400" />
+                    <CheckCircle className="h-7 w-7 text-status-success" />
                     Face Recognition Ready
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="h-8 w-8 text-amber-400" />
+                    <AlertTriangle className="h-7 w-7 text-status-warning" />
                     Face Registration Required
                   </>
                 )}
@@ -78,27 +78,27 @@ const StudentFaceRegistrationPage = () => {
             <CardContent className="space-y-6">
               {isFaceRegistered ? (
                 <div className="space-y-4">
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-6">
-                    <div className="text-emerald-300 mb-3">
-                      <span className="font-semibold text-lg">Your face is successfully registered!</span>
+                  <div className="bg-status-success-subtle border border-status-success-border rounded-xl p-5">
+                    <div className="text-status-success mb-2">
+                      <span className="font-semibold text-base">Your face is successfully registered!</span>
                     </div>
-                    <p className="text-emerald-200/80">
+                    <p className="text-xs text-text-secondary">
                       You can now use face recognition for quick attendance marking across all your classes.
                     </p>
                   </div>
                   
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     <Button 
                       onClick={() => setOpen(true)}
                       variant="outline"
-                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                      className="border-border-default hover:bg-surface-subtle"
                     >
-                      Update Face Registration
+                      Update Face Data
                     </Button>
                     
                     <Button 
                       onClick={() => navigate('/student')}
-                      className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
+                      className="bg-action-primary hover:bg-action-primary-hover text-white"
                     >
                       Back to Dashboard
                     </Button>
@@ -106,27 +106,33 @@ const StudentFaceRegistrationPage = () => {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6">
-                    <div className="text-amber-300 mb-3">
-                      <span className="font-semibold text-lg">Set up face recognition</span>
+                  <div className="bg-status-warning-subtle border border-status-warning-border rounded-xl p-5">
+                    <div className="text-status-warning mb-2">
+                      <span className="font-semibold text-base">Face registration is required</span>
                     </div>
-                    <p className="text-amber-200/80">
-                      Register your face to enable quick attendance marking. This is a one-time setup process.
+                    <p className="text-xs text-text-secondary mb-3">
+                      Please register your face to enable automated attendance marking. The process takes less than a minute.
                     </p>
+                    <ul className="text-xs text-text-muted space-y-1 list-disc list-inside">
+                      <li>Ensure good lighting</li>
+                      <li>Face the camera directly</li>
+                      <li>Remove accessories like sunglasses or hats</li>
+                    </ul>
                   </div>
                   
-                  <div className="flex gap-4">
+                  <div className="flex gap-3">
                     <Button 
                       onClick={() => setOpen(true)}
-                      className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                      className="bg-action-primary hover:bg-action-primary-hover text-white"
                     >
-                      Start Face Registration
+                      <Camera className="h-4 w-4 mr-2" />
+                      Register Face Now
                     </Button>
                     
                     <Button 
-                      onClick={() => navigate('/student')}
                       variant="outline"
-                      className="border-slate-600 text-slate-300 hover:bg-slate-800"
+                      onClick={() => navigate('/student')}
+                      className="border-border-default hover:bg-surface-subtle"
                     >
                       Skip for Now
                     </Button>
@@ -138,24 +144,24 @@ const StudentFaceRegistrationPage = () => {
 
           {/* Face Verification Test Card */}
           {isFaceRegistered && (
-            <Card className="bg-slate-900/70 backdrop-blur-sm border-slate-700/80">
+            <Card className="bg-surface-default border-border-subtle shadow-card">
               <CardHeader>
-                <CardTitle className="text-xl text-white flex items-center gap-3">
-                  <Shield className="h-6 w-6 text-blue-400" />
+                <CardTitle className="text-lg text-text-primary flex items-center gap-2.5">
+                  <Shield className="h-5 w-5 text-action-primary" />
                   Face Verification Test
                 </CardTitle>
-                <CardDescription className="text-slate-400">
+                <CardDescription className="text-text-muted text-xs">
                   Test if your face matches the stored data. This is for verification only - no attendance will be marked.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
+                <div className="bg-status-info-subtle border border-status-info-border rounded-xl p-4">
                   <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+                    <AlertTriangle className="h-4 w-4 text-action-primary mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-blue-300 font-medium mb-1">Simple Test</p>
-                      <p className="text-blue-200/80 text-sm">
-                        Just verifying your face matches - no attendance marking.
+                      <p className="text-action-primary font-medium text-xs mb-0.5">Verification Mode</p>
+                      <p className="text-text-secondary text-xs">
+                        Confirming your facial vectors match your student record without committing an attendance record.
                       </p>
                     </div>
                   </div>
@@ -163,7 +169,7 @@ const StudentFaceRegistrationPage = () => {
 
                 <Button 
                   onClick={() => setShowFaceVerification(true)}
-                  className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+                  className="w-full bg-action-primary hover:bg-action-primary-hover text-white"
                 >
                   <Scan className="h-4 w-4 mr-2" />
                   Start Face Verification
@@ -188,22 +194,22 @@ const StudentFaceRegistrationPage = () => {
 
       {/* Face Verification Modal */}
       {showFaceVerification && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div
-            className="bg-slate-900/95 border border-slate-700 rounded-xl w-full shadow-2xl flex flex-col max-h-[90vh]"
+            className="bg-surface-default border border-border-default rounded-xl w-full shadow-2xl flex flex-col max-h-[90vh]"
             style={{ width: 'min(92vw, 720px)' }}
           >
-            <div className="border-b border-slate-800 px-6 py-4 flex-shrink-0 sticky top-0 bg-slate-900/95 z-10">
+            <div className="border-b border-border-subtle px-6 py-4 flex-shrink-0 sticky top-0 bg-surface-default z-10">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-                  <Scan className="h-5 w-5 text-blue-400" />
+                <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
+                  <Scan className="h-5 w-5 text-action-primary" />
                   Face Verification Test
                 </h2>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowFaceVerification(false)}
-                  className="text-slate-400 hover:text-white"
+                  className="text-text-muted hover:text-text-primary"
                 >
                   Close
                 </Button>
