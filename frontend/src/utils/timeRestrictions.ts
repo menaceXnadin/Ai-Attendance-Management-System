@@ -1,279 +1,292 @@
-// Time-based access control for face verification
-// Ensures attendance can only be marked during valid periods
-
-// � TIME RESTRICTIONS ENABLED - Attendance marking controlled by school hours and class periods
-export const DEVELOPMENT_MODE = false;
-export const FORCE_DEVELOPMENT_OVERRIDE = false; 
-export const TIME_RESTRICTIONS_ENABLED = true; // Master switch to enable time restrictions - ENABLED FOR PRODUCTION
-
-import { isDevelopmentOverrideEnabled } from './developmentOverride';
+/**
+ * Student check-in availability — display only.
+ *
+ * The server is authoritative (DOMAIN_RULES §13.9): `GET /schedules/student/today`
+ * returns each class's `checkin_window` (`opens_at`, `late_after`, `closes_at`,
+ * `state`), the session status and the student's own record (`my_status`), plus
+ * `term_state` / `day_status`. This module only interprets that payload for the UI.
+ *
+ * Fail closed: no schedule, a failed request, a holiday, between-terms or a class
+ * without a server window all mean "check-in closed" with a clear reason. There are
+ * no hard-coded fallback periods, and no client override can open check-in.
+ */
+import type {
+  CheckinRejectionCode,
+  RecordStatus,
+  StudentTodayClass,
+  StudentTodaySchedule,
+} from '@/integrations/api/client';
 
 export interface ClassPeriod {
   id: string;
   name: string;
-  startTime: string; // HH:MM format
-  endTime: string;   // HH:MM format
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
   subjectId?: number;
+  sessionId?: number | null;
 }
 
-export interface SchoolHours {
-  startTime: string; // HH:MM format
-  endTime: string;   // HH:MM format
-}
-
-export interface TimeRestrictionConfig {
-  schoolHours: SchoolHours;
-  classPeriods: ClassPeriod[];
-}
-
-// Default school hours and periods configuration - Generic fallback when no real schedule is available
-export const DEFAULT_TIME_CONFIG: TimeRestrictionConfig = {
-  schoolHours: {
-    startTime: "08:00",
-    endTime: "16:00"  // 8 AM to 4 PM - generic school hours
-  },
-  classPeriods: [
-    { id: "period-1", name: "First Period", startTime: "08:00", endTime: "09:00" },
-    { id: "period-2", name: "Second Period", startTime: "09:15", endTime: "10:15" },
-    { id: "period-3", name: "Third Period", startTime: "10:30", endTime: "11:30" },
-    { id: "period-4", name: "Fourth Period", startTime: "12:30", endTime: "13:30" },
-    { id: "period-5", name: "Fifth Period", startTime: "13:45", endTime: "14:45" }
-  ]
-};
-
-/**
- * Convert HH:MM time string to minutes from midnight
- */
-export const timeToMinutes = (timeStr: string): number => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours * 60 + minutes;
-};
-
-/**
- * Get current time in minutes from midnight
- */
-export const getCurrentTimeInMinutes = (): number => {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-};
-
-/**
- * Check if current time is within school hours
- */
-export const isWithinSchoolHours = (config: TimeRestrictionConfig = DEFAULT_TIME_CONFIG): boolean => {
-  const currentMinutes = getCurrentTimeInMinutes();
-  const schoolStart = timeToMinutes(config.schoolHours.startTime);
-  const schoolEnd = timeToMinutes(config.schoolHours.endTime);
-  
-  return currentMinutes >= schoolStart && currentMinutes <= schoolEnd;
-};
-
-/**
- * Get the current active class period, if any
- */
-export const getCurrentActivePeriod = (config: TimeRestrictionConfig = DEFAULT_TIME_CONFIG): ClassPeriod | null => {
-  const currentMinutes = getCurrentTimeInMinutes();
-  
-  for (const period of config.classPeriods) {
-    const periodStart = timeToMinutes(period.startTime);
-    const periodEnd = timeToMinutes(period.endTime);
-    
-    if (currentMinutes >= periodStart && currentMinutes <= periodEnd) {
-      return period;
-    }
-  }
-  
-  return null;
-};
-
-/**
- * Get the next upcoming period
- */
-export const getNextPeriod = (config: TimeRestrictionConfig = DEFAULT_TIME_CONFIG): ClassPeriod | null => {
-  const currentMinutes = getCurrentTimeInMinutes();
-  
-  for (const period of config.classPeriods) {
-    const periodStart = timeToMinutes(period.startTime);
-    
-    if (currentMinutes < periodStart) {
-      return period;
-    }
-  }
-  
-  return null;
-};
-
-/**
- * Check if face verification is currently allowed
- */
-export const isFaceVerificationAllowed = (
-  config: TimeRestrictionConfig = DEFAULT_TIME_CONFIG,
-  hasVerifiedThisPeriod: boolean = false
-): {
+export interface CheckinAvailability {
   allowed: boolean;
   reason: string;
-  currentPeriod?: ClassPeriod;
+  /** The class whose window is open right now (if any). */
+  currentPeriod: ClassPeriod | null;
+  /** The next class whose window has not opened yet. */
   nextPeriod?: ClassPeriod;
+  /** Human countdown to `nextPeriod` opening, e.g. "1h 5m". */
   timeUntilNext?: string;
-} => {
-  // ✅ TIME RESTRICTIONS ENABLED - Check actual conditions
-  if (!TIME_RESTRICTIONS_ENABLED) {
-    const mockPeriod: ClassPeriod = {
-      id: 'always-available',
-      name: 'Always Available',
-      startTime: '00:00',
-      endTime: '23:59'
+  /** The open class itself (when `allowed`). */
+  openClass?: StudentTodayClass;
+}
+
+const hhmm = (t?: string | null) => (t ? t.slice(0, 5) : '');
+
+/** Parses a server ISO date-time; returns null if missing/invalid. */
+export const parseServerTime = (iso?: string | null): Date | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/** "9:50 AM" from a server ISO date-time or an HH:MM[:SS] string. */
+export const formatClock = (value?: string | null): string => {
+  if (!value) return '';
+  const iso = /T\d{2}:\d{2}/.test(value);
+  const timePart = iso ? value.split('T')[1] : value;
+  const [h, m] = timePart.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return '';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`;
+};
+
+/** Backward-compatible alias (HH:MM → 12h). */
+export const formatTimeForDisplay = (timeStr: string): string => formatClock(timeStr);
+
+const formatDuration = (ms: number): string => {
+  const totalMinutes = Math.max(0, Math.ceil(ms / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+};
+
+export const toPeriod = (c: StudentTodayClass): ClassPeriod => ({
+  id: c.session_id ? `session-${c.session_id}` : `schedule-${c.id}-${c.start_time}`,
+  name: c.subject_name,
+  startTime: hhmm(c.start_time),
+  endTime: hhmm(c.end_time),
+  subjectId: c.subject_id,
+  sessionId: c.session_id ?? null,
+});
+
+export const isClassCancelled = (c: StudentTodayClass): boolean =>
+  c.session_status === 'cancelled' || !!c.is_cancelled;
+
+/** The student's own record for the class, as reported by the server (`undefined` = server did not say). */
+export const myStatusOf = (c: StudentTodayClass): RecordStatus | null | undefined =>
+  'my_status' in c ? (c.my_status ?? null) : undefined;
+
+const DAY_STATUS_REASON: Record<string, string> = {
+  holiday: 'Today is a holiday — there are no classes, so check-in is closed.',
+  weekly_off: 'Today is a weekly day off — check-in is closed.',
+  exam: 'Regular classes are suspended for exams today — check-in is closed.',
+  between_terms: 'The institution is between terms — check-in is closed.',
+};
+
+/**
+ * Decides whether the check-in button may be offered, from the server payload only.
+ * `now` is used for countdown text, never to open a window the server marked closed.
+ */
+export const evaluateCheckin = (
+  schedule: StudentTodaySchedule | null | undefined,
+  opts: { loading?: boolean; loadFailed?: boolean; now?: number } = {}
+): CheckinAvailability => {
+  const now = opts.now ?? Date.now();
+  if (opts.loadFailed) {
+    return {
+      allowed: false,
+      reason: "Couldn't load today's schedule from the server. Check-in stays closed until it loads.",
+      currentPeriod: null,
     };
-    
+  }
+  if (!schedule) {
+    return { allowed: false, reason: opts.loading ? "Loading today's schedule…" : 'Check-in is closed.', currentPeriod: null };
+  }
+  if (schedule.term_state === 'between_terms') {
+    return { allowed: false, reason: DAY_STATUS_REASON.between_terms, currentPeriod: null };
+  }
+  if (schedule.term_state === 'no_terms') {
+    return { allowed: false, reason: 'No academic term is configured — check-in is closed.', currentPeriod: null };
+  }
+  if (schedule.day_status && schedule.day_status !== 'instructional' && DAY_STATUS_REASON[schedule.day_status]) {
+    return { allowed: false, reason: DAY_STATUS_REASON[schedule.day_status], currentPeriod: null };
+  }
+  const classes = schedule.classes ?? [];
+  if (classes.length === 0) {
+    return { allowed: false, reason: 'No classes are scheduled for you today — check-in is closed.', currentPeriod: null };
+  }
+
+  const live = classes.filter((c) => !isClassCancelled(c));
+  const openClasses = live.filter((c) => c.checkin_window?.state === 'open');
+  // Prefer the server's own `checkin_allowed` flag; otherwise "open window + no record yet".
+  const openUnrecorded =
+    live.find((c) => c.checkin_allowed === true) ??
+    openClasses.find((c) => c.checkin_allowed !== false && !myStatusOf(c));
+  if (openUnrecorded) {
+    const closes = formatClock(openUnrecorded.checkin_window?.closes_at);
+    const lateAfter = parseServerTime(openUnrecorded.checkin_window?.late_after);
+    const lateNote = lateAfter && lateAfter.getTime() <= now ? ' You will be marked late.' : '';
     return {
       allowed: true,
-      reason: "✅ Face verification available - Time restrictions disabled",
-      currentPeriod: mockPeriod
+      reason: `Check-in is open for ${openUnrecorded.subject_name}${closes ? ` until ${closes}` : ''}.${lateNote}`,
+      currentPeriod: toPeriod(openUnrecorded),
+      openClass: openUnrecorded,
     };
   }
 
-  // Legacy development overrides (kept for reference but not needed)
-  const isOverrideEnabled = isDevelopmentOverrideEnabled();
-  if (isOverrideEnabled || DEVELOPMENT_MODE || FORCE_DEVELOPMENT_OVERRIDE) {
-    const mockPeriod: ClassPeriod = {
-      id: 'dev-period',
-      name: 'Development Period',
-      startTime: '00:00',
-      endTime: '23:59'
-    };
-    
-    let reasonText = "🔧 DEVELOPMENT MODE: All restrictions bypassed for testing";
-    if (isOverrideEnabled) {
-      reasonText = "🔧 DEVELOPMENT OVERRIDE: All restrictions bypassed (toggle active)";
-    } else if (FORCE_DEVELOPMENT_OVERRIDE) {
-      reasonText = "🔧 FORCE OVERRIDE: All restrictions bypassed for immediate testing";
-    }
-    
-    return {
-      allowed: true,
-      reason: reasonText,
-      currentPeriod: mockPeriod,
-    };
-  }
+  const upcoming = live
+    .filter((c) => c.checkin_window?.state === 'not_open')
+    .sort((a, b) => (a.checkin_window?.opens_at ?? '').localeCompare(b.checkin_window?.opens_at ?? ''));
+  const next = upcoming[0];
+  const nextOpens = parseServerTime(next?.checkin_window?.opens_at);
+  const timeUntilNext = nextOpens ? formatDuration(nextOpens.getTime() - now) : undefined;
 
-  // First check if we're within school hours
-  if (!isWithinSchoolHours(config)) {
-    const schoolStart = config.schoolHours.startTime;
-    const schoolEnd = config.schoolHours.endTime;
+  if (openClasses.length > 0) {
+    const recorded = openClasses[0];
+    const status = myStatusOf(recorded);
     return {
       allowed: false,
-      reason: `Face verification is only available during school hours (${schoolStart} - ${schoolEnd})`,
+      reason: `Your attendance for ${recorded.subject_name} is already recorded${status ? ` as ${status}` : ''}.`,
+      currentPeriod: toPeriod(recorded),
+      nextPeriod: next ? toPeriod(next) : undefined,
+      timeUntilNext,
     };
   }
 
-  // Check if we're within an active period
-  const currentPeriod = getCurrentActivePeriod(config);
-  if (!currentPeriod) {
-    const nextPeriod = getNextPeriod(config);
-    const timeUntilNext = nextPeriod ? calculateTimeUntil(nextPeriod.startTime) : null;
-    
+  if (next) {
+    const opens = formatClock(next.checkin_window?.opens_at);
     return {
       allowed: false,
-      reason: "No class period is currently active",
-      nextPeriod,
-      timeUntilNext: timeUntilNext || undefined,
+      reason: `Check-in for ${next.subject_name} opens${opens ? ` at ${opens}` : ' shortly'}.`,
+      currentPeriod: null,
+      nextPeriod: toPeriod(next),
+      timeUntilNext,
     };
   }
 
-  // Check if already verified for this period
-  if (hasVerifiedThisPeriod) {
-    const nextPeriod = getNextPeriod(config);
-    const timeUntilNext = nextPeriod ? calculateTimeUntil(nextPeriod.startTime) : null;
-    
+  if (live.length > 0 && live.every((c) => !c.checkin_window)) {
     return {
       allowed: false,
-      reason: `Already verified for ${currentPeriod.name}. Wait for the next period.`,
-      currentPeriod,
-      nextPeriod,
-      timeUntilNext: timeUntilNext || undefined,
+      reason: 'The server did not report a check-in window for your classes — check-in is closed.',
+      currentPeriod: null,
     };
   }
 
-  // All checks passed - verification is allowed
   return {
-    allowed: true,
-    reason: `Face verification available for ${currentPeriod.name}`,
-    currentPeriod,
+    allowed: false,
+    reason: live.length === 0 ? "All of today's classes are cancelled." : "Check-in windows for today's classes are closed.",
+    currentPeriod: null,
   };
 };
 
-/**
- * Calculate time until a specific time (HH:MM)
- */
-export const calculateTimeUntil = (targetTime: string): string => {
-  const currentMinutes = getCurrentTimeInMinutes();
-  const targetMinutes = timeToMinutes(targetTime);
-  
-  let diffMinutes = targetMinutes - currentMinutes;
-  
-  // If target is tomorrow (past midnight)
-  if (diffMinutes < 0) {
-    diffMinutes += 24 * 60;
-  }
-  
-  const hours = Math.floor(diffMinutes / 60);
-  const minutes = diffMinutes % 60;
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  } else {
-    return `${minutes}m`;
-  }
+/** Human countdown until a window closes, from the server `closes_at`. */
+export const getTimeRemainingInWindow = (closesAt?: string | null, now: number = Date.now()): string => {
+  const closes = parseServerTime(closesAt);
+  if (!closes) return '';
+  const ms = closes.getTime() - now;
+  return ms <= 0 ? 'Window closed' : `${formatDuration(ms)} left to check in`;
 };
 
-/**
- * Format time string for display (convert 24h to 12h format)
- */
-export const formatTimeForDisplay = (timeStr: string): string => {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  const hour12 = hours % 12 || 12;
-  return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+/** Friendly text for every face check-in rejection (docs/system/face-verification.md §7). */
+const REJECTION_MESSAGES: Record<CheckinRejectionCode, string> = {
+  already_recorded: 'Your attendance for this class is already recorded.',
+  window_closed: 'The check-in window for this class is closed.',
+  not_enrolled: "You're not enrolled in this class, so you can't check in.",
+  session_cancelled: 'This class has been cancelled — no check-in needed.',
+  no_session_today: 'There is no class session to check in to right now.',
+  between_terms: 'The institution is between terms — check-in is closed.',
+  face_mismatch: "We couldn't match your face to your registered profile. Face the camera in good light and try again.",
+  no_face_detected: "We couldn't see a face. Centre your face in the oval and try again.",
+  subject_not_found: "This class couldn't be found. Refresh the page and try again.",
+  too_many_attempts: 'Too many unsuccessful attempts. Face check-in is paused for a few minutes.',
+  no_registered_face: "You haven't registered your face yet. Register it first, then check in.",
+  presence_code_required: 'Enter the 6-digit check-in code shown in class.',
+  presence_code_invalid:
+    "That check-in code didn't work. The code changes regularly — enter the one currently shown in class.",
+  challenge_required: 'Your check-in attempt expired. Please try again.',
+  challenge_invalid: 'Your check-in attempt expired or was already used. Please try again.',
+  invalid_frames: "The camera didn't capture the right photos. Please try again.",
+  multiple_faces: 'More than one face was in view. Make sure only you are in the frame.',
+  low_quality: "The photos weren't clear enough to check you in.",
+  liveness_failed: "We didn't see your head turn. When the arrow appears, turn your head that way.",
+  turned_too_far: 'You turned your head too far. Turn it about halfway (not to the side profile) and try again.',
+  spoof_suspected: "We couldn't verify a live face. Make sure you're in good light and not using a photo or screen.",
+  liveness_unavailable: 'Face check-in is temporarily unavailable. Please tell your teacher or an administrator.',
 };
 
-/**
- * Generate a unique period key for tracking verifications
- * Format: YYYY-MM-DD-PERIOD_ID
- */
-export const generatePeriodKey = (period: ClassPeriod, date?: Date): string => {
-  const targetDate = date || new Date();
-  const dateStr = targetDate.toISOString().split('T')[0];
-  return `${dateStr}-${period.id}`;
-};
-
-/**
- * Check if user has already verified for a specific period today
- */
-export const hasVerifiedForPeriod = (
-  periodKey: string,
-  verificationHistory: string[]
-): boolean => {
-  return verificationHistory.includes(periodKey);
-};
-
-/**
- * Get time remaining in current period
- */
-export const getTimeRemainingInPeriod = (period: ClassPeriod): string => {
-  const currentMinutes = getCurrentTimeInMinutes();
-  const periodEnd = timeToMinutes(period.endTime);
-  const remainingMinutes = periodEnd - currentMinutes;
-  
-  if (remainingMinutes <= 0) {
-    return "Period ended";
+/** Friendly text for a server check-in rejection (`code` from mark-attendance). */
+export const checkinRejectionMessage = (
+  code?: string | null,
+  serverMessage?: string | null,
+  currentStatus?: RecordStatus | null
+): string => {
+  if (code === 'already_recorded' && currentStatus) {
+    return `Your attendance for this class is already recorded as ${currentStatus}.`;
   }
-  
-  const hours = Math.floor(remainingMinutes / 60);
-  const minutes = remainingMinutes % 60;
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m remaining`;
-  } else {
-    return `${minutes}m remaining`;
+  if (code && code in REJECTION_MESSAGES) return REJECTION_MESSAGES[code as CheckinRejectionCode];
+  return serverMessage || 'Attendance could not be recorded.';
+};
+
+/** Rejections the student can fix by simply trying again (a new challenge is fetched). */
+const RETRYABLE_CHECKIN_CODES: ReadonlySet<string> = new Set([
+  'face_mismatch',
+  'no_face_detected',
+  'multiple_faces',
+  'low_quality',
+  'liveness_failed',
+  'turned_too_far',
+  'spoof_suspected',
+  'challenge_required',
+  'challenge_invalid',
+  'invalid_frames',
+  'presence_code_required',
+  'presence_code_invalid',
+]);
+
+export const isRetryableCheckinCode = (code?: string | null): boolean => !!code && RETRYABLE_CHECKIN_CODES.has(code);
+
+/**
+ * Actionable hints for per-frame quality problems (check-in `quality_issues`, enrolment
+ * `image_results[].issues`). Unknown codes are skipped.
+ */
+export const FACE_QUALITY_HINTS: Record<string, string> = {
+  too_dark: 'Move to a brighter spot or face a light source.',
+  too_bright: 'Move out of direct light so your face isn’t washed out.',
+  too_blurry: 'Hold still while the photos are taken.',
+  too_small: 'Move closer to the camera.',
+  low_confidence: 'Face the camera with your whole face visible (no sunglasses, mask or hat).',
+  not_frontal: 'Face the camera directly for the first photos.',
+  no_face: 'Keep your face inside the oval.',
+  invalid_image: "A photo couldn't be read. Please try again.",
+  multiple_faces: 'Make sure only your face is in view.',
+  turned_too_far: 'You turned too far. Turn your head about halfway, not all the way to the side.',
+};
+
+export const faceQualityHints = (issues?: readonly string[] | null): string[] => {
+  const seen = new Set<string>();
+  const hints: string[] = [];
+  for (const issue of issues ?? []) {
+    const hint = FACE_QUALITY_HINTS[issue];
+    if (hint && !seen.has(hint)) {
+      seen.add(hint);
+      hints.push(hint);
+    }
   }
+  return hints;
+};
+
+/** "4:05" / "45 s" countdown text. */
+export const formatRetryCountdown = (seconds: number): string => {
+  const s = Math.max(0, Math.ceil(seconds));
+  if (s < 60) return `${s} s`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };

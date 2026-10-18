@@ -24,7 +24,12 @@ class HolidayType(enum.Enum):
     FULL_DAY = "full_day"
     HALF_DAY = "half_day"
 
-class AttendanceStatus(enum.Enum):
+class EventAttendanceStatus(enum.Enum):
+    """Status for event/session attendance (DB enum type ``attendancestatus``, stores NAMES).
+
+    Renamed from ``AttendanceStatus`` to avoid colliding with ``app.models.AttendanceStatus``
+    (class attendance). Note: the live DB type has no CANCELLED label.
+    """
     PRESENT = "present"
     ABSENT = "absent"
     PENDING = "pending"
@@ -127,7 +132,7 @@ class SessionAttendance(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     
     # Attendance information
-    status = Column(SQLEnum(AttendanceStatus), default=AttendanceStatus.PENDING)
+    status = Column(SQLEnum(EventAttendanceStatus, name="attendancestatus"), default=EventAttendanceStatus.PENDING)
     marked_at = Column(DateTime, nullable=True)
     marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     
@@ -153,7 +158,7 @@ class EventAttendance(Base):
     student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     
     # Attendance information
-    status = Column(SQLEnum(AttendanceStatus), default=AttendanceStatus.PENDING)
+    status = Column(SQLEnum(EventAttendanceStatus, name="attendancestatus"), default=EventAttendanceStatus.PENDING)
     marked_at = Column(DateTime, nullable=True)
     marked_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     
@@ -247,7 +252,7 @@ class SemesterConfiguration(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Period identification
-    semester_number = Column(Integer, nullable=True)   # Optional: Reference semester (e.g., 5 for "typical 3rd year Fall")
+    semester_number = Column(Integer, nullable=False)  # Reference semester (NOT NULL in DB) (e.g., 5 for "typical 3rd year Fall")
     academic_year = Column(Integer, nullable=False)    # Academic year (e.g., 2025)
     semester_name = Column(String(100), nullable=False)  # Period name (e.g., "Fall 2025 Academic Period")
     

@@ -9,16 +9,16 @@ interface StatsCardProps {
 
 const StatsCard = ({ title, stat, description, icon }: StatsCardProps) => {
   return (
-    <div className="bg-card rounded-lg shadow-sm px-6 py-5 border border-border">
-      <div className="flex items-center">
-        <div className="flex-shrink-0 h-10 w-10 rounded-md bg-primary text-primary-foreground flex items-center justify-center">
+    <div className="rounded-lg bg-surface-default px-5 py-4 shadow">
+      <div className="flex items-start gap-3">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground [&_svg]:h-5 [&_svg]:w-5">
           {icon}
         </div>
-        <div className="ml-4">
-          <h3 className="text-sm font-medium text-card-foreground">{title}</h3>
-          <div className="flex items-baseline">
-            <p className="text-2xl font-semibold text-card-foreground">{stat}</p>
-            <p className="ml-2 text-xs text-muted-foreground">{description}</p>
+        <div className="min-w-0">
+          <h3 className="truncate text-caption text-text-muted">{title}</h3>
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{stat}</p>
+            <p className="text-caption text-text-muted">{description}</p>
           </div>
         </div>
       </div>

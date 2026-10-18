@@ -8,22 +8,18 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Loader2, 
-  User, 
-  Mail, 
-  IdCard, 
-  GraduationCap, 
-  Calendar, 
-  Phone, 
-  Shield, 
-  Lock,
-  Users,
-  BookOpen,
-  Hash
-} from 'lucide-react';
+import {
+  Person20Regular,
+  HatGraduation20Regular,
+  Call20Regular,
+  LockClosed20Regular,
+  Save20Regular,
+  ArrowReset20Regular,
+  PersonAdd20Regular,
+} from '@fluentui/react-icons';
 import { api } from '@/integrations/api/client';
 import type { Faculty } from '@/integrations/api/types';
+import { cn } from '@/lib/utils';
 
 interface StudentFormProps {
   onSubmit: (data: StudentFormData) => void;
@@ -45,6 +41,69 @@ export interface StudentFormData {
   password?: string;
   confirmPassword?: string;
 }
+
+// Fluent-style native dropdown to match ui/input
+const selectClass =
+  'flex h-9 w-full rounded-md border border-border-default border-b-border-strong bg-surface-default px-3 text-body text-text-primary transition-colors duration-150 ease-fluent-standard hover:border-border-strong focus:border-b-brand focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
+
+const readOnlyClass = 'bg-surface-subtle text-text-secondary cursor-not-allowed';
+
+type FieldProps = {
+  id: string;
+  label: string;
+  required?: boolean;
+  hint?: React.ReactNode;
+  error?: string;
+  adornment?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+};
+
+const Field = ({ id, label, required, hint, error, adornment, className, children }: FieldProps) => (
+  <div className={cn('space-y-1.5', className)}>
+    <div className="flex items-center justify-between gap-2">
+      <Label htmlFor={id} className="text-body-strong font-semibold text-text-primary">
+        {label}
+        {required && <span className="ml-0.5 text-status-error" aria-hidden>*</span>}
+      </Label>
+      {adornment}
+    </div>
+    {children}
+    {error ? (
+      <p role="alert" className="text-caption text-status-error">{error}</p>
+    ) : hint ? (
+      <p className="text-caption text-text-muted">{hint}</p>
+    ) : null}
+  </div>
+);
+
+type SectionProps = {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  optional?: boolean;
+  children: React.ReactNode;
+};
+
+const FormSection = ({ icon, title, description, optional, children }: SectionProps) => (
+  <section className="grid gap-4 py-6 first:pt-0 last:pb-0 lg:grid-cols-[220px_1fr] lg:gap-8">
+    <div className="flex items-start gap-3">
+      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-surface-subtle text-text-secondary">
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-subheading text-text-primary">{title}</h3>
+          <Badge variant={optional ? 'outline' : 'secondary'} shape="pill" className="font-normal">
+            {optional ? 'Optional' : 'Required'}
+          </Badge>
+        </div>
+        <p className="mt-0.5 text-caption text-text-muted">{description}</p>
+      </div>
+    </div>
+    <div className="min-w-0 space-y-4">{children}</div>
+  </section>
+);
 
 const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormProps) => {
   const { register, handleSubmit, formState: { errors }, reset, watch, setValue } = useForm<StudentFormData>({
@@ -104,165 +163,118 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
 
   return (
     <div className="w-full">
-      <div className="max-w-5xl mx-auto">
-        <Card className="border border-slate-200/80 dark:border-slate-700/50 shadow-sm bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm overflow-hidden">
-          <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-gradient-to-r from-slate-50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-900/50 px-8 py-6">
-            <div className="flex items-start gap-4">
-              <div className="p-3 bg-blue-500/10 dark:bg-blue-500/20 rounded-xl border border-blue-500/20 transition-all duration-300 hover:scale-105 hover:bg-blue-500/15">
-                <User className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div className="flex-1">
-                <CardTitle className="text-2xl font-semibold text-slate-900 dark:text-slate-50 tracking-tight">
-                  {initialData ? 'Edit Student Profile' : 'Add New Student'}
-                </CardTitle>
-                <CardDescription className="text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
-                  {initialData 
-                    ? 'Update student information and academic details.' 
-                    : 'Fill in the required information to create a new student profile.'}
-                </CardDescription>
-              </div>
+      <div className="mx-auto max-w-5xl">
+        <Card className="overflow-hidden border-0 bg-surface-default shadow">
+          <CardHeader className="flex-row items-center gap-3 space-y-0 border-b border-border-subtle px-6 py-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              {initialData ? <Person20Regular aria-hidden /> : <PersonAdd20Regular aria-hidden />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-section-title text-text-primary">
+                {initialData ? 'Edit Student Profile' : 'Add New Student'}
+              </CardTitle>
+              <CardDescription className="mt-0.5 text-body text-text-muted">
+                {initialData
+                  ? 'Update student information and academic details.'
+                  : 'Fill in the required information to create a new student profile.'}
+              </CardDescription>
             </div>
           </CardHeader>
-          
+
           <form onSubmit={handleSubmit(handleFormSubmit)}>
-            <CardContent className="px-8 py-6 space-y-8">
-              
+            <CardContent className="divide-y divide-border-subtle px-6 py-6">
+
               {/* Personal Information Section */}
-              <div className="space-y-5">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                  <div className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">
-                    <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Personal Information</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Basic student details</p>
-                  </div>
-                  <Badge variant="secondary" className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-0 text-xs font-medium">Required</Badge>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2 group">
-                    <Label htmlFor="full_name" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <User className="h-3.5 w-3.5 text-slate-400" />
-                      Full Name
-                    </Label>
-                    <Input 
-                      id="full_name" 
-                      {...register('full_name', { required: "Full name is required" })} 
-                      placeholder="e.g. John Doe" 
+              <FormSection
+                icon={<Person20Regular aria-hidden />}
+                title="Personal Information"
+                description="Basic student details"
+              >
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field id="full_name" label="Full Name" required error={errors.full_name?.message}>
+                    <Input
+                      id="full_name"
+                      {...register('full_name', { required: "Full name is required" })}
+                      placeholder="e.g. John Doe"
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                      aria-invalid={!!errors.full_name}
                     />
-                    {errors.full_name && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.full_name.message}
-                    </span>}
-                  </div>
-                  
-                  <div className="space-y-2 group">
-                    <Label htmlFor="email" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Mail className="h-3.5 w-3.5 text-slate-400" />
-                      Email Address
-                    </Label>
-                    <Input 
-                      id="email" 
-                      type="email" 
-                      {...register('email', { 
+                  </Field>
+
+                  <Field id="email" label="Email Address" required error={errors.email?.message}>
+                    <Input
+                      id="email"
+                      type="email"
+                      {...register('email', {
                         required: "Email is required",
                         pattern: {
                           value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
                           message: "Invalid email address"
                         }
-                      })} 
-                      placeholder="e.g. john.doe@college.edu" 
+                      })}
+                      placeholder="e.g. john.doe@college.edu"
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                      aria-invalid={!!errors.email}
                     />
-                    {errors.email && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.email.message}
-                    </span>}
-                  </div>
+                  </Field>
                 </div>
-              </div>
+              </FormSection>
 
               {/* Academic Information Section */}
-              <div className="space-y-5">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                  <div className="p-2 bg-purple-50 dark:bg-purple-900/30 rounded-lg">
-                    <GraduationCap className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Academic Information</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Student ID and enrollment details</p>
-                  </div>
-                  <Badge variant="secondary" className="bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-0 text-xs font-medium">Required</Badge>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="student_id" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <IdCard className="h-3.5 w-3.5 text-slate-400" />
-                      Student ID
-                      {!initialData && (
-                        <Badge variant="outline" className="ml-auto border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs font-medium">
+              <FormSection
+                icon={<HatGraduation20Regular aria-hidden />}
+                title="Academic Information"
+                description="Student ID and enrollment details"
+              >
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field
+                    id="student_id"
+                    label="Student ID"
+                    error={errors.student_id?.message}
+                    adornment={
+                      !initialData ? (
+                        <Badge variant="info" shape="pill" className="font-normal">
                           Auto-generated
                         </Badge>
-                      )}
-                    </Label>
+                      ) : undefined
+                    }
+                    hint={
+                      !initialData
+                        ? previewStudentId
+                          ? 'Preview ID format (XXX will be replaced with sequence number)'
+                          : 'Select faculty and batch year to see ID preview'
+                        : undefined
+                    }
+                  >
                     <div className="relative">
-                      <Input 
-                        id="student_id" 
-                        {...register('student_id')} 
+                      <Input
+                        id="student_id"
+                        {...register('student_id')}
                         value={initialData?.student_id || previewStudentId}
                         placeholder={initialData ? "e.g. CSCI2025001" : "Select faculty to preview ID..."}
                         readOnly
                         disabled={isLoading}
-                        className="h-11 border-slate-200 dark:border-slate-700 transition-colors duration-200 bg-slate-100/50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 placeholder:text-slate-400 dark:placeholder:text-slate-500 cursor-not-allowed font-mono font-semibold text-base tracking-wide"
+                        className={cn(readOnlyClass, 'font-mono tracking-wide')}
                       />
                       {!initialData && previewStudentId && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                          <div className="flex gap-0.5">
-                            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></span>
-                            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></span>
-                            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></span>
-                          </div>
-                          <span className="text-xs text-purple-600 dark:text-purple-400 font-medium">Preview</span>
-                        </div>
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm bg-brand-subtle px-1.5 py-0.5 text-overline text-brand-foreground">
+                          Preview
+                        </span>
                       )}
                     </div>
-                    {!initialData && previewStudentId && (
-                      <p className="text-xs text-purple-600 dark:text-purple-400 flex items-center gap-1.5 mt-1 font-medium">
-                        <span className="w-1 h-1 bg-purple-500 rounded-full animate-pulse"></span>
-                        Preview ID format (XXX will be replaced with sequence number)
-                      </p>
-                    )}
-                    {!initialData && !previewStudentId && (
-                      <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-1">
-                        <span className="w-1 h-1 bg-slate-400 rounded-full"></span>
-                        Select faculty and batch year to see ID preview
-                      </p>
-                    )}
-                    {errors.student_id && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.student_id.message}
-                    </span>}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="faculty_id" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <GraduationCap className="h-3.5 w-3.5 text-slate-400" />
-                      Faculty
-                    </Label>
-                    <select 
-                      id="faculty_id" 
-                      {...register('faculty_id', { 
+                  </Field>
+
+                  <Field id="faculty_id" label="Faculty" required error={errors.faculty_id?.message}>
+                    <select
+                      id="faculty_id"
+                      {...register('faculty_id', {
                         required: "Faculty is required",
                         valueAsNumber: true,
                         validate: value => value > 0 || "Please select a faculty"
-                      })} 
-                      className="flex h-11 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-500/20 transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      })}
+                      className={selectClass}
                       disabled={isLoading}
+                      aria-invalid={!!errors.faculty_id}
                     >
                       <option value="">Select Faculty</option>
                       {faculties.map((faculty: { id: number; name: string }) => (
@@ -271,25 +283,17 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
                         </option>
                       ))}
                     </select>
-                    {errors.faculty_id && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.faculty_id.message}
-                    </span>}
-                  </div>
+                  </Field>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="semester" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <BookOpen className="h-3.5 w-3.5 text-slate-400" />
-                      Semester
-                    </Label>
-                    <Input 
-                      id="semester" 
-                      type="number" 
-                      min="1" 
-                      max="8" 
-                      {...register('semester', { 
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <Field id="semester" label="Semester" required error={errors.semester?.message}>
+                    <Input
+                      id="semester"
+                      type="number"
+                      min="1"
+                      max="8"
+                      {...register('semester', {
                         required: "Semester is required",
                         valueAsNumber: true,
                         min: {
@@ -300,28 +304,20 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
                           value: 8,
                           message: "Semester cannot be more than 8"
                         }
-                      })} 
-                      placeholder="1" 
+                      })}
+                      placeholder="1"
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                      aria-invalid={!!errors.semester}
                     />
-                    {errors.semester && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.semester.message}
-                    </span>}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="year" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                      Academic Year
-                    </Label>
-                    <Input 
-                      id="year" 
-                      type="number" 
-                      min="1" 
-                      max="4" 
-                      {...register('year', { 
+                  </Field>
+
+                  <Field id="year" label="Academic Year" hint="Set automatically from semester" error={errors.year?.message}>
+                    <Input
+                      id="year"
+                      type="number"
+                      min="1"
+                      max="4"
+                      {...register('year', {
                         required: "Academic year is required",
                         valueAsNumber: true,
                         min: {
@@ -332,29 +328,21 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
                           value: 4,
                           message: "Year cannot be more than 4"
                         }
-                      })} 
-                      placeholder="1" 
+                      })}
+                      placeholder="1"
                       readOnly
                       disabled={isLoading}
-                      className="h-11 bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400"
+                      className={readOnlyClass}
                     />
-                    {errors.year && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.year.message}
-                    </span>}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="batch" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Users className="h-3.5 w-3.5 text-slate-400" />
-                      Batch Year
-                    </Label>
-                    <Input 
-                      id="batch" 
-                      type="number" 
-                      min="2020" 
+                  </Field>
+
+                  <Field id="batch" label="Batch Year" required error={errors.batch?.message}>
+                    <Input
+                      id="batch"
+                      type="number"
+                      min="2020"
                       max={new Date().getFullYear() + 1}
-                      {...register('batch', { 
+                      {...register('batch', {
                         required: "Batch year is required",
                         valueAsNumber: true,
                         min: {
@@ -365,167 +353,120 @@ const StudentForm = ({ onSubmit, initialData, isLoading = false }: StudentFormPr
                           value: new Date().getFullYear() + 1,
                           message: `Batch year cannot be more than ${new Date().getFullYear() + 1}`
                         }
-                      })} 
+                      })}
                       placeholder={new Date().getFullYear().toString()}
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-purple-500 dark:focus:border-purple-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                      aria-invalid={!!errors.batch}
                     />
-                    {errors.batch && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.batch.message}
-                    </span>}
-                  </div>
+                  </Field>
                 </div>
-              </div>
+              </FormSection>
 
               {/* Contact Information Section */}
-              <div className="space-y-5">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                  <div className="p-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-                    <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Contact Information</h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Phone numbers for communication</p>
-                  </div>
-                  <Badge variant="outline" className="border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-medium">Optional</Badge>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="phone_number" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Phone className="h-3.5 w-3.5 text-slate-400" />
-                      Phone Number
-                    </Label>
-                    <Input 
-                      id="phone_number" 
+              <FormSection
+                icon={<Call20Regular aria-hidden />}
+                title="Contact Information"
+                description="Phone numbers for communication"
+                optional
+              >
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <Field id="phone_number" label="Phone Number" error={errors.phone_number?.message}>
+                    <Input
+                      id="phone_number"
                       type="tel"
-                      {...register('phone_number')} 
-                      placeholder="e.g. +977-9812345678" 
+                      {...register('phone_number')}
+                      placeholder="e.g. +977-9812345678"
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 transition-colors duration-200 bg-white dark:bg-slate-800"
                     />
-                    {errors.phone_number && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.phone_number.message}
-                    </span>}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="emergency_contact" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Shield className="h-3.5 w-3.5 text-slate-400" />
-                      Emergency Contact
-                    </Label>
-                    <Input 
-                      id="emergency_contact" 
+                  </Field>
+
+                  <Field id="emergency_contact" label="Emergency Contact" error={errors.emergency_contact?.message}>
+                    <Input
+                      id="emergency_contact"
                       type="tel"
-                      {...register('emergency_contact')} 
-                      placeholder="e.g. +977-9887654321" 
+                      {...register('emergency_contact')}
+                      placeholder="e.g. +977-9887654321"
                       disabled={isLoading}
-                      className="h-11 border-slate-200 dark:border-slate-700 focus:border-emerald-500 dark:focus:border-emerald-400 transition-colors duration-200 bg-white dark:bg-slate-800"
                     />
-                    {errors.emergency_contact && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                      <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                      {errors.emergency_contact.message}
-                    </span>}
-                  </div>
+                  </Field>
                 </div>
-              </div>
-              
+              </FormSection>
+
               {/* Security Section - Password fields only shown when creating a new student */}
               {!initialData && (
-                <div className="space-y-5">
-                  <div className="flex items-center gap-3 pb-3 border-b border-slate-200/60 dark:border-slate-700/60">
-                    <div className="p-2 bg-rose-50 dark:bg-rose-900/30 rounded-lg">
-                      <Lock className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-base font-semibold text-slate-900 dark:text-slate-50">Security</h3>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Account password credentials</p>
-                    </div>
-                    <Badge variant="secondary" className="bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border-0 text-xs font-medium">Required</Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5 text-slate-400" />
-                        Password
-                      </Label>
-                      <PasswordInput 
-                        id="password" 
-                        {...register('password', { 
+                <FormSection
+                  icon={<LockClosed20Regular aria-hidden />}
+                  title="Security"
+                  description="Account password credentials"
+                >
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field
+                      id="password"
+                      label="Password"
+                      required
+                      hint="At least 8 characters"
+                      error={errors.password?.message}
+                    >
+                      <PasswordInput
+                        id="password"
+                        {...register('password', {
                           required: initialData ? false : "Password is required",
                           minLength: {
                             value: 8,
                             message: "Password must be at least 8 characters"
                           }
-                        })} 
-                        placeholder="••••••••" 
+                        })}
+                        placeholder="••••••••"
                         disabled={isLoading}
-                        className="h-11 border-slate-200 dark:border-slate-700 focus:border-rose-500 dark:focus:border-rose-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                        aria-invalid={!!errors.password}
                       />
-                      {errors.password && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                        <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                        {errors.password.message}
-                      </span>}
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmPassword" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5 text-slate-400" />
-                        Confirm Password
-                      </Label>
-                      <PasswordInput 
-                        id="confirmPassword" 
-                        {...register('confirmPassword', { 
+                    </Field>
+
+                    <Field id="confirmPassword" label="Confirm Password" required error={errors.confirmPassword?.message}>
+                      <PasswordInput
+                        id="confirmPassword"
+                        {...register('confirmPassword', {
                           required: initialData ? false : "Please confirm password",
-                          validate: (value, formValues) => 
+                          validate: (value, formValues) =>
                             value === formValues.password || "Passwords do not match"
-                        })} 
-                        placeholder="••••••••" 
+                        })}
+                        placeholder="••••••••"
                         disabled={isLoading}
-                        className="h-11 border-slate-200 dark:border-slate-700 focus:border-rose-500 dark:focus:border-rose-400 transition-colors duration-200 bg-white dark:bg-slate-800"
+                        aria-invalid={!!errors.confirmPassword}
                       />
-                      {errors.confirmPassword && <span className="text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5 mt-1">
-                        <span className="w-1 h-1 bg-red-600 dark:bg-red-400 rounded-full"></span>
-                        {errors.confirmPassword.message}
-                      </span>}
-                    </div>
+                    </Field>
                   </div>
-                </div>
+                </FormSection>
               )}
             </CardContent>
-            
-            <CardFooter className="bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-200/60 dark:border-slate-700/60 px-8 py-5">
-              <div className="flex justify-between items-center w-full">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  onClick={() => reset()} 
-                  disabled={isLoading}
-                  className="px-5 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors duration-200"
-                >
-                  Reset Form
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isLoading}
-                  className="px-8 bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {initialData ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                    <>
-                      <User className="mr-2 h-4 w-4" />
-                      {initialData ? 'Update Student' : 'Create Student'}
-                    </>
-                  )}
-                </Button>
-              </div>
+
+            <CardFooter className="justify-end gap-2 border-t border-border-subtle bg-surface-subtle px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => reset()}
+                disabled={isLoading}
+              >
+                <ArrowReset20Regular aria-hidden />
+                Reset Form
+              </Button>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="min-w-[140px]"
+              >
+                {isLoading ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+                    {initialData ? 'Updating...' : 'Creating...'}
+                  </>
+                ) : (
+                  <>
+                    <Save20Regular aria-hidden />
+                    {initialData ? 'Update Student' : 'Create Student'}
+                  </>
+                )}
+              </Button>
             </CardFooter>
           </form>
         </Card>

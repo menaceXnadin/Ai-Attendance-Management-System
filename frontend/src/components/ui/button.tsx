@@ -4,29 +4,60 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Fluent 2 (Microsoft Teams) button.
+ *
+ * Variants
+ *  - default      brand filled (Fluent "primary")
+ *  - outline      neutral bordered (Fluent default / "secondary" button)
+ *  - secondary    neutral filled on a subtle surface
+ *  - ghost        transparent, neutral hover, primary text
+ *  - subtle       transparent, neutral hover, secondary text (Fluent "subtle")
+ *  - destructive  filled danger
+ *  - link         brand text link
+ *
+ * Icons inside are 16px (20px for `lg` / `icon`) unless the icon carries its
+ * own `size-*` class.
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  [
+    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent",
+    "text-body font-semibold select-none",
+    "transition-colors duration-150 ease-fluent-standard",
+    "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary",
+    "disabled:pointer-events-none disabled:cursor-not-allowed",
+    "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  ].join(" "),
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-action-primary-hover shadow-none",
+        default:
+          "bg-brand text-brand-on hover:bg-brand-hover active:bg-brand-pressed disabled:bg-surface-subtle disabled:text-text-disabled disabled:border-border-subtle",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-none",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 active:bg-destructive/80 disabled:bg-surface-subtle disabled:text-text-disabled disabled:border-border-subtle",
         outline:
-          "border border-border bg-surface-default hover:bg-surface-subtle text-text-primary shadow-none",
+          "bg-surface-default border-border-default text-text-primary hover:bg-surface-hover active:bg-surface-pressed disabled:bg-surface-subtle disabled:text-text-disabled disabled:border-border-subtle",
         secondary:
-          "bg-surface-subtle text-text-primary hover:bg-border-subtle border border-border-subtle shadow-none",
-        ghost: "hover:bg-surface-subtle text-text-primary hover:text-text-primary",
-        link: "text-primary underline-offset-4 hover:underline",
+          "bg-surface-subtle border-border-subtle text-text-primary hover:bg-surface-hover active:bg-surface-pressed disabled:bg-surface-subtle disabled:text-text-disabled",
+        ghost:
+          "bg-transparent text-text-primary hover:bg-surface-hover active:bg-surface-pressed disabled:bg-transparent disabled:text-text-disabled",
+        subtle:
+          "bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary active:bg-surface-pressed disabled:bg-transparent disabled:text-text-disabled",
+        link:
+          "border-0 bg-transparent font-normal text-brand-foreground underline-offset-4 hover:text-brand-foreground-hover hover:underline disabled:text-text-disabled",
       },
       size: {
-        default: "h-9 px-3.5 py-1.5",
-        sm: "h-8 px-2.5 text-xs",
-        lg: "h-10 px-4",
-        icon: "h-9 w-9",
-        "icon-sm": "h-8 w-8",
+        default: "h-8 px-3",
+        sm: "h-7 px-2 text-caption-strong",
+        lg: "h-10 px-4 [&_svg:not([class*='size-'])]:size-5",
+        icon: "h-8 w-8 p-0 [&_svg:not([class*='size-'])]:size-5",
+        "icon-sm": "h-7 w-7 p-0",
       },
     },
+    compoundVariants: [
+      { variant: "link", size: "default", className: "h-auto px-0" },
+      { variant: "link", size: "sm", className: "h-auto px-0" },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

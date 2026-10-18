@@ -4,17 +4,40 @@ Handles teacher registration, profile management, and listing.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete as sa_delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from typing import List
 from app.core.database import get_db
 from app.core.security import get_password_hash
-from app.models import User, Teacher, UserRole, Faculty, ClassSchedule, Subject, Student
+from app.models import User, Teacher, UserRole, Faculty, ClassSchedule, Subject, Student, AttendanceRecord
 from app.schemas import TeacherCreate, Teacher as TeacherSchema, TeacherUpdate, TeacherAssignmentResponse, TeacherAssignmentCreate
 from app.utils.teacher_id_generator import generate_teacher_id
-from app.api.dependencies import get_current_user, require_admin_role
+from app.api.dependencies import get_current_user, require_admin_role, has_role
+from app.api.routes.schedules import find_schedule_conflicts
 
 router = APIRouter(prefix="/teachers", tags=["Teachers"])
+
+
+async def _teacher_schedule_conflict(db: AsyncSession, teacher_id: int, schedule: ClassSchedule):
+    """The first other active timetable row of ``teacher_id`` on the same weekday whose time range
+    overlaps ``schedule`` (Rule §9 teacher double-booking), as a conflict dict from the shared
+    ``schedules.find_schedule_conflicts`` helper, or None. Only active rows count, so an inactive
+    ``schedule`` never conflicts (its re-activation is checked by the schedules routes)."""
+    if schedule.is_active is False:
+        return None
+    conflicts = await find_schedule_conflicts(
+        db,
+        day_of_week=schedule.day_of_week,
+        start_time=schedule.start_time,
+        end_time=schedule.end_time,
+        faculty_id=None,
+        semester=None,
+        classroom=None,
+        teacher_id=teacher_id,
+        exclude_id=schedule.id,
+    )
+    return next((c for c in conflicts if c["type"] == "teacher"), None)
 
 
 @router.post("/", response_model=TeacherSchema, status_code=status.HTTP_201_CREATED)
@@ -148,8 +171,7 @@ async def get_current_teacher(
     """
     Get current teacher's profile.
     """
-    current_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
-    if current_role != "faculty":
+    if not has_role(current_user, "faculty"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a teacher account"
@@ -192,6 +214,22 @@ async def get_teacher(
     return teacher
 
 
+def _apply_teacher_update(teacher: Teacher, teacher_update: TeacherUpdate) -> None:
+    """Copy the sent fields onto the teacher; a new ``name`` also renames the login
+    (``users.full_name``), which is the name the rest of the app shows."""
+    update_data = teacher_update.model_dump(exclude_unset=True)
+    name = update_data.pop("name", None)
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name cannot be empty")
+        teacher.name = name
+        if teacher.user is not None:
+            teacher.user.full_name = name
+    for field, value in update_data.items():
+        setattr(teacher, field, value)
+
+
 @router.put("/me", response_model=TeacherSchema)
 async def update_current_teacher(
     teacher_update: TeacherUpdate,
@@ -201,8 +239,7 @@ async def update_current_teacher(
     """
     Update current teacher's profile.
     """
-    current_role = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
-    if current_role != "faculty":
+    if not has_role(current_user, "faculty"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not a teacher account"
@@ -228,10 +265,7 @@ async def update_current_teacher(
                 detail="Faculty not found"
             )
     
-    # Update fields
-    update_data = teacher_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(teacher, field, value)
+    _apply_teacher_update(teacher, teacher_update)
     
     await db.commit()
     
@@ -274,10 +308,7 @@ async def update_teacher(
                 detail="Faculty not found"
             )
     
-    # Update fields
-    update_data = teacher_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(teacher, field, value)
+    _apply_teacher_update(teacher, teacher_update)
     
     await db.commit()
     
@@ -298,7 +329,11 @@ async def delete_teacher(
 ):
     """
     Delete a teacher account (Admin only).
-    This will cascade delete the teacher profile and associated user.
+
+    If the teacher's user has marked any attendance (attendance_records.marked_by),
+    or is referenced by other records, the account is deactivated
+    (users.is_active = false) instead, so the record of who marked attendance is
+    never lost. Otherwise the teacher profile and user are deleted.
     """
     result = await db.execute(select(Teacher).where(Teacher.id == teacher_id))
     teacher = result.scalar_one_or_none()
@@ -308,14 +343,30 @@ async def delete_teacher(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Teacher not found"
         )
-    
-    # Delete the user (will cascade to teacher profile)
-    user_result = await db.execute(select(User).where(User.id == teacher.user_id))
-    user = user_result.scalar_one_or_none()
-    
-    if user:
-        await db.delete(user)
+
+    user_id = teacher.user_id
+
+    async def _deactivate() -> None:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if user is not None:
+            user.is_active = False
         await db.commit()
+
+    marked = (await db.execute(
+        select(AttendanceRecord.id).where(AttendanceRecord.marked_by == user_id).limit(1)
+    )).scalar_one_or_none()
+    if marked is not None:
+        await _deactivate()
+        return None
+
+    try:
+        # Core DELETEs (no ORM cascades): class_schedules.teacher_id is SET NULL by the DB.
+        await db.execute(sa_delete(Teacher).where(Teacher.id == teacher_id))
+        await db.execute(sa_delete(User).where(User.id == user_id))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        await _deactivate()
     
     return None
 
@@ -457,6 +508,24 @@ async def assign_teacher_to_subject(
             detail=f"This class is already assigned to {teacher_name}. Please unassign them first."
         )
     
+    # Reject a teacher double-booking (Rule §9): another ACTIVE timetable row of this teacher
+    # on the same weekday whose time range overlaps (a.start < b.end and b.start < a.end).
+    # The teacher row is locked so two concurrent assignments for one teacher serialize.
+    await db.execute(select(Teacher.id).where(Teacher.id == teacher_id).with_for_update())
+    conflict = await _teacher_schedule_conflict(db, teacher_id, schedule)
+    if conflict is not None:
+        subject_name = (await db.execute(
+            select(Subject.name).where(Subject.id == conflict["subject_id"])
+        )).scalar() or "another class"
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{teacher.name} already teaches {subject_name} on {schedule.day_of_week.value.capitalize()} "
+                f"{conflict['start_time']}-{conflict['end_time']}, which overlaps "
+                f"this class ({schedule.start_time.strftime('%H:%M')}-{schedule.end_time.strftime('%H:%M')})."
+            ),
+        )
+
     # Assign teacher to schedule
     schedule.teacher_id = teacher_id
     await db.commit()

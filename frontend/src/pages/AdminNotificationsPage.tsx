@@ -2,39 +2,33 @@ import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import AdminNotificationCreator from '@/components/AdminNotificationCreator';
 import EnhancedNotificationSystem from '@/components/EnhancedNotificationSystem';
-import { Send, Bell } from 'lucide-react';
+import { Send20Regular, Alert20Regular } from '@fluentui/react-icons';
 
 const AdminNotificationsPage: React.FC = () => {
   return (
-    <div className="p-6 space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">Notification Management</h1>
-        <p className="text-slate-400">Create and manage notifications for students and faculty</p>
+        <h1 className="text-page-title text-text-primary">Notification Management</h1>
+        <p className="text-body text-text-muted mt-1">Create and manage notifications for students and faculty</p>
       </div>
 
       <Tabs defaultValue="create" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-slate-800/50 border border-slate-700/50">
-          <TabsTrigger 
-            value="create" 
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-400 data-[state=active]:text-white data-[state=inactive]:text-slate-300"
-          >
-            <Send className="h-4 w-4 mr-2" />
+        <TabsList>
+          <TabsTrigger value="create" className="gap-2">
+            <Send20Regular className="shrink-0" aria-hidden />
             Send Notification
           </TabsTrigger>
-          <TabsTrigger 
-            value="view" 
-            className="data-[state=active]:bg-action-primary data-[state=active]:text-white data-[state=inactive]:text-slate-300"
-          >
-            <Bell className="h-4 w-4 mr-2" />
+          <TabsTrigger value="view" className="gap-2">
+            <Alert20Regular className="shrink-0" aria-hidden />
             All Notifications
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="create" className="mt-6">
+        <TabsContent value="create" className="mt-4">
           <AdminNotificationCreator />
         </TabsContent>
 
-        <TabsContent value="view" className="mt-6">
+        <TabsContent value="view" className="mt-4">
           <EnhancedNotificationSystem />
         </TabsContent>
       </Tabs>

@@ -2,7 +2,16 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, RefreshCw, Trash2, Settings, CheckCircle, AlertTriangle } from 'lucide-react';
+import {
+  ArrowSync16Regular,
+  ArrowSync20Regular,
+  CalendarLtr20Regular,
+  CheckmarkCircle12Filled,
+  Clock20Regular,
+  Delete20Regular,
+  Lightbulb20Regular,
+  Warning12Filled
+} from '@fluentui/react-icons';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 
@@ -173,71 +182,70 @@ const CalendarGeneratorControl = () => {
     }
   };
 
+  const statusVariant: 'success' | 'warning' | 'destructive' =
+    status?.status === 'active' ? 'success' : status?.status === 'warning' ? 'warning' : 'destructive';
+
   return (
     <div className="space-y-6">
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-400" />
-            Automatic Calendar Generator
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Automatically generates class events based on your class schedules
-          </CardDescription>
+      <Card className="overflow-hidden border-0 bg-surface-default shadow">
+        <CardHeader className="flex flex-row items-start gap-3 space-y-0 border-b border-border-subtle px-5 py-4">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+            <CalendarLtr20Regular aria-hidden />
+          </div>
+          <div className="min-w-0 space-y-0.5">
+            <CardTitle className="text-subheading text-text-primary">
+              Automatic Calendar Generator
+            </CardTitle>
+            <CardDescription className="text-body text-text-muted">
+              Automatically generates class events based on your class schedules
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-5 p-5">
           {/* Status Section */}
           {status && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <Badge 
-                      className={
-                        status.status === 'active' 
-                          ? 'bg-green-500/20 text-green-300 border-green-400/30'
-                          : status.status === 'warning'
-                          ? 'bg-yellow-500/20 text-yellow-300 border-yellow-400/30'
-                          : 'bg-red-500/20 text-red-300 border-red-400/30'
-                      }
-                    >
-                      {status.status === 'active' ? (
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                      ) : (
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                      )}
-                      {status.status.toUpperCase()}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-slate-300">{status.message}</p>
+              <div className="flex items-center justify-between gap-4 rounded-md border border-border-subtle bg-surface-subtle px-4 py-3">
+                <div className="min-w-0 space-y-1.5">
+                  <Badge variant={statusVariant} shape="pill" className="gap-1 capitalize">
+                    {status.status === 'active' ? (
+                      <CheckmarkCircle12Filled aria-hidden />
+                    ) : (
+                      <Warning12Filled aria-hidden />
+                    )}
+                    {status.status}
+                  </Badge>
+                  <p className="text-body text-text-secondary">{status.message}</p>
                 </div>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
                   onClick={fetchStatus}
-                  className="text-slate-400 hover:text-white"
+                  className="h-8 w-8 shrink-0 text-text-muted"
+                  aria-label="Refresh generator status"
+                  title="Refresh status"
                 >
-                  <RefreshCw className="h-4 w-4" />
+                  <ArrowSync20Regular aria-hidden />
                 </Button>
               </div>
 
               {status.semester && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                    <p className="text-xs text-slate-400 mb-1">Current Semester</p>
-                    <p className="text-lg font-semibold text-white">{status.semester.name}</p>
-                    <p className="text-sm text-slate-400">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="rounded-md border border-border-subtle bg-surface-default p-4">
+                    <p className="text-caption text-text-muted">Current Semester</p>
+                    <p className="mt-0.5 text-subheading text-text-primary">{status.semester.name}</p>
+                    <p className="text-caption tabular-nums text-text-secondary">
                       {new Date(status.semester.start_date).toLocaleDateString()} - {new Date(status.semester.end_date).toLocaleDateString()}
                     </p>
                   </div>
 
                   {status.coverage && (
-                    <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                      <p className="text-xs text-slate-400 mb-1">Upcoming Coverage</p>
-                      <p className="text-lg font-semibold text-white">
+                    <div className="rounded-md border border-border-subtle bg-surface-default p-4">
+                      <p className="text-caption text-text-muted">Upcoming Coverage</p>
+                      <p className="mt-0.5 text-subheading tabular-nums text-text-primary">
                         {status.coverage.events_next_30_days} events
                       </p>
-                      <p className="text-sm text-slate-400">
+                      <p className="text-caption text-text-secondary">
                         {status.coverage.recommendation}
                       </p>
                     </div>
@@ -249,36 +257,44 @@ const CalendarGeneratorControl = () => {
 
           {/* Last Generation Stats */}
           {lastStats && (
-            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-400/30">
-              <p className="text-sm font-semibold text-blue-300 mb-2">Last Generation Results</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+            <div className="rounded-md border border-status-info-border bg-status-info-subtle p-4">
+              <p className="mb-3 text-body-strong text-text-primary">Last Generation Results</p>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                 <div>
-                  <p className="text-slate-400">Events Created</p>
-                  <p className="text-xl font-bold text-green-400">{lastStats.events_created}</p>
+                  <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                    <span className="h-2 w-2 rounded-full bg-status-success" aria-hidden />
+                    Events Created
+                  </p>
+                  <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{lastStats.events_created}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400">Class Days</p>
-                  <p className="text-xl font-bold text-blue-400">{lastStats.class_days}</p>
+                  <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                    <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
+                    Class Days
+                  </p>
+                  <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{lastStats.class_days}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400">Already Existing</p>
-                  <p className="text-xl font-bold text-yellow-400">{lastStats.events_skipped}</p>
+                  <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                    <span className="h-2 w-2 rounded-full bg-status-warning" aria-hidden />
+                    Already Existing
+                  </p>
+                  <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{lastStats.events_skipped}</p>
                 </div>
               </div>
             </div>
           )}
 
           {/* Action Buttons */}
-          <div className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               onClick={handleAutoGenerate}
               disabled={isGenerating}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
             >
               {isGenerating ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <ArrowSync16Regular className="animate-spin" aria-hidden />
               ) : (
-                <Clock className="h-4 w-4 mr-2" />
+                <Clock20Regular aria-hidden />
               )}
               Generate Next 30 Days
             </Button>
@@ -287,12 +303,11 @@ const CalendarGeneratorControl = () => {
               onClick={handleGenerateSemester}
               disabled={isGeneratingSemester}
               variant="outline"
-              className="w-full border-slate-600 text-slate-300 hover:bg-slate-800"
             >
               {isGeneratingSemester ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <ArrowSync16Regular className="animate-spin" aria-hidden />
               ) : (
-                <Calendar className="h-4 w-4 mr-2" />
+                <CalendarLtr20Regular aria-hidden />
               )}
               Generate Full Semester
             </Button>
@@ -301,30 +316,28 @@ const CalendarGeneratorControl = () => {
               onClick={handleCleanup}
               disabled={isCleaning}
               variant="outline"
-              className="w-full border-red-600 text-red-400 hover:bg-red-950"
+              className="border-status-error-border text-status-error hover:bg-status-error-subtle hover:text-status-error"
             >
               {isCleaning ? (
-                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                <ArrowSync16Regular className="animate-spin" aria-hidden />
               ) : (
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Delete20Regular aria-hidden />
               )}
               Cleanup Old Events (90+ days)
             </Button>
           </div>
 
           {/* Info Section */}
-          <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700/50">
-            <div className="flex items-start gap-2">
-              <Settings className="h-5 w-5 text-slate-400 mt-0.5" />
-              <div className="space-y-2 text-sm text-slate-400">
-                <p className="font-semibold text-slate-300">How It Works:</p>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li>Generates CLASS events based on your class_schedules table</li>
-                  <li>Automatically skips weekends and holidays</li>
-                  <li>Prevents duplicate events</li>
-                  <li>Should be run daily via scheduled task for best results</li>
-                </ul>
-              </div>
+          <div className="flex items-start gap-3 rounded-md bg-surface-subtle p-4">
+            <Lightbulb20Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+            <div className="space-y-1.5 text-body text-text-secondary">
+              <p className="text-body-strong text-text-primary">How It Works:</p>
+              <ul className="list-inside list-disc space-y-1 marker:text-text-muted">
+                <li>Generates CLASS events based on your class_schedules table</li>
+                <li>Automatically skips weekends and holidays</li>
+                <li>Prevents duplicate events</li>
+                <li>Should be run daily via scheduled task for best results</li>
+              </ul>
             </div>
           </div>
         </CardContent>

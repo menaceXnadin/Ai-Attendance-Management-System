@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { clearAuthToken } from '@/lib/authToken';
 
 // Hook for handling API errors in functional components
 export const useApiErrorHandler = () => {
@@ -12,7 +13,7 @@ export const useApiErrorHandler = () => {
                        error.message.includes('401');
 
     if (isAuthError) {
-      localStorage.removeItem('authToken');
+      clearAuthToken();
       navigate('/login');
       return;
     }

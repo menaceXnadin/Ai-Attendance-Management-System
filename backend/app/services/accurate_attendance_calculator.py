@@ -1,433 +1,373 @@
-"""
-Accurate Attendance Calculator Service
-Calculates attendance based on ACTUAL classes held (not just records created)
+"""Legacy adapters over the attendance metrics service (DOMAIN_RULES §8, §13.5, §13.12).
 
-Key Features:
-1. Counts total classes HELD for faculty/semester
-2. Filters out system_inactive days
-3. Filters out holidays and non-class events
-4. Only counts EventType.CLASS events
-5. Compares against ALL students to determine what was actually held
-"""
+This module used to be an independent "accurate" calculator: it guessed the semester from
+the month, derived "held" days from record ``created_at`` timestamps of any cohort and
+turned missing records into absences. All of that is gone. Every percentage, count,
+eligibility flag and band now comes from :mod:`app.services.attendance_metrics` and
+:mod:`app.services.attendance_policy`; this module only
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, case, distinct
-from datetime import date, datetime
-from typing import Dict, Optional
+* maps those results onto legacy response keys (``calculate_accurate_attendance``,
+  ``calculate_subject_wise_attendance`` keep their names/shapes for existing callers), and
+* offers small *batch* read helpers for date-bucketed dashboards (per-day / per-subject
+  tallies). They apply the metrics service's countability rules verbatim (held session,
+  present/late/absent, not ``excluded_from_metrics``, on/after the student's enrollment start)
+  through ``Counts.add_record`` / ``summarize_counts`` — no rule is re-implemented here.
+
+Read-only: never flushes or commits.
+"""
+from __future__ import annotations
+
 from collections import defaultdict
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from typing import Any, Iterable, Optional, Sequence
 
-from app.models import (
-    Student, AttendanceRecord, AttendanceStatus, 
-    AcademicEvent, EventType, Subject
+from sqlalchemy import func, select
+
+from app.core.clock import app_now, local_naive
+from app.models import AttendanceRecord, ClassSession, SessionStatus, Student, Subject
+from app.services.attendance_metrics import (
+    COUNTABLE_STATUSES,
+    Counts,
+    compute_student_metrics,
+    summarize_counts,
+)
+from app.services.attendance_policy import AttendancePolicy, get_attendance_policy
+from app.services.class_sessions import enrollment_start_sql, unrecorded_sql
+from app.services.term_service import Term
+
+# §13.12 fields copied from a ``summarize_counts`` block into legacy responses.
+METRIC_FIELDS: tuple[str, ...] = (
+    "percentage",
+    "has_data",
+    "considered",
+    "attended",
+    "present",
+    "late",
+    "absent",
+    "excused",
+    "cancelled_sessions",
+    "unrecorded",
+    "eligible",
+    "eligibility_provisional",
+    "band",
+    "band_label",
 )
 
 
-async def get_total_classes_held(
-    db: AsyncSession,
-    faculty_id: int,
-    semester: int,
-    start_date: date,
-    end_date: date
-) -> int:
-    """
-    Calculate total number of classes ACTUALLY HELD for a faculty/semester.
-    
-    Logic:
-    1. Count distinct (date, period, subject_id) combinations
-    2. Only from dates where:
-       - EventType = CLASS (not holiday, exam, etc.)
-       - System was active (attendance records exist from ANY student)
-       - Date is within semester range
-    3. Filter by faculty and semester
-    
-    Returns:
-        Total number of unique class sessions held
-    """
-    
-    # Step 1: Get all dates with CLASS events (not holidays, exams, etc.)
-    class_event_dates_query = select(distinct(AcademicEvent.start_date)).where(
-        and_(
-            AcademicEvent.event_type == EventType.CLASS,
-            AcademicEvent.is_active == True,
-            AcademicEvent.faculty_id == faculty_id,
-            AcademicEvent.start_date >= start_date,
-            AcademicEvent.start_date <= end_date
-        )
-    )
-    
-    class_dates_result = await db.execute(class_event_dates_query)
-    class_event_dates = set(row[0] for row in class_dates_result.all())
-    
-    # Step 2: Get all dates where system was active (any student has records)
-    active_dates_query = select(
-        func.distinct(func.date(AttendanceRecord.date)).label('active_date')
-    ).join(
-        Student, AttendanceRecord.student_id == Student.id
-    ).where(
-        and_(
-            Student.faculty_id == faculty_id,
-            Student.semester == semester,
-            func.date(AttendanceRecord.date) >= start_date,
-            func.date(AttendanceRecord.date) <= end_date
-        )
-    )
-    
-    active_dates_result = await db.execute(active_dates_query)
-    system_active_dates = set(row.active_date for row in active_dates_result.all())
-    
-    # Step 3: Valid class dates = CLASS events AND system was active
-    # If no class events defined, fall back to dates with attendance records
-    if class_event_dates:
-        valid_class_dates = class_event_dates.intersection(system_active_dates)
-    else:
-        # Fallback: use system active dates (for systems without event management)
-        valid_class_dates = system_active_dates
-    
-    # Step 4: Exclude explicit holidays
-    holiday_dates_query = select(distinct(AcademicEvent.start_date)).where(
-        and_(
-            AcademicEvent.event_type.in_([EventType.HOLIDAY, EventType.CANCELLED_CLASS]),
-            AcademicEvent.is_active == True,
-            AcademicEvent.start_date >= start_date,
-            AcademicEvent.start_date <= end_date
-        )
-    )
-    
-    holiday_dates_result = await db.execute(holiday_dates_query)
-    holiday_dates = set(row[0] for row in holiday_dates_result.all())
-    
-    # Remove holidays from valid dates
-    valid_class_dates = valid_class_dates - holiday_dates
-    
-    # Step 5: Count total class sessions on valid dates
-    # Use attendance records from OTHER students to determine what classes were held
-    total_classes_query = select(
-        func.count(distinct(
-            func.concat(
-                func.date(AttendanceRecord.date), '|',
-                func.coalesce(AttendanceRecord.period, 0), '|',
-                func.coalesce(AttendanceRecord.subject_id, 0)
-            )
-        ))
-    ).join(
-        Student, AttendanceRecord.student_id == Student.id
-    ).where(
-        and_(
-            Student.faculty_id == faculty_id,
-            Student.semester == semester,
-            func.date(AttendanceRecord.date).in_(valid_class_dates) if valid_class_dates else False
-        )
-    )
-    
-    result = await db.execute(total_classes_query)
-    total_held = result.scalar() or 0
-    
-    return total_held
+def status_value(value: Any) -> str:
+    """Enum/str attendance status -> lower-case string."""
+    return str(getattr(value, "value", value) or "").lower()
 
 
-async def calculate_accurate_attendance(
-    db: AsyncSession,
-    student_id: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None
-) -> Dict:
+def metric_fields(summary: dict[str, Any], *, term: Any = None, term_state: Optional[str] = None,
+                  include_term: bool = True) -> dict[str, Any]:
+    """The Rule §13.12 field set from a ``summarize_counts`` block (+ ``term``/``term_state``)."""
+    out = {k: summary.get(k) for k in METRIC_FIELDS}
+    if include_term:
+        if isinstance(term, Term):
+            term = term.summary()
+        out["term"] = term
+        out["term_state"] = term_state
+    return out
+
+
+def risk_level_for_band(band_name: Optional[str], policy: AttendancePolicy) -> str:
+    """Legacy ``riskLevel``/``risk_level`` vocabulary derived from the policy band (Rule §2).
+
+    No data -> ``"unknown"`` (never "critical"). Lowest band -> ``critical``; the at-risk band
+    (second lowest, whose floor is the minimum percentage) -> ``high``; the top band -> ``low``;
+    any band in between -> ``medium``.
     """
-    Calculate accurate attendance percentage for a student.
-    
-    CORRECTED APPROACH:
-    - Aggregates from subject-wise breakdown (only subjects student is enrolled in)
-    - Uses total classes HELD per subject (not just student's records)
-    - Properly accounts for unmarked absences
-    
-    Args:
-        db: Database session
-        student_id: Student ID
-        start_date: Start of period (defaults to semester start)
-        end_date: End of period (defaults to today)
-        
-    Returns:
-        Dictionary with accurate attendance metrics
-    """
-    
-    # Get subject-wise breakdown (this correctly filters to student's enrolled subjects)
-    subject_breakdown = await calculate_subject_wise_attendance(
-        db=db,
-        student_id=student_id,
-        start_date=start_date,
-        end_date=end_date
-    )
-    
-    if not subject_breakdown:
-        return {
-            "total_classes_held": 0,
-            "classes_attended": 0,
-            "present_count": 0,
-            "late_count": 0,
-            "marked_absent_count": 0,
-            "total_absences": 0,
-            "unmarked_absences": 0,
-            "attendance_percentage": 0.0,
-            "risk_level": "unknown",
-            "calculation_method": "accurate_per_subject_aggregate",
-            "subjects": []
-        }
-    
-    # Aggregate totals from subject breakdown
-    total_classes_held = sum(s["total_classes"] for s in subject_breakdown)
-    classes_attended = sum(s["attended"] for s in subject_breakdown)
-    present_count = sum(s["present"] for s in subject_breakdown)
-    late_count = sum(s["late"] for s in subject_breakdown)
-    total_absences = sum(s["absent"] for s in subject_breakdown)
-    
-    # Calculate unmarked absences
-    # Note: Need to get actual marked absent count
-    student_query = select(Student).where(Student.id == student_id)
-    student_result = await db.execute(student_query)
-    student = student_result.scalar_one()
-    
-    if not start_date:
-        end_date_val = end_date if end_date else date.today()
-        current_year = end_date_val.year
-        if student.semester % 2 == 1:
-            start_date = date(current_year if end_date_val.month >= 8 else current_year - 1, 8, 1)
-        else:
-            start_date = date(current_year, 1, 1)
-    
-    if not end_date:
-        end_date = date.today()
-    
-    # Get marked absent count
-    marked_absent_query = select(func.count()).where(
-        and_(
-            AttendanceRecord.student_id == student_id,
-            AttendanceRecord.status == AttendanceStatus.absent,
-            func.date(AttendanceRecord.date) >= start_date,
-            func.date(AttendanceRecord.date) <= end_date
-        )
-    )
-    marked_absent_result = await db.execute(marked_absent_query)
-    marked_absent_count = marked_absent_result.scalar() or 0
-    
-    unmarked_absences = total_absences - marked_absent_count
-    excused_count = 0  # Not tracked in current implementation
-    
-    # Calculate percentage
-    attendance_percentage = (classes_attended / total_classes_held * 100) if total_classes_held > 0 else 0
-    
-    # Determine risk level
-    if attendance_percentage >= 90:
-        risk_level = "low"
-    elif attendance_percentage >= 80:
-        risk_level = "medium"
-    elif attendance_percentage >= 75:
-        risk_level = "moderate"
-    elif attendance_percentage >= 60:
-        risk_level = "high"
-    else:
-        risk_level = "critical"
-    
-    # Get date range for metadata (from first subject if available)
-    if subject_breakdown:
-        # Note: start_date/end_date passed to calculate_subject_wise_attendance
-        pass
-    
+    if not band_name:
+        return "unknown"
+    names = [b.name for b in policy.bands]  # sorted by min_percentage, descending
+    if band_name not in names:
+        return "unknown"
+    idx = names.index(band_name)
+    if idx == len(names) - 1:
+        return "critical"
+    if idx == len(names) - 2:
+        return "high"
+    if idx == 0:
+        return "low"
+    return "medium"
+
+
+def custom_range_term(start: date, end: date, name: Optional[str] = None) -> Term:
+    """A synthetic, id-less :class:`Term` so callers with an explicit date range can reuse
+    ``compute_student_metrics`` (the window is still clipped to enrollment and today)."""
+    return Term(id=None, name=name or f"{start.isoformat()} to {end.isoformat()}", start_date=start, end_date=end)
+
+
+def legacy_subject_row(subject: dict[str, Any]) -> dict[str, Any]:
+    """Per-subject metrics block -> legacy subject-breakdown row (+ §13.12 fields)."""
     return {
-        "total_classes_held": total_classes_held,
-        "classes_attended": classes_attended,
-        "present_count": present_count,
-        "late_count": late_count,
-        "marked_absent_count": marked_absent_count,
-        "excused_count": excused_count,
-        "total_absences": total_absences,
-        "unmarked_absences": unmarked_absences,
-        "attendance_percentage": round(attendance_percentage, 2),
-        "risk_level": risk_level,
-        "calculation_method": "accurate_per_subject_aggregate",
-        "subjects": subject_breakdown
+        "subject_id": subject.get("subject_id"),
+        "subject_name": subject.get("subject_name"),
+        "subject_code": subject.get("subject_code"),
+        "total_classes": subject.get("total_classes", 0),
+        "attended": subject.get("attended", 0),
+        "present": subject.get("present", 0),
+        "late": subject.get("late", 0),
+        "absent": subject.get("absent", 0),
+        "attendance_percentage": subject.get("attendance_percentage", 0.0),
+        "attendance_rate": subject.get("attendance_rate", 0.0),
+        **metric_fields(subject, include_term=False),
     }
 
 
+# ============================================================================ student delegates
+
+
 async def calculate_subject_wise_attendance(
-    db: AsyncSession,
+    db,
     student_id: int,
     start_date: Optional[date] = None,
-    end_date: Optional[date] = None
-) -> list:
+    end_date: Optional[date] = None,
+    term_id: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """Per-subject attendance for a student (delegates to ``compute_student_metrics``).
+
+    Default scope = the reporting term (Rule §3); ``term_id`` selects a term; an explicit
+    ``start_date``/``end_date`` range is honoured (clipped to enrollment and today).
+    Returns ``[]`` for an unknown student (legacy behaviour).
     """
-    Calculate accurate subject-wise attendance using calendar logic.
-    
-    CORRECTED APPROACH (matches student_calendar endpoint):
-    1. Find dates with CLASS events
-    2. Detect system activity (real-time) OR manual attendance
-    3. Count classes held = active days × subjects scheduled per day
-    4. Count student's actual attendance
+    from app.services.domain_errors import DomainError
+
+    term = None
+    if start_date is not None or end_date is not None:
+        today = app_now().date()
+        term = custom_range_term(start_date or date(1900, 1, 1), end_date or today)
+    try:
+        metrics = await compute_student_metrics(db, student_id, term=term, term_id=term_id)
+    except DomainError as exc:
+        if exc.code == "student_not_found":
+            return []
+        raise
+    return [legacy_subject_row(s) for s in metrics.per_subject]
+
+
+async def calculate_accurate_attendance(
+    db,
+    student_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    term_id: Optional[int] = None,
+) -> dict[str, Any]:
+    """Legacy "accurate attendance" dict, now a thin delegate to ``compute_student_metrics``.
+
+    ``unmarked_absences`` is always 0: unrecorded sessions are never absences (Rule §0.2); they
+    are reported as ``unrecorded``. ``risk_level`` comes from the policy band ("unknown" when
+    there is no data). Raises ``DomainError(student_not_found)`` for an unknown student.
     """
-    
-    # Get student
-    student_query = select(Student).where(Student.id == student_id)
-    student_result = await db.execute(student_query)
-    student = student_result.scalar_one_or_none()
-    
-    if not student:
+    term = None
+    if start_date is not None or end_date is not None:
+        term = custom_range_term(start_date or date(1900, 1, 1), end_date or app_now().date())
+    metrics = await compute_student_metrics(db, student_id, term=term, term_id=term_id)
+    o = metrics.overall
+    return {
+        "total_classes_held": o["total_classes"],
+        "classes_attended": o["attended"],
+        "present_count": o["present"],
+        "late_count": o["late"],
+        "marked_absent_count": o["absent"],
+        "excused_count": o["excused"],
+        "total_absences": o["absent"],
+        "unmarked_absences": 0,
+        "attendance_percentage": o["attendance_percentage"],
+        "risk_level": risk_level_for_band(o["band"], metrics.policy),
+        "calculation_method": "attendance_metrics",
+        "subjects": [legacy_subject_row(s) for s in metrics.per_subject],
+        **metric_fields(o, term=metrics.term_context.term, term_state=metrics.term_state),
+    }
+
+
+# ============================================================================ batch helpers
+
+
+def _countable_filters(start: date, end: date) -> list:
+    """WHERE clauses shared by the batch helpers (Rule §8 + §13.5 + §13.7)."""
+    return [
+        AttendanceRecord.excluded_from_metrics.is_(False),
+        ClassSession.session_date >= start,
+        ClassSession.session_date <= end,
+        ClassSession.session_date >= enrollment_start_sql(),
+    ]
+
+
+def _scope(stmt, student_ids: Optional[Sequence[int]], faculty_id: Optional[int], semester: Optional[int]):
+    if student_ids is not None:
+        stmt = stmt.where(AttendanceRecord.student_id.in_(list(student_ids)))
+    if faculty_id is not None:
+        stmt = stmt.where(Student.faculty_id == faculty_id)
+    if semester is not None:
+        stmt = stmt.where(Student.semester == semester)
+    return stmt
+
+
+async def counts_by_date(
+    db,
+    start: date,
+    end: date,
+    *,
+    student_ids: Optional[Sequence[int]] = None,
+    faculty_id: Optional[int] = None,
+    semester: Optional[int] = None,
+) -> dict[date, Counts]:
+    """Per-day record tallies (countable present/late/absent + excused) in ONE grouped query."""
+    out: dict[date, Counts] = defaultdict(Counts)
+    if end < start or (student_ids is not None and not student_ids):
+        return out
+    stmt = (
+        select(ClassSession.session_date, AttendanceRecord.status, ClassSession.status, func.count())
+        .join(ClassSession, ClassSession.id == AttendanceRecord.session_id)
+        .join(Student, Student.id == AttendanceRecord.student_id)
+        .where(*_countable_filters(start, end))
+        .group_by(ClassSession.session_date, AttendanceRecord.status, ClassSession.status)
+    )
+    stmt = _scope(stmt, student_ids, faculty_id, semester)
+    for d, rstatus, sstatus, n in (await db.execute(stmt)).all():
+        out[d].add_record(status_value(rstatus), sstatus, int(n))
+    return out
+
+
+async def countable_student_day_rows(
+    db,
+    start: date,
+    end: date,
+    *,
+    student_ids: Optional[Sequence[int]] = None,
+    faculty_id: Optional[int] = None,
+    semester: Optional[int] = None,
+) -> list[tuple[int, date, str]]:
+    """``(student_id, session_date, status)`` for every countable record (Rule §8) in ONE query."""
+    if end < start or (student_ids is not None and not student_ids):
         return []
-    
-    # Date range
-    if not end_date:
-        end_date = date.today()
-    if not start_date:
-        # Default to current semester start
-        current_year = end_date.year
-        if student.semester % 2 == 1:
-            start_date = date(current_year if end_date.month >= 8 else current_year - 1, 8, 1)
-        else:
-            start_date = date(current_year, 1, 1)
-    
-    # STEP 1: Get CLASS events from calendar
-    from app.models import AcademicEvent, EventType
-    events_query = select(AcademicEvent).where(
-        and_(
-            AcademicEvent.start_date >= start_date,
-            AcademicEvent.start_date <= end_date,
-            or_(
-                AcademicEvent.faculty_id == student.faculty_id,
-                AcademicEvent.faculty_id.is_(None)
-            ),
-            AcademicEvent.event_type == EventType.CLASS
-        )
+    stmt = (
+        select(AttendanceRecord.student_id, ClassSession.session_date, AttendanceRecord.status)
+        .join(ClassSession, ClassSession.id == AttendanceRecord.session_id)
+        .join(Student, Student.id == AttendanceRecord.student_id)
+        .where(*_countable_filters(start, end), ClassSession.status == SessionStatus.held.value)
     )
-    events_result = await db.execute(events_query)
-    class_event_dates = {event.start_date for event in events_result.scalars().all()}
-    
-    # STEP 2: Detect system activity and manual attendance (same logic as student_calendar)
-    global_activity_query = select(
-        AttendanceRecord,
-        Student.faculty_id,
-        Student.semester
-    ).join(
-        Student, AttendanceRecord.student_id == Student.id
-    ).where(
-        and_(
-            func.date(AttendanceRecord.date) >= start_date,
-            func.date(AttendanceRecord.date) <= end_date
-        )
-    )
-    
-    global_result = await db.execute(global_activity_query)
-    all_global_records = global_result.all()
-    
-    dates_with_system_activity = set()
-    dates_with_manual_attendance = set()
-    
-    for record, record_faculty_id, record_semester in all_global_records:
-        record_date = record.date.date() if hasattr(record.date, 'date') else record.date
-        
-        # System activity = record created same day as class
-        if record.created_at.date() == record_date:
-            dates_with_system_activity.add(record_date)
-        
-        # Manual attendance for THIS faculty+semester
-        method = record.method.value if hasattr(record.method, 'value') else str(record.method) if record.method else None
-        if method and method.lower() == 'manual':
-            if record_faculty_id == student.faculty_id and record_semester == student.semester:
-                dates_with_manual_attendance.add(record_date)
-    
-    # Dates with classes held = (system OR manual) AND class_event
-    dates_with_classes_held = (dates_with_system_activity | dates_with_manual_attendance) & class_event_dates
-    
-    # STEP 3: Get class schedules to determine subjects per day
-    from app.models import ClassSchedule
-    schedules_query = select(ClassSchedule).where(
-        and_(
-            ClassSchedule.faculty_id == student.faculty_id,
-            ClassSchedule.semester == student.semester,
-            ClassSchedule.is_active == True
-        )
-    )
-    schedules_result = await db.execute(schedules_query)
-    class_schedules = schedules_result.scalars().all()
-    
-    # Group schedules by day of week and subject
-    from collections import defaultdict
-    schedules_by_day_subject = defaultdict(set)
-    for schedule in class_schedules:
-        day_name = schedule.day_of_week.name if hasattr(schedule.day_of_week, 'name') else str(schedule.day_of_week).upper()
-        schedules_by_day_subject[day_name].add(schedule.subject_id)
-    
-    # STEP 4: Count classes held per subject (iterate through active days)
-    classes_held_per_subject = defaultdict(int)
-    
-    for class_date in dates_with_classes_held:
-        day_name = class_date.strftime('%A').upper()
-        subjects_for_day = schedules_by_day_subject.get(day_name, set())
-        
-        for subject_id in subjects_for_day:
-            classes_held_per_subject[subject_id] += 1
-    
-    # STEP 5: Get student's actual attendance records
-    student_records_query = select(AttendanceRecord).where(
-        and_(
-            AttendanceRecord.student_id == student_id,
-            func.date(AttendanceRecord.date) >= start_date,
-            func.date(AttendanceRecord.date) <= end_date
-        )
-    )
-    student_records_result = await db.execute(student_records_query)
-    student_records = student_records_result.scalars().all()
-    
-    # Count attendance by subject
-    subject_attendance = defaultdict(lambda: {'present': 0, 'late': 0, 'absent': 0})
-    for record in student_records:
-        if record.subject_id:
-            status = record.status
-            if status == AttendanceStatus.present:
-                subject_attendance[record.subject_id]['present'] += 1
-            elif status == AttendanceStatus.late:
-                subject_attendance[record.subject_id]['late'] += 1
-            elif status == AttendanceStatus.absent:
-                subject_attendance[record.subject_id]['absent'] += 1
-    
-    # STEP 6: Build subject breakdown
-    subject_breakdown = []
-    
-    # Get all subject IDs from schedule (not just ones with records!)
-    all_subject_ids = set()
-    for subjects in schedules_by_day_subject.values():
-        all_subject_ids.update(subjects)
-    
-    for subject_id in all_subject_ids:
-        # Get subject info
-        subject_query = select(Subject).where(Subject.id == subject_id)
-        subject_result = await db.execute(subject_query)
-        subject = subject_result.scalar_one_or_none()
-        
-        if not subject:
-            continue
-        
-        total_held = classes_held_per_subject.get(subject_id, 0)
-        
-        if total_held == 0:
-            continue  # Skip subjects with no classes held
-        
-        attendance = subject_attendance.get(subject_id, {'present': 0, 'late': 0, 'absent': 0})
-        present = attendance['present']
-        late = attendance['late']
-        absent_marked = attendance['absent']
-        
-        attended = present + late
-        absent_total = total_held - attended  # Total absent = held - attended
-        
-        percentage = (attended / total_held * 100) if total_held > 0 else 0
-        
-        subject_breakdown.append({
-            "subject_id": subject_id,
-            "subject_name": subject.name,
-            "subject_code": subject.code,
-            "total_classes": total_held,
-            "attended": attended,
-            "present": present,
-            "late": late,
-            "absent": absent_total,
-            "attendance_percentage": round(percentage, 2)
-        })
-    
-    return subject_breakdown
+    stmt = _scope(stmt, student_ids, faculty_id, semester)
+    rows = []
+    for sid, d, rstatus in (await db.execute(stmt)).all():
+        s = status_value(rstatus)
+        if s in COUNTABLE_STATUSES:
+            rows.append((sid, d, s))
+    return rows
+
+
+@dataclass
+class SubjectTally:
+    subject_id: int
+    counts: Counts = field(default_factory=Counts)
+    students: int = 0
+    first_class: Optional[date] = None
+    last_class: Optional[date] = None
+    held_sessions: int = 0
+
+
+async def subject_tallies(
+    db,
+    start: date,
+    end: date,
+    *,
+    policy: Optional[AttendancePolicy] = None,
+    now: Optional[datetime] = None,
+) -> dict[int, SubjectTally]:
+    """Per-subject tallies across all cohorts in ``[start, end]`` (3 queries, no per-subject loop).
+
+    Record counts follow Rule §8 exactly; ``cancelled_sessions``/``unrecorded`` count *sessions*
+    (cohort level) rather than per-student slots.
+    """
+    out: dict[int, SubjectTally] = {}
+    if end < start:
+        return out
+    now = now or app_now()
+    policy = policy or await get_attendance_policy(db)
+
+    def tally(subject_id: int) -> SubjectTally:
+        if subject_id not in out:
+            out[subject_id] = SubjectTally(subject_id)
+        return out[subject_id]
+
+    rec_rows = (await db.execute(
+        select(ClassSession.subject_id, AttendanceRecord.status, ClassSession.status, func.count())
+        .join(ClassSession, ClassSession.id == AttendanceRecord.session_id)
+        .join(Student, Student.id == AttendanceRecord.student_id)
+        .where(*_countable_filters(start, end))
+        .group_by(ClassSession.subject_id, AttendanceRecord.status, ClassSession.status)
+    )).all()
+    for subj, rstatus, sstatus, n in rec_rows:
+        tally(subj).counts.add_record(status_value(rstatus), sstatus, int(n))
+
+    extent_rows = (await db.execute(
+        select(ClassSession.subject_id, func.count(func.distinct(AttendanceRecord.student_id)))
+        .join(ClassSession, ClassSession.id == AttendanceRecord.session_id)
+        .join(Student, Student.id == AttendanceRecord.student_id)
+        .where(*_countable_filters(start, end), ClassSession.status == SessionStatus.held.value,
+               AttendanceRecord.status.in_(sorted(COUNTABLE_STATUSES)))
+        .group_by(ClassSession.subject_id)
+    )).all()
+    for subj, n_students in extent_rows:
+        tally(subj).students = int(n_students)
+
+    session_rows = (await db.execute(
+        select(ClassSession.subject_id, ClassSession.session_date, ClassSession.status)
+        .where(ClassSession.session_date >= start, ClassSession.session_date <= end)
+    )).all()
+    for subj, sdate, sstatus in session_rows:
+        s = str(sstatus)
+        t = tally(subj)
+        if s == SessionStatus.held:
+            t.held_sessions += 1
+            t.first_class = sdate if t.first_class is None or sdate < t.first_class else t.first_class
+            t.last_class = sdate if t.last_class is None or sdate > t.last_class else t.last_class
+        elif s == SessionStatus.cancelled:
+            t.counts.cancelled_sessions += 1
+
+    # Unrecorded uses the single shared definition (amended §5.2/§13.4): past end + grace,
+    # on/after tracking_start_date, and a non-empty cohort roster that day.
+    cutoff = local_naive(now - timedelta(minutes=policy.finalize_grace_minutes))
+    unrecorded_rows = (await db.execute(
+        select(ClassSession.subject_id, func.count())
+        .where(ClassSession.session_date >= start, ClassSession.session_date <= end,
+               unrecorded_sql(cutoff, policy.tracking_start_date))
+        .group_by(ClassSession.subject_id)
+    )).all()
+    for subj, n in unrecorded_rows:
+        tally(subj).counts.unrecorded += int(n)
+    return out
+
+
+async def subject_labels(db, subject_ids: Iterable[int]) -> dict[int, tuple[str, str]]:
+    ids = sorted(set(subject_ids))
+    if not ids:
+        return {}
+    rows = (await db.execute(select(Subject.id, Subject.name, Subject.code).where(Subject.id.in_(ids)))).all()
+    return {i: (n, c) for i, n, c in rows}
+
+
+def summary_of(counts: Counts, policy: AttendancePolicy) -> dict[str, Any]:
+    """Alias of ``summarize_counts`` for callers of this adapter module."""
+    return summarize_counts(counts, policy)
+
+
+__all__ = [
+    "METRIC_FIELDS",
+    "status_value",
+    "metric_fields",
+    "risk_level_for_band",
+    "custom_range_term",
+    "legacy_subject_row",
+    "calculate_subject_wise_attendance",
+    "calculate_accurate_attendance",
+    "counts_by_date",
+    "countable_student_day_rows",
+    "SubjectTally",
+    "subject_tallies",
+    "subject_labels",
+    "summary_of",
+]

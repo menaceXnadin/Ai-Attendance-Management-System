@@ -1,20 +1,368 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import StudentFormEnhanced, { StudentFormData } from '@/components/StudentFormEnhanced';
-import StudentList from '@/components/StudentList';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Close, Education, UserMultiple, Add, Filter } from '@carbon/icons-react';
+import { EmptyState } from '@/components/feedback/EmptyState';
+import { FaceStatusButton } from '@/components/face-admin/FaceBadges';
+import StudentFaceDialog from '@/components/face-admin/StudentFaceDialog';
+import { resolveFaceStatus, type FaceStatusKey } from '@/components/face-admin/faceLabels';
+import {
+  Search20Regular,
+  Dismiss12Regular,
+  Dismiss16Regular,
+  People20Regular,
+  PersonAdd20Regular,
+  Filter20Regular,
+  ArrowLeft20Regular,
+  LockClosed20Regular,
+  Edit20Regular,
+  Delete20Regular,
+  CalendarLtr20Regular,
+  ArrowUp16Regular,
+  ArrowDown16Regular,
+  ArrowSort16Regular,
+  MoreHorizontal20Regular,
+  ScanPerson20Regular,
+} from '@fluentui/react-icons';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 import { StudentCreateData } from '@/integrations/api/types';
 import { useAuth } from '@/contexts/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { clearAuthToken, getAuthToken } from '@/lib/authToken';
 
-// No longer needed with the simplified form
+// Fluent-style native dropdown (neutral stroke with accessible bottom border)
+const selectClass =
+  'h-8 rounded-md border border-border-default border-b-border-strong bg-surface-default pl-2.5 pr-7 text-body text-text-primary transition-colors duration-150 ease-fluent-standard hover:border-border-strong focus:border-b-brand focus:outline-none disabled:opacity-50';
+
+const FilterTag = ({ label, onRemove, ariaLabel }: { label: React.ReactNode; onRemove: () => void; ariaLabel: string }) => (
+  <span className="inline-flex h-6 items-center gap-1 rounded-md border border-border-subtle bg-surface-default pl-2 pr-1 text-caption text-text-primary">
+    <span className="max-w-[200px] truncate">{label}</span>
+    <button
+      type="button"
+      onClick={onRemove}
+      className="grid h-4 w-4 place-items-center rounded-sm text-text-muted transition-colors hover:bg-surface-hover hover:text-text-primary"
+      aria-label={ariaLabel}
+    >
+      <Dismiss12Regular aria-hidden />
+    </button>
+  </span>
+);
+
+const ChipToggle = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={active}
+    className={`h-7 min-w-[2rem] rounded-md border px-2 text-caption-strong tabular-nums transition-colors duration-150 ease-fluent-standard ${
+      active
+        ? 'border-brand-stroke bg-brand-subtle text-brand-foreground'
+        : 'border-border-default bg-surface-default text-text-secondary hover:bg-surface-hover'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+/** A student row as shown on this page, including the face enrolment fields (docs/system/face-verification.md §8). */
+type StudentRow = StudentFormData & {
+  studentId?: string;
+  faculty?: string;
+  face_registered: boolean;
+  face_enrollment_status: FaceStatusKey;
+  face_registered_at: string | null;
+};
+
+type SortField = 'name' | 'batch' | 'semester' | 'year';
+type FaceFilter = 'any' | 'registered' | 'not_registered' | 'reset' | 'deleted';
+
+const FACE_FILTER_LABEL: Record<Exclude<FaceFilter, 'any'>, string> = {
+  registered: 'Face registered',
+  not_registered: 'No registered face',
+  reset: 'Face reset',
+  deleted: 'Face deleted by student',
+};
+
+const faceStatusOf = (s: StudentRow) => resolveFaceStatus(s.face_enrollment_status, s.face_registered);
+
+// Deterministic avatar tint (Teams-style colored initials)
+const avatarTints = [
+  'bg-brand-subtle text-brand-foreground',
+  'bg-status-info-subtle text-status-info',
+  'bg-status-success-subtle text-status-success',
+  'bg-status-warning-subtle text-status-warning',
+];
+
+const getInitials = (name?: string) =>
+  (name || 'S')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p.charAt(0).toUpperCase())
+    .join('') || 'S';
+
+const tintFor = (name?: string) => {
+  const s = name || '';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return avatarTints[h % avatarTints.length];
+};
+
+const headClass = 'h-9 px-4 text-caption-strong normal-case tracking-normal text-text-secondary';
+
+const SortableHeader = ({
+  field,
+  label,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: {
+  field: SortField;
+  label: string;
+  sortBy?: SortField;
+  sortDir?: 'asc' | 'desc';
+  onSortChange?: (field: SortField) => void;
+}) => {
+  const isActive = sortBy === field;
+  return (
+    <button
+      type="button"
+      onClick={() => onSortChange?.(field)}
+      className={`-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        isActive ? 'text-text-primary' : ''
+      }`}
+      title={`Sort by ${label}`}
+    >
+      <span>{label}</span>
+      {isActive ? (
+        sortDir === 'asc' ? (
+          <ArrowUp16Regular className="text-brand-foreground" aria-hidden />
+        ) : (
+          <ArrowDown16Regular className="text-brand-foreground" aria-hidden />
+        )
+      ) : (
+        <ArrowSort16Regular className="text-text-muted" aria-hidden />
+      )}
+    </button>
+  );
+};
+
+/** Students table with the face registration status column and row action. */
+const StudentTable = ({
+  students,
+  onEdit,
+  onDelete,
+  onFace,
+  isLoading = false,
+  sortBy,
+  sortDir,
+  onSortChange,
+}: {
+  students: StudentRow[];
+  onEdit: (student: StudentRow) => void;
+  onDelete: (studentId: string) => void;
+  onFace: (student: StudentRow) => void;
+  isLoading?: boolean;
+  sortBy?: SortField;
+  sortDir?: 'asc' | 'desc';
+  onSortChange?: (field: SortField) => void;
+}) => {
+  const navigate = useNavigate();
+  const sortProps = { sortBy, sortDir, onSortChange };
+
+  return (
+    <div className="w-full overflow-hidden rounded-lg bg-surface-default shadow">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader className="border-b border-border-subtle bg-surface-subtle">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className={headClass}>
+                <SortableHeader field="name" label="Full Name" {...sortProps} />
+              </TableHead>
+              <TableHead className={headClass}>Student ID</TableHead>
+              <TableHead className={headClass}>Faculty</TableHead>
+              <TableHead className={headClass}>
+                <SortableHeader field="semester" label="Semester" {...sortProps} />
+              </TableHead>
+              <TableHead className={headClass}>
+                <SortableHeader field="year" label="Year" {...sortProps} />
+              </TableHead>
+              <TableHead className={headClass}>
+                <SortableHeader field="batch" label="Batch" {...sortProps} />
+              </TableHead>
+              <TableHead className={headClass}>Face</TableHead>
+              <TableHead className={`${headClass} w-12 text-right`}>
+                <span className="sr-only">Actions</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, idx) => (
+                <TableRow key={`loading-${idx}`} className="hover:bg-transparent">
+                  <TableCell className="px-4 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-3.5 w-32" />
+                        <Skeleton className="h-3 w-40" />
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-5 w-24 rounded-full" /></TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-4 w-12" /></TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell className="px-4 py-2.5"><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                  <TableCell className="px-4 py-2.5 text-right"><Skeleton className="ml-auto h-8 w-8" /></TableCell>
+                </TableRow>
+              ))
+            ) : students.length === 0 ? (
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="p-6 text-center">
+                  <EmptyState
+                    title="No students found"
+                    description="No student records match the current filter criteria."
+                    isFiltered
+                    className="border-0"
+                  />
+                </TableCell>
+              </TableRow>
+            ) : (
+              students.map((student) => {
+                const faceStatus = faceStatusOf(student);
+                return (
+                  <TableRow key={student.id} className="group border-b border-border-subtle hover:bg-surface-hover">
+                    <TableCell className="px-4 py-2.5">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div
+                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-caption-strong ${tintFor(student.full_name)}`}
+                          aria-hidden
+                        >
+                          {getInitials(student.full_name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="max-w-[240px] truncate text-body-strong text-text-primary">{student.full_name}</p>
+                          <p className="max-w-[240px] truncate text-caption text-text-muted">{student.email}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      <span className="font-mono text-caption text-text-secondary">{student.student_id}</span>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      <Badge variant="secondary" shape="pill" className="max-w-[200px] truncate font-normal">
+                        {student.faculty}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-body tabular-nums text-text-secondary">
+                      Sem {student.semester}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-body tabular-nums text-text-secondary">
+                      Year {student.year}
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-body tabular-nums text-text-secondary">{student.batch}</TableCell>
+                    <TableCell className="px-4 py-2.5">
+                      <FaceStatusButton
+                        status={faceStatus}
+                        studentName={student.full_name}
+                        onClick={() => onFace(student)}
+                        disabled={!student.id}
+                      />
+                    </TableCell>
+                    <TableCell className="px-4 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onEdit(student)}
+                          title="Edit student"
+                          aria-label="Edit student"
+                          className="text-text-muted opacity-0 transition-opacity hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <Edit20Regular aria-hidden />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              title="More actions"
+                              aria-label={`More actions for ${student.full_name}`}
+                              className="text-text-muted hover:text-text-primary"
+                            >
+                              <MoreHorizontal20Regular aria-hidden />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuItem
+                              onSelect={() => navigate(`/app/students/${student.id}/calendar`)}
+                              className="gap-2"
+                            >
+                              <CalendarLtr20Regular className="text-text-muted" aria-hidden />
+                              View attendance calendar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => onEdit(student)} className="gap-2">
+                              <Edit20Regular className="text-text-muted" aria-hidden />
+                              Edit student
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled={!student.id} onSelect={() => onFace(student)} className="gap-2">
+                              <ScanPerson20Regular className="text-text-muted" aria-hidden />
+                              Face registration…
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              disabled={!student.id}
+                              onSelect={() => {
+                                // The page asks for confirmation before deleting.
+                                if (student.id) onDelete(student.id);
+                              }}
+                              className="gap-2 text-status-error focus:text-status-error"
+                            >
+                              <Delete20Regular aria-hidden />
+                              Delete student
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {students.length > 0 && !isLoading && (
+        <div className="flex items-center justify-between border-t border-border-subtle bg-surface-subtle px-4 py-2 text-caption text-text-muted">
+          <span>
+            Total: <strong className="font-semibold text-text-primary tabular-nums">{students.length}</strong> student
+            {students.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const StudentsPage = () => {
   const [selectedStudent, setSelectedStudent] = useState<StudentFormData | undefined>(undefined);
+  const [faceStudent, setFaceStudent] = useState<StudentRow | null>(null);
+  const [faceFilter, setFaceFilter] = useState<FaceFilter>('any');
   const [activeTab, setActiveTab] = useState<string>('list');
   const [selectedFaculty, setSelectedFaculty] = useState<string>('');
   const [searchStudentId, setSearchStudentId] = useState<string>('');
@@ -25,6 +373,7 @@ const StudentsPage = () => {
   const [hasEmail, setHasEmail] = useState<'any' | 'yes' | 'no'>('any');
   const [sortBy, setSortBy] = useState<'name' | 'batch' | 'semester' | 'year'>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -50,7 +399,7 @@ const StudentsPage = () => {
         console.log(`[StudentsPage] Faculty value:`, student.faculty);
         console.log(`[StudentsPage] Faculty type:`, typeof student.faculty);
         
-        const mapped = {
+        const mapped: StudentRow = {
           id: student.id || '',
           full_name: student.name || 'Unknown Name',
           student_id: student.studentId || 'Unknown ID',
@@ -63,6 +412,9 @@ const StudentsPage = () => {
           batch: student.batch || new Date().getFullYear(),
           phone_number: student.phone_number || '',
           emergency_contact: student.emergency_contact || '',
+          face_registered: !!student.face_registered,
+          face_enrollment_status: resolveFaceStatus(student.face_enrollment_status, student.face_registered),
+          face_registered_at: student.face_registered_at ?? null,
         };
         
         console.log(`[StudentsPage] Mapped student:`, mapped);
@@ -147,6 +499,16 @@ const StudentsPage = () => {
       });
     }
 
+    // Filter by face registration status
+    if (faceFilter !== 'any') {
+      filtered = filtered.filter(s => {
+        const status = faceStatusOf(s);
+        if (faceFilter === 'registered') return status === 'enrolled';
+        if (faceFilter === 'not_registered') return status !== 'enrolled';
+        return status === faceFilter;
+      });
+    }
+
     // Sorting
     const compare = (a: StudentFormData, b: StudentFormData) => {
       let res = 0;
@@ -163,7 +525,12 @@ const StudentsPage = () => {
     };
 
     return [...filtered].sort(compare);
-  }, [students, selectedFaculty, searchStudentId, selectedSemesters, selectedYears, selectedBatch, hasEmail, sortBy, sortDir]);
+  }, [students, selectedFaculty, searchStudentId, selectedSemesters, selectedYears, selectedBatch, hasEmail, faceFilter, sortBy, sortDir]);
+
+  const notRegisteredCount = React.useMemo(
+    () => students.filter(s => faceStatusOf(s) !== 'enrolled').length,
+    [students]
+  );
 
   React.useEffect(() => {
     console.log('[StudentsPage] Mapped students for StudentList:', students);
@@ -175,7 +542,7 @@ const StudentsPage = () => {
       try {
         console.log('[Frontend] Starting student creation with data:', student);
         console.log('[Frontend] Current user:', user); // Debug current user
-        console.log('[Frontend] Auth token present:', !!localStorage.getItem('authToken'));
+        console.log('[Frontend] Auth token present:', !!getAuthToken());
         
         // Debug: Check current auth status
         try {
@@ -234,7 +601,7 @@ const StudentsPage = () => {
       void refetch(); // Explicitly refetch students data
       setActiveTab('list');
       toast({
-        title: "Student Added Successfully! 🎉",
+        title: "Student Added Successfully!",
         description: `Student ID ${data.student_id} has been auto-generated and assigned.`,
         duration: 5000,
       });
@@ -413,16 +780,18 @@ const StudentsPage = () => {
   // Handle authentication errors (after all hooks)
   if (error && (error.message.includes('authenticated') || error.message.includes('expired'))) {
     return (
-      <div className="flex justify-center items-center min-h-[400px]">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Authentication Required</h2>
-          <p className="text-muted-foreground mb-4">{error.message}</p>
-          <Button 
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="max-w-sm rounded-lg bg-surface-default p-8 text-center shadow">
+          <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-status-warning-subtle text-status-warning">
+            <LockClosed20Regular aria-hidden />
+          </div>
+          <h2 className="mb-1 text-section-title text-text-primary">Authentication Required</h2>
+          <p className="mb-5 text-body text-text-muted">{error.message}</p>
+          <Button
             onClick={() => {
-              localStorage.removeItem('authToken');
+              clearAuthToken();
               window.location.href = '/login';
             }}
-            className="bg-brand-500 hover:bg-brand-600"
           >
             Go to Login
           </Button>
@@ -431,37 +800,38 @@ const StudentsPage = () => {
     );
   }
 
+  const advancedFilterCount =
+    (selectedSemesters.length ? 1 : 0) + (selectedYears.length ? 1 : 0);
+  const hasActiveFilters = !!(
+    selectedFaculty ||
+    searchStudentId.trim() ||
+    selectedSemesters.length ||
+    selectedYears.length ||
+    selectedBatch ||
+    hasEmail !== 'any' ||
+    faceFilter !== 'any'
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="space-y-0.5">
-          <h1 className="text-page-title font-semibold text-text-primary">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end">
+        <div>
+          <h1 className="text-page-title text-text-primary">
             Student Management
           </h1>
-          <p className="text-xs text-text-muted">
-            {activeTab === 'list' 
+          <p className="mt-1 text-body text-text-muted">
+            {activeTab === 'list'
               ? `Manage and monitor ${students.length} registered students`
               : selectedStudent ? 'Update student information' : 'Register a new student'}
           </p>
         </div>
-        {activeTab === 'list' ? (
-          <Button 
-            onClick={handleAddNewClick} 
-            size="default"
-            className="gap-2"
-          >
-            <Add size={16} aria-hidden="true" />
-            Add New Student
-          </Button>
-        ) : (
-          <Button 
-            variant="outline" 
-            size="default"
+        {activeTab !== 'list' && (
+          <Button
+            variant="outline"
             onClick={() => { setActiveTab('list'); }}
-            className="gap-2"
           >
-            <Close size={16} aria-hidden="true" />
+            <ArrowLeft20Regular aria-hidden />
             Back to List
           </Button>
         )}
@@ -474,268 +844,274 @@ const StudentsPage = () => {
             {selectedStudent ? 'Edit Student' : 'Add Student'}
           </TabsTrigger>
         </TabsList>
-        
-        <TabsContent value="list" className="space-y-4">
-          {/* Search and Filter Section */}
-          <div className="rounded-lg border border-border bg-surface-default p-4 space-y-4">
-            {/* Search Bar */}
-            <div className="relative">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">
-                <Search size={16} aria-hidden="true" />
+
+        <TabsContent value="list" className="mt-0 space-y-3">
+          {/* Command bar / toolbar */}
+          <div className="rounded-lg bg-surface-default shadow">
+            <div className="flex flex-col gap-2 p-3 lg:flex-row lg:items-center">
+              {/* Search */}
+              <div className="relative w-full lg:w-80">
+                <Search20Regular className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" aria-hidden />
+                <Input
+                  type="text"
+                  aria-label="Search students"
+                  placeholder="Search by name, student ID, email, phone, faculty, or batch..."
+                  className="h-8 pl-9 pr-8"
+                  value={searchStudentId}
+                  onChange={e => { setSearchStudentId(e.target.value); }}
+                />
+                {searchStudentId && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchStudentId(''); }}
+                    className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                    aria-label="Clear search"
+                  >
+                    <Dismiss16Regular aria-hidden />
+                  </button>
+                )}
               </div>
-              <input
-                type="text"
-                placeholder="Search by name, student ID, email, phone, faculty, or batch..."
-                className="w-full rounded-md border border-border bg-surface-default pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary transition-colors"
-                value={searchStudentId}
-                onChange={e => { setSearchStudentId(e.target.value); }}
-              />
-              {searchStudentId && (
-                <button
-                  type="button"
-                  onClick={() => { setSearchStudentId(''); }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-1 rounded"
-                  aria-label="Clear search"
+
+              {/* Dropdown filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor="filter-faculty">Faculty</label>
+                <select
+                  id="filter-faculty"
+                  className={selectClass}
+                  value={selectedFaculty}
+                  onChange={e => { setSelectedFaculty(e.target.value); }}
                 >
-                  <Close size={14} aria-hidden="true" />
-                </button>
-              )}
+                  <option value="">All Faculties</option>
+                  {faculties.map(faculty => (
+                    <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
+                  ))}
+                </select>
+
+                <label className="sr-only" htmlFor="filter-batch">Batch</label>
+                <select
+                  id="filter-batch"
+                  className={selectClass}
+                  value={selectedBatch}
+                  onChange={(e) => setSelectedBatch(e.target.value)}
+                >
+                  <option value="">All Batches</option>
+                  {batchOptions.map(b => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
+
+                <label className="sr-only" htmlFor="filter-email">Email Status</label>
+                <select
+                  id="filter-email"
+                  className={selectClass}
+                  value={hasEmail}
+                  onChange={(e) => setHasEmail(e.target.value as 'any' | 'yes' | 'no')}
+                >
+                  <option value="any">Any email status</option>
+                  <option value="yes">Has Email</option>
+                  <option value="no">Missing Email</option>
+                </select>
+
+                <label className="sr-only" htmlFor="filter-face">Face registration</label>
+                <select
+                  id="filter-face"
+                  className={selectClass}
+                  value={faceFilter}
+                  onChange={(e) => setFaceFilter(e.target.value as FaceFilter)}
+                >
+                  <option value="any">Any face status</option>
+                  <option value="registered">Face registered</option>
+                  <option value="not_registered">No registered face</option>
+                  <option value="reset">Reset — awaiting re-enrolment</option>
+                  <option value="deleted">Deleted by student</option>
+                </select>
+
+                <Button
+                  type="button"
+                  variant={showAdvanced ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setShowAdvanced(v => !v)}
+                  aria-expanded={showAdvanced}
+                  aria-controls="advanced-filters"
+                >
+                  <Filter20Regular aria-hidden />
+                  Advanced Filters
+                  {advancedFilterCount > 0 && (
+                    <span className="grid h-4 min-w-[1rem] place-items-center rounded-full bg-brand px-1 text-overline text-brand-on">
+                      {advancedFilterCount}
+                    </span>
+                  )}
+                </Button>
+              </div>
+
+              <div className="lg:ml-auto">
+                <Button onClick={handleAddNewClick} className="w-full lg:w-auto">
+                  <PersonAdd20Regular aria-hidden />
+                  Add New Student
+                </Button>
+              </div>
             </div>
 
             {searchStudentId && (
-              <div className="flex items-center gap-2 text-xs text-text-muted px-1">
-                <span className="font-medium">Searching across: Name • Student ID • Email • Phone • Faculty • Batch</span>
+              <p className="px-4 pb-2 text-caption text-text-muted">
+                Searching across: Name • Student ID • Email • Phone • Faculty • Batch
+              </p>
+            )}
+
+            {/* Advanced Filters panel */}
+            {showAdvanced && (
+              <div id="advanced-filters" className="border-t border-border-subtle bg-surface-subtle px-4 py-3">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:gap-8">
+                  <fieldset>
+                    <legend className="mb-1.5 text-caption-strong text-text-secondary">Semester</legend>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.from({ length: 8 }, (_, i) => i + 1).map(num => (
+                        <ChipToggle
+                          key={num}
+                          active={selectedSemesters.includes(num)}
+                          onClick={() => {
+                            setSelectedSemesters(prev =>
+                              prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+                            );
+                          }}
+                        >
+                          {num}
+                        </ChipToggle>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  <fieldset>
+                    <legend className="mb-1.5 text-caption-strong text-text-secondary">Year</legend>
+                    <div className="flex flex-wrap gap-1.5">
+                      {Array.from({ length: 4 }, (_, i) => i + 1).map(num => (
+                        <ChipToggle
+                          key={num}
+                          active={selectedYears.includes(num)}
+                          onClick={() => {
+                            setSelectedYears(prev =>
+                              prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
+                            );
+                          }}
+                        >
+                          {num}
+                        </ChipToggle>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  {/* Clear filters action */}
+                  <div className="md:ml-auto md:self-end">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedFaculty('');
+                        setSelectedSemesters([]);
+                        setSelectedYears([]);
+                        setSelectedBatch('');
+                        setHasEmail('any');
+                        setFaceFilter('any');
+                      }}
+                    >
+                      <Dismiss16Regular aria-hidden />
+                      Clear All Filters
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* Advanced Filters */}
-            <Accordion type="single" collapsible className="rounded-lg border border-border bg-surface-subtle/40 overflow-hidden">
-              <AccordionItem value="advanced" className="border-none">
-                <AccordionTrigger className="px-4 py-2.5 hover:no-underline text-xs font-medium text-text-secondary uppercase tracking-wider">
-                  <div className="flex items-center gap-2">
-                    <Filter size={14} className="text-action-primary" aria-hidden="true" />
-                    <span>Advanced Filters</span>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="px-4 pb-4">
-                  <div className="space-y-4 pt-1">
-                    {/* Faculty Filter */}
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-text-secondary flex items-center gap-1.5">
-                        <Education size={14} aria-hidden="true" />
-                        Faculty
-                      </label>
-                      <select
-                        className="w-full rounded-md border border-border bg-surface-default px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                        value={selectedFaculty}
-                        onChange={e => { setSelectedFaculty(e.target.value); }}
-                      >
-                        <option value="">All Faculties</option>
-                        {faculties.map(faculty => (
-                          <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Academic Filters Grid */}
-                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                      {/* Semesters */}
-                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
-                        <p className="text-xs font-semibold text-text-secondary">
-                          Semester
-                        </p>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {Array.from({ length: 8 }, (_, i) => i + 1).map(num => (
-                            <button
-                              key={num}
-                              type="button"
-                              onClick={() => {
-                                setSelectedSemesters(prev => 
-                                  prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
-                                );
-                              }}
-                              className={`py-1 rounded text-xs font-medium border transition-colors ${
-                                selectedSemesters.includes(num)
-                                  ? 'bg-action-primary text-white border-action-primary'
-                                  : 'border-border text-text-secondary hover:bg-surface-subtle'
-                              }`}
-                            >
-                              {num}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Years */}
-                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
-                        <p className="text-xs font-semibold text-text-secondary">
-                          Year
-                        </p>
-                        <div className="grid grid-cols-4 gap-1.5">
-                          {Array.from({ length: 4 }, (_, i) => i + 1).map(num => (
-                            <button
-                              key={num}
-                              type="button"
-                              onClick={() => {
-                                setSelectedYears(prev => 
-                                  prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num]
-                                );
-                              }}
-                              className={`py-1 rounded text-xs font-medium border transition-colors ${
-                                selectedYears.includes(num)
-                                  ? 'bg-action-primary text-white border-action-primary'
-                                  : 'border-border text-text-secondary hover:bg-surface-subtle'
-                              }`}
-                            >
-                              {num}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Batch */}
-                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
-                        <label className="text-xs font-semibold text-text-secondary block">
-                          Batch
-                        </label>
-                        <select
-                          className="w-full rounded border border-border bg-surface-default px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                          value={selectedBatch}
-                          onChange={(e) => setSelectedBatch(e.target.value)}
-                        >
-                          <option value="">All Batches</option>
-                          {batchOptions.map(b => (
-                            <option key={b} value={b}>{b}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Email presence */}
-                      <div className="p-3 rounded-md border border-border bg-surface-default space-y-2">
-                        <label className="text-xs font-semibold text-text-secondary block">
-                          Email Status
-                        </label>
-                        <select
-                          className="w-full rounded border border-border bg-surface-default px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                          value={hasEmail}
-                          onChange={(e) => setHasEmail(e.target.value as 'any' | 'yes' | 'no')}
-                        >
-                          <option value="any">Any</option>
-                          <option value="yes">Has Email</option>
-                          <option value="no">Missing Email</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Clear filters action */}
-                    <div className="flex justify-end pt-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedFaculty('');
-                          setSelectedSemesters([]);
-                          setSelectedYears([]);
-                          setSelectedBatch('');
-                          setHasEmail('any');
-                        }}
-                        className="text-xs text-text-muted hover:text-status-error gap-1.5"
-                      >
-                        <Close size={14} aria-hidden="true" />
-                        Clear All Filters
-                      </Button>
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-
             {/* Active Filters Display */}
-            {(selectedFaculty || searchStudentId.trim() || selectedSemesters.length || selectedYears.length || selectedBatch || hasEmail !== 'any') && (
-              <div className="pt-2">
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  <span className="text-[11px] font-semibold text-text-muted uppercase tracking-wider mr-1">Active Filters:</span>
-                  {searchStudentId.trim() && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>"{searchStudentId}"</span>
-                      <button onClick={() => setSearchStudentId('')} className="hover:text-status-error ml-0.5" aria-label="Remove search filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  {selectedFaculty && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>{faculties.find(f => f.id === Number(selectedFaculty))?.name}</span>
-                      <button onClick={() => setSelectedFaculty('')} className="hover:text-status-error ml-0.5" aria-label="Remove faculty filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  {selectedSemesters.length > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>Sem: {selectedSemesters.sort((a,b)=>a-b).join(', ')}</span>
-                      <button onClick={() => setSelectedSemesters([])} className="hover:text-status-error ml-0.5" aria-label="Remove semester filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  {selectedYears.length > 0 && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>Year: {selectedYears.sort((a,b)=>a-b).join(', ')}</span>
-                      <button onClick={() => setSelectedYears([])} className="hover:text-status-error ml-0.5" aria-label="Remove year filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  {selectedBatch && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>Batch: {selectedBatch}</span>
-                      <button onClick={() => setSelectedBatch('')} className="hover:text-status-error ml-0.5" aria-label="Remove batch filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  {hasEmail !== 'any' && (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-surface-subtle border border-border text-text-primary">
-                      <span>{hasEmail === 'yes' ? 'Has Email' : 'Missing Email'}</span>
-                      <button onClick={() => setHasEmail('any')} className="hover:text-status-error ml-0.5" aria-label="Remove email filter">
-                        <Close size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSearchStudentId('');
-                      setSelectedFaculty('');
-                      setSelectedSemesters([]);
-                      setSelectedYears([]);
-                      setSelectedBatch('');
-                      setHasEmail('any');
-                    }}
-                    className="h-6 px-2 text-xs text-text-muted hover:text-text-primary"
-                  >
-                    Reset All
-                  </Button>
-                </div>
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center gap-1.5 border-t border-border-subtle px-4 py-2">
+                <span className="mr-1 text-caption text-text-muted">Active filters:</span>
+                {searchStudentId.trim() && (
+                  <FilterTag label={`"${searchStudentId}"`} onRemove={() => setSearchStudentId('')} ariaLabel="Remove search filter" />
+                )}
+                {selectedFaculty && (
+                  <FilterTag
+                    label={faculties.find(f => f.id === Number(selectedFaculty))?.name}
+                    onRemove={() => setSelectedFaculty('')}
+                    ariaLabel="Remove faculty filter"
+                  />
+                )}
+                {selectedSemesters.length > 0 && (
+                  <FilterTag
+                    label={`Sem: ${selectedSemesters.sort((a,b)=>a-b).join(', ')}`}
+                    onRemove={() => setSelectedSemesters([])}
+                    ariaLabel="Remove semester filter"
+                  />
+                )}
+                {selectedYears.length > 0 && (
+                  <FilterTag
+                    label={`Year: ${selectedYears.sort((a,b)=>a-b).join(', ')}`}
+                    onRemove={() => setSelectedYears([])}
+                    ariaLabel="Remove year filter"
+                  />
+                )}
+                {selectedBatch && (
+                  <FilterTag label={`Batch: ${selectedBatch}`} onRemove={() => setSelectedBatch('')} ariaLabel="Remove batch filter" />
+                )}
+                {hasEmail !== 'any' && (
+                  <FilterTag
+                    label={hasEmail === 'yes' ? 'Has Email' : 'Missing Email'}
+                    onRemove={() => setHasEmail('any')}
+                    ariaLabel="Remove email filter"
+                  />
+                )}
+                {faceFilter !== 'any' && (
+                  <FilterTag
+                    label={FACE_FILTER_LABEL[faceFilter]}
+                    onRemove={() => setFaceFilter('any')}
+                    ariaLabel="Remove face registration filter"
+                  />
+                )}
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => {
+                    setSearchStudentId('');
+                    setSelectedFaculty('');
+                    setSelectedSemesters([]);
+                    setSelectedYears([]);
+                    setSelectedBatch('');
+                    setHasEmail('any');
+                    setFaceFilter('any');
+                  }}
+                  className="h-6 px-1.5"
+                >
+                  Reset All
+                </Button>
               </div>
             )}
           </div>
 
           {/* Results Section */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2 text-xs text-text-secondary">
-                <UserMultiple size={16} className="text-action-primary" aria-hidden="true" />
-                <span>Showing <strong className="text-text-primary tabular-nums">{filteredStudents.length}</strong> of <strong className="text-text-primary tabular-nums">{students.length}</strong> students</span>
-              </div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-caption text-text-muted">
+              <People20Regular className="text-text-muted" aria-hidden />
+              <span>Showing <strong className="font-semibold text-text-primary tabular-nums">{filteredStudents.length}</strong> of <strong className="font-semibold text-text-primary tabular-nums">{students.length}</strong> students</span>
+              {!isLoading && notRegisteredCount > 0 && faceFilter !== 'not_registered' && (
+                <>
+                  <span aria-hidden>·</span>
+                  <button
+                    type="button"
+                    onClick={() => setFaceFilter('not_registered')}
+                    className="inline-flex items-center gap-1 rounded text-brand-foreground hover:text-brand-foreground-hover hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-text-primary"
+                  >
+                    <ScanPerson20Regular className="size-4" aria-hidden />
+                    <span className="tabular-nums">{notRegisteredCount}</span> without a registered face
+                  </button>
+                </>
+              )}
             </div>
 
-            <StudentList 
-              students={filteredStudents} 
+            <StudentTable
+              students={filteredStudents}
               onEdit={handleEditStudent}
               onDelete={handleDeleteStudent}
+              onFace={setFaceStudent}
               isLoading={isLoading}
               sortBy={sortBy}
               sortDir={sortDir}
@@ -743,15 +1119,27 @@ const StudentsPage = () => {
             />
           </div>
         </TabsContent>
-        
-        <TabsContent value="form" className="mt-4">
-          <StudentFormEnhanced 
+
+        <TabsContent value="form" className="mt-0">
+          <StudentFormEnhanced
             onSubmit={onSubmit}
             initialData={selectedStudent}
             isLoading={addStudentMutation.isPending || updateStudentMutation.isPending}
           />
         </TabsContent>
       </Tabs>
+
+      <StudentFaceDialog
+        student={
+          faceStudent && faceStudent.id
+            ? { id: faceStudent.id, name: faceStudent.full_name, studentId: faceStudent.student_id }
+            : null
+        }
+        open={!!faceStudent}
+        onOpenChange={(open) => {
+          if (!open) setFaceStudent(null);
+        }}
+      />
     </div>
   );
 };

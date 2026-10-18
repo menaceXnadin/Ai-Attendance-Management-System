@@ -2,18 +2,17 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Users, 
-  Calendar, 
-  Clock, 
-  Target,
-  BarChart3,
-  Activity,
-  AlertCircle,
-  CheckCircle
-} from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  CalendarLtr20Regular,
+  CheckmarkCircle20Regular,
+  DataBarVertical20Regular,
+  People20Regular,
+  Warning16Regular,
+  CheckmarkCircle16Regular,
+} from '@fluentui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 
@@ -50,16 +49,13 @@ const RealTimeAnalytics: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {[...Array(4)].map((_, i) => (
-          <Card key={i} className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-            <CardContent className="p-6">
-              {/* Use a dedicated skeleton animation to avoid global green glow from .animate-pulse */}
-              <div className="animate-skeleton space-y-3">
-                <div className="h-4 bg-slate-700/50 rounded w-3/4"></div>
-                <div className="h-8 bg-slate-700/50 rounded w-1/2"></div>
-                <div className="h-3 bg-slate-700/50 rounded w-full"></div>
-              </div>
+          <Card key={i} className="shadow">
+            <CardContent className="space-y-3 p-5">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-8 w-1/2" />
+              <Skeleton className="h-3 w-full" />
             </CardContent>
           </Card>
         ))}
@@ -76,10 +72,10 @@ const RealTimeAnalytics: React.FC = () => {
   };
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-status-success', bgColor: 'bg-status-success-subtle', badge: 'success' as const };
+    if (rate >= 85) return { status: 'Good', color: 'text-status-success', bgColor: 'bg-status-success-subtle', badge: 'success' as const };
+    if (rate >= 75) return { status: 'Warning', color: 'text-status-warning', bgColor: 'bg-status-warning-subtle', badge: 'warning' as const };
+    return { status: 'Critical', color: 'text-status-error', bgColor: 'bg-status-error-subtle', badge: 'destructive' as const };
   };
 
   const attendanceStatus = getAttendanceStatus(data.attendanceRate);
@@ -89,82 +85,75 @@ const RealTimeAnalytics: React.FC = () => {
   const weeklyTrend = attendanceSummary ? 
     ((attendanceSummary.percentagePresent - data.attendanceRate) || 0) : 0;
 
+  const kpiValueClass = 'mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary';
+  const chipClass = 'grid h-10 w-10 shrink-0 place-items-center rounded-md';
+  const cardHeaderClass = 'space-y-0 border-b border-border-subtle px-5 py-4';
+  const cardTitleClass = 'text-subheading tracking-normal text-text-primary';
+  const listRowClass = 'flex items-center justify-between gap-3 py-2.5';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Total Students */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Total Students</p>
-                <div className="text-2xl font-bold text-blue-400">
-                  {data.totalStudents}
-                </div>
-                <p className="text-xs text-slate-500">
-                  Registered students
-                </p>
+        <Card className="shadow">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Total Students</p>
+                <div className={kpiValueClass}>{data.totalStudents}</div>
+                <p className="mt-1 text-caption text-text-muted">Registered students</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                <Users className="h-6 w-6 text-white" />
+              <div className={`${chipClass} bg-brand-subtle text-brand-foreground`}>
+                <People20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Present Today */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Present Today</p>
-                <div className="text-2xl font-bold text-green-400">
-                  {data.presentToday}
-                </div>
-                <p className="text-xs text-slate-500">
-                  out of {data.totalStudents} students
-                </p>
+        <Card className="shadow">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Present Today</p>
+                <div className={kpiValueClass}>{data.presentToday}</div>
+                <p className="mt-1 text-caption text-text-muted">out of {data.totalStudents} students</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-white" />
+              <div className={`${chipClass} bg-status-success-subtle text-status-success`}>
+                <CheckmarkCircle20Regular aria-hidden />
               </div>
             </div>
-            <div className="mt-3">
-              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-2" />
+            <div className="mt-4">
+              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-1.5" />
             </div>
           </CardContent>
         </Card>
 
         {/* Attendance Rate */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Attendance Rate</p>
-                <div className="text-2xl font-bold text-action-primary">
-                  {data.attendanceRate}%
-                </div>
-                <div className="flex items-center gap-1 mt-1">
+        <Card className="shadow">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Attendance Rate</p>
+                <div className={kpiValueClass}>{data.attendanceRate}%</div>
+                <div className="mt-1 flex items-center gap-1">
                   {weeklyTrend >= 0 ? (
-                    <TrendingUp className="h-3 w-3 text-green-400" />
+                    <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />
                   ) : (
-                    <TrendingDown className="h-3 w-3 text-red-400" />
+                    <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />
                   )}
-                  <span className={`text-xs ${weeklyTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`text-caption ${weeklyTrend >= 0 ? 'text-status-success' : 'text-status-error'}`}>
                     {Math.abs(weeklyTrend).toFixed(1)}% vs average
                   </span>
                 </div>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-action-primary flex items-center justify-center text-white">
-                <BarChart3 className="h-6 w-6 text-white" />
+              <div className={`${chipClass} bg-brand-subtle text-brand-foreground`}>
+                <DataBarVertical20Regular aria-hidden />
               </div>
             </div>
             <div className="mt-3">
-              <Badge variant="outline" className={`${attendanceStatus.bgColor} ${attendanceStatus.color} border-current`}>
+              <Badge variant={attendanceStatus.badge} shape="pill">
                 {attendanceStatus.status}
               </Badge>
             </div>
@@ -172,21 +161,16 @@ const RealTimeAnalytics: React.FC = () => {
         </Card>
 
         {/* Total Classes */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-500"></div>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Total Classes</p>
-                <div className="text-2xl font-bold text-orange-400">
-                  {data.totalClasses}
-                </div>
-                <p className="text-xs text-slate-500">
-                  Active classes
-                </p>
+        <Card className="shadow">
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Total Classes</p>
+                <div className={kpiValueClass}>{data.totalClasses}</div>
+                <p className="mt-1 text-caption text-text-muted">Active classes</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-white" />
+              <div className={`${chipClass} bg-brand-subtle text-brand-foreground`}>
+                <CalendarLtr20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
@@ -194,93 +178,88 @@ const RealTimeAnalytics: React.FC = () => {
       </div>
 
       {/* Quick Insights */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         {/* Today's Summary */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-400" />
-              Today's Summary
-            </CardTitle>
+        <Card className="shadow">
+          <CardHeader className={cardHeaderClass}>
+            <CardTitle className={cardTitleClass}>Today's Summary</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Present</span>
-              <Badge className="bg-green-500/20 text-green-300">{data.presentToday}</Badge>
-            </div>
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Absent</span>
-              <Badge className="bg-red-500/20 text-red-300">{absentToday}</Badge>
-            </div>
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Rate</span>
-              <Badge className={`${attendanceStatus.bgColor} ${attendanceStatus.color}`}>
-                {data.attendanceRate}%
-              </Badge>
+          <CardContent className="px-5 py-1">
+            <div className="divide-y divide-border-subtle">
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">Present</span>
+                <Badge variant="success" shape="pill">{data.presentToday}</Badge>
+              </div>
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">Absent</span>
+                <Badge variant="destructive" shape="pill">{absentToday}</Badge>
+              </div>
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">Rate</span>
+                <Badge variant={attendanceStatus.badge} shape="pill">
+                  {data.attendanceRate}%
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* System Health */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Target className="h-5 w-5 text-green-400" />
-              System Health
-            </CardTitle>
+        <Card className="shadow">
+          <CardHeader className={cardHeaderClass}>
+            <CardTitle className={cardTitleClass}>System Health</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Database</span>
-              <div className="flex items-center gap-1">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                <span className="text-green-300 text-sm">Online</span>
+          <CardContent className="px-5 py-1">
+            <div className="divide-y divide-border-subtle">
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">Database</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-presence-available" aria-hidden />
+                  <span className="text-body text-text-primary">Online</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">API Server</span>
-              <div className="flex items-center gap-1">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                <span className="text-green-300 text-sm">Active</span>
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">API Server</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-presence-available" aria-hidden />
+                  <span className="text-body text-text-primary">Active</span>
+                </div>
               </div>
-            </div>
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Records</span>
-              <Badge className="bg-blue-500/20 text-blue-300">
-                {data.totalAttendanceRecords}
-              </Badge>
+              <div className={listRowClass}>
+                <span className="text-body text-text-secondary">Records</span>
+                <Badge variant="secondary" shape="pill">
+                  {data.totalAttendanceRecords}
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Quick Actions */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Clock className="h-5 w-5 text-purple-400" />
-              Quick Insights
-            </CardTitle>
+        <Card className="shadow">
+          <CardHeader className={cardHeaderClass}>
+            <CardTitle className={cardTitleClass}>Quick Insights</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+          <CardContent className="space-y-2 px-5 py-3">
             {data.attendanceRate < 75 && (
-              <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
-                <AlertCircle className="h-4 w-4 text-amber-400" />
-                <span className="text-amber-300 text-sm">Low attendance alert</span>
+              <div className="flex items-center gap-2 rounded-md border border-status-warning-border bg-status-warning-subtle px-3 py-2">
+                <Warning16Regular className="shrink-0 text-status-warning" aria-hidden />
+                <span className="text-body text-text-primary">Low attendance alert</span>
               </div>
             )}
-            
+
             {data.attendanceRate >= 90 && (
-              <div className="flex items-center gap-2 p-2 rounded bg-green-500/10 border border-green-500/20">
-                <CheckCircle className="h-4 w-4 text-green-400" />
-                <span className="text-green-300 text-sm">Excellent attendance!</span>
+              <div className="flex items-center gap-2 rounded-md border border-status-success-border bg-status-success-subtle px-3 py-2">
+                <CheckmarkCircle16Regular className="shrink-0 text-status-success" aria-hidden />
+                <span className="text-body text-text-primary">Excellent attendance!</span>
               </div>
             )}
-            
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Auto-refresh</span>
-              <div className="flex items-center gap-1">
-                <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-blue-300 text-sm">30s</span>
+
+            <div className={listRowClass}>
+              <span className="text-body text-text-secondary">Auto-refresh</span>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
+                <span className="text-body tabular-nums text-text-primary">30s</span>
               </div>
             </div>
           </CardContent>

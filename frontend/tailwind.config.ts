@@ -1,6 +1,15 @@
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
+function withOpacity(varName: string) {
+	return ({ opacityValue }: { opacityValue?: string }) => {
+		if (opacityValue && !opacityValue.startsWith("var(")) {
+			return `color-mix(in srgb, var(${varName}) calc(${opacityValue} * 100%), transparent)`;
+		}
+		return `var(${varName})`;
+	};
+}
+
 export default {
 	darkMode: ["class"],
 	content: [
@@ -19,36 +28,44 @@ export default {
 		},
 		extend: {
 			fontFamily: {
-				sans: ['"IBM Plex Sans"', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-				mono: ['"IBM Plex Mono"', 'monospace']
+				sans: ['"Segoe UI"', '"Segoe UI Web (West European)"', '-apple-system', 'BlinkMacSystemFont', 'Roboto', '"Helvetica Neue"', 'sans-serif'],
+				mono: ['"Cascadia Code"', 'Consolas', '"Courier New"', 'monospace']
 			},
 			fontSize: {
-				'display': ['2rem', { lineHeight: '2.5rem', fontWeight: '600' }],
-				'page-title': ['1.5rem', { lineHeight: '2rem', fontWeight: '600' }],
-				'section-title': ['1.125rem', { lineHeight: '1.5rem', fontWeight: '600' }],
-				'subheading': ['1rem', { lineHeight: '1.5rem', fontWeight: '600' }],
-				'body': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '400' }],
-				'body-strong': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '500' }],
-				'label': ['0.8125rem', { lineHeight: '1rem', fontWeight: '500' }],
-				'caption': ['0.75rem', { lineHeight: '1rem', fontWeight: '400' }],
-				'overline': ['0.6875rem', { lineHeight: '1rem', fontWeight: '600', letterSpacing: '0.05em' }]
+				// Fluent 2 type ramp
+				'display': ['2rem', { lineHeight: '2.5rem', fontWeight: '600' }],        // Title 1 · 32/40
+				'title-2': ['1.75rem', { lineHeight: '2.25rem', fontWeight: '600' }],    // Title 2 · 28/36
+				'page-title': ['1.5rem', { lineHeight: '2rem', fontWeight: '600' }],     // Title 3 · 24/32
+				'section-title': ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600' }], // Subtitle 1 · 20/28
+				'subheading': ['1rem', { lineHeight: '1.375rem', fontWeight: '600' }],   // Subtitle 2 · 16/22
+				'body': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '400' }],      // Body 1 · 14/20
+				'body-strong': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '600' }],
+				'label': ['0.875rem', { lineHeight: '1.25rem', fontWeight: '600' }],
+				'caption': ['0.75rem', { lineHeight: '1rem', fontWeight: '400' }],       // Caption 1 · 12/16
+				'caption-strong': ['0.75rem', { lineHeight: '1rem', fontWeight: '600' }],
+				'overline': ['0.625rem', { lineHeight: '0.875rem', fontWeight: '600', letterSpacing: '0.04em' }] // Caption 2 · 10/14
 			},
 			colors: {
 				border: {
 					DEFAULT: 'hsl(var(--border))',
-					subtle: 'var(--border-subtle)',
-					default: 'var(--border-default)',
-					strong: 'var(--border-strong)',
+					subtle: withOpacity('--border-subtle'),
+					default: withOpacity('--border-default'),
+					strong: withOpacity('--border-strong'),
 				},
-				'border-subtle': 'var(--border-subtle)',
-				'border-default': 'var(--border-default)',
-				'border-strong': 'var(--border-strong)',
+				'border-subtle': withOpacity('--border-subtle'),
+				'border-default': withOpacity('--border-default'),
+				'border-strong': withOpacity('--border-strong'),
 				text: {
-					primary: 'var(--text-primary)',
-					secondary: 'var(--text-secondary)',
-					muted: 'var(--text-muted)',
-					inverse: 'var(--text-inverse)',
+					primary: withOpacity('--text-primary'),
+					secondary: withOpacity('--text-secondary'),
+					muted: withOpacity('--text-muted'),
+					inverse: withOpacity('--text-inverse'),
+					disabled: withOpacity('--text-disabled'),
 				},
+				'text-primary': withOpacity('--text-primary'),
+				'text-secondary': withOpacity('--text-secondary'),
+				'text-muted': withOpacity('--text-muted'),
+				'text-inverse': withOpacity('--text-inverse'),
 				input: 'hsl(var(--input))',
 				ring: 'hsl(var(--ring))',
 				background: 'hsl(var(--background))',
@@ -92,67 +109,146 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				surface: {
-					canvas: 'var(--surface-canvas)',
-					DEFAULT: 'var(--surface-default)',
-					subtle: 'var(--surface-subtle)',
-					raised: 'var(--surface-raised)',
+					canvas: withOpacity('--surface-canvas'),
+					DEFAULT: withOpacity('--surface-default'),
+					default: withOpacity('--surface-default'),
+					subtle: withOpacity('--surface-subtle'),
+					raised: withOpacity('--surface-raised'),
+					hover: withOpacity('--surface-hover'),
+					pressed: withOpacity('--surface-pressed'),
+					selected: withOpacity('--surface-selected'),
 				},
+				'surface-canvas': withOpacity('--surface-canvas'),
+				'surface-default': withOpacity('--surface-default'),
+				'surface-subtle': withOpacity('--surface-subtle'),
+				'surface-raised': withOpacity('--surface-raised'),
 				action: {
-					primary: 'var(--action-primary)',
-					'primary-hover': 'var(--action-primary-hover)',
-					'primary-subtle': 'var(--action-primary-subtle)',
-					secondary: 'var(--action-secondary)',
+					DEFAULT: withOpacity('--action-primary'),
+					default: withOpacity('--action-primary'),
+					primary: withOpacity('--action-primary'),
+					'primary-hover': withOpacity('--action-primary-hover'),
+					'primary-subtle': withOpacity('--action-primary-subtle'),
+					secondary: withOpacity('--action-secondary'),
 				},
+				'action-primary': withOpacity('--action-primary'),
+				'action-primary-hover': withOpacity('--action-primary-hover'),
+				'action-primary-subtle': withOpacity('--action-primary-subtle'),
+				'action-secondary': withOpacity('--action-secondary'),
 				'border-token': {
-					subtle: 'var(--border-subtle)',
-					DEFAULT: 'var(--border-default)',
-					strong: 'var(--border-strong)',
+					subtle: withOpacity('--border-subtle'),
+					DEFAULT: withOpacity('--border-default'),
+					strong: withOpacity('--border-strong'),
 				},
 				nav: {
-					surface: 'var(--nav-surface)',
-					hover: 'var(--nav-hover)',
-					active: 'var(--nav-active)',
-					text: 'var(--nav-text)',
+					surface: withOpacity('--nav-surface'),
+					hover: withOpacity('--nav-hover'),
+					active: withOpacity('--nav-active'),
+					text: withOpacity('--nav-text'),
 				},
 				status: {
-					success: 'var(--status-success)',
-					'success-subtle': 'var(--status-success-subtle)',
-					'success-border': 'var(--status-success-border)',
-					warning: 'var(--status-warning)',
-					'warning-subtle': 'var(--status-warning-subtle)',
-					'warning-border': 'var(--status-warning-border)',
-					error: 'var(--status-error)',
-					'error-subtle': 'var(--status-error-subtle)',
-					'error-border': 'var(--status-error-border)',
-					info: 'var(--status-info)',
-					'info-subtle': 'var(--status-info-subtle)',
-					'info-border': 'var(--status-info-border)',
+					success: withOpacity('--status-success'),
+					'success-subtle': withOpacity('--status-success-subtle'),
+					'success-border': withOpacity('--status-success-border'),
+					warning: withOpacity('--status-warning'),
+					'warning-subtle': withOpacity('--status-warning-subtle'),
+					'warning-border': withOpacity('--status-warning-border'),
+					error: withOpacity('--status-error'),
+					'error-subtle': withOpacity('--status-error-subtle'),
+					'error-border': withOpacity('--status-error-border'),
+					info: withOpacity('--status-info'),
+					'info-subtle': withOpacity('--status-info-subtle'),
+					'info-border': withOpacity('--status-info-border'),
 				},
 				brand: {
-					50: "#e6f5f7",
-					100: "#ccebef",
-					200: "#99d7df",
-					300: "#66c3cf",
-					400: "#33afbf",
-					500: "#009baf",
-					600: "#007c8c",
-					700: "#005d69",
-					800: "#003e46",
-					900: "#001f23",
+					DEFAULT: withOpacity('--brand'),
+					hover: withOpacity('--brand-hover'),
+					pressed: withOpacity('--brand-pressed'),
+					foreground: withOpacity('--brand-foreground'),
+					'foreground-hover': withOpacity('--brand-foreground-hover'),
+					subtle: withOpacity('--brand-subtle'),
+					'subtle-hover': withOpacity('--brand-subtle-hover'),
+					stroke: withOpacity('--brand-stroke'),
+					on: withOpacity('--on-brand'),
+					// Teams brand ramp (static)
+					50: '#E8EBFA',
+					100: '#DCE0FA',
+					200: '#C5CBFA',
+					300: '#AAB1FA',
+					400: '#7F85F5',
+					500: '#5B5FC7',
+					600: '#4F52B2',
+					700: '#444791',
+					800: '#383966',
+					900: '#2F2F4A',
+				},
+				'surface-hover': withOpacity('--surface-hover'),
+				'surface-pressed': withOpacity('--surface-pressed'),
+				'surface-selected': withOpacity('--surface-selected'),
+				'text-disabled': withOpacity('--text-disabled'),
+				titlebar: withOpacity('--titlebar'),
+				presence: {
+					available: withOpacity('--presence-available'),
+					away: withOpacity('--presence-away'),
+					busy: withOpacity('--presence-busy'),
+					offline: withOpacity('--presence-offline'),
+				},
+				chart: {
+					1: withOpacity('--chart-1'),
+					2: withOpacity('--chart-2'),
+					3: withOpacity('--chart-3'),
+					4: withOpacity('--chart-4'),
+					5: withOpacity('--chart-5'),
+					6: withOpacity('--chart-6'),
+					7: withOpacity('--chart-7'),
+					8: withOpacity('--chart-8'),
 				}
 			},
 			borderRadius: {
+				// Fluent 2 corner radii
 				none: '0px',
-				sm: '4px',
-				md: '6px',
+				sm: '2px',
+				DEFAULT: '4px',
+				md: '4px',
 				lg: '8px',
+				xl: '12px',
+				'2xl': '16px',
 				full: '9999px',
 			},
 			boxShadow: {
+				// Fluent 2 elevation ramp (theme-aware via CSS variables)
 				none: 'none',
-				sm: '0 1px 2px 0 rgba(16, 24, 40, 0.06)',
-				md: '0 4px 12px 0 rgba(16, 24, 40, 0.10)',
-				lg: '0 12px 32px 0 rgba(16, 24, 40, 0.14)',
+				xs: 'var(--shadow-2)',
+				sm: 'var(--shadow-2)',
+				DEFAULT: 'var(--shadow-4)',
+				md: 'var(--shadow-8)',
+				lg: 'var(--shadow-16)',
+				xl: 'var(--shadow-28)',
+				'2xl': 'var(--shadow-64)',
+				'fluent-2': 'var(--shadow-2)',
+				'fluent-4': 'var(--shadow-4)',
+				'fluent-8': 'var(--shadow-8)',
+				'fluent-16': 'var(--shadow-16)',
+				'fluent-28': 'var(--shadow-28)',
+				'fluent-64': 'var(--shadow-64)',
+			},
+			// `text-primary` / `text-action-primary` render the accessible brand
+			// foreground (lighter in dark mode) while `bg-primary` stays the filled brand.
+			textColor: {
+				primary: {
+					DEFAULT: withOpacity('--brand-foreground'),
+					foreground: 'hsl(var(--primary-foreground))',
+				},
+				'action-primary': withOpacity('--brand-foreground'),
+				action: {
+					DEFAULT: withOpacity('--brand-foreground'),
+					default: withOpacity('--brand-foreground'),
+					primary: withOpacity('--brand-foreground'),
+				},
+			},
+			transitionTimingFunction: {
+				'fluent-decelerate': 'cubic-bezier(0.1, 0.9, 0.2, 1)',
+				'fluent-accelerate': 'cubic-bezier(0.9, 0.1, 1, 0.2)',
+				'fluent-standard': 'cubic-bezier(0.33, 0, 0.67, 1)',
 			},
 			keyframes: {
 				'accordion-down': {
@@ -185,7 +281,7 @@ export default {
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
 				'accordion-up': 'accordion-up 0.2s ease-out',
-				'fade-in-up': 'fade-in-up 0.3s ease-out forwards'
+				'fade-in-up': 'fade-in-up 0.3s cubic-bezier(0.1, 0.9, 0.2, 1) forwards'
 			}
 		}
 	},

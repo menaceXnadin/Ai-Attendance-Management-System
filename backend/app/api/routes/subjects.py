@@ -1,40 +1,26 @@
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, Integer, text
+from sqlalchemy import select, Integer, text, func, delete as sa_delete
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from app.core.database import get_db, get_sync_db
-from app.models import Subject, Faculty
+from app.models import Subject, Faculty, AttendanceRecord, ClassSchedule, Mark, AcademicEvent
 from app.schemas import SubjectCreate, Subject as SubjectSchema
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin_role, require_debug_admin
 
 router = APIRouter(prefix="/subjects", tags=["subjects"])
 
 @router.get("/debug-auth")
-async def debug_auth_endpoint(request: Request):
-    """Debug endpoint to test HTTPBearer dependency."""
-    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    from fastapi import Depends
-    
-    print(f"[DEBUG AUTH] Raw Authorization header: {request.headers.get('authorization')}")
-    
-    security = HTTPBearer()
-    try:
-        credentials: HTTPAuthorizationCredentials = await security(request)
-        print(f"[DEBUG AUTH] HTTPBearer parsed successfully: {credentials.credentials[:50]}...")
-        return {"message": "HTTPBearer working", "token": credentials.credentials[:50] + "..."}
-    except Exception as e:
-        print(f"[DEBUG AUTH] HTTPBearer failed: {e}")
-        return {"error": f"HTTPBearer failed: {str(e)}"}
+async def debug_auth_endpoint(current_user = Depends(require_debug_admin)):
+    """Debug endpoint to confirm bearer auth works (admin + DEBUG only). Never echoes the token."""
+    return {"message": "HTTPBearer working", "user_id": current_user.id}
 
 @router.get("/debug-test")
-async def debug_test_endpoint(request: Request):
-    """Debug endpoint to test without authentication."""
-    headers = dict(request.headers)
-    print(f"[DEBUG TEST] Headers received: {headers}")
-    auth_header = headers.get('authorization')
-    print(f"[DEBUG TEST] Authorization header: {auth_header}")
-    return {"message": "Debug test successful", "auth_header": auth_header}
+async def debug_test_endpoint(request: Request, current_user = Depends(require_debug_admin)):
+    """Debug endpoint (admin + DEBUG only). Never echoes request headers."""
+    has_auth = request.headers.get('authorization') is not None
+    return {"message": "Debug test successful", "auth_header": "<redacted>" if has_auth else None}
 
 @router.get("/", response_model=List[SubjectSchema])
 async def get_subjects(
@@ -44,7 +30,6 @@ async def get_subjects(
     db: AsyncSession = Depends(get_db)
 ):
     """Get subjects with optional filters for faculty and semester."""
-    print(f"[DEBUG SUBJECTS] User: {current_user.email}, Role: {current_user.role}")
     query = select(Subject)
     
     # Apply filters
@@ -111,7 +96,7 @@ async def get_subjects_by_faculty(
 @router.post("/", response_model=SubjectSchema)
 async def create_subject(
     subject: SubjectCreate,
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new subject."""
@@ -163,17 +148,51 @@ async def get_subject(
 @router.delete("/{subject_id}")
 async def delete_subject(
     subject_id: int,
-    current_user = Depends(get_current_user),
+    current_user = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a subject."""
+    """Delete a subject (admin only).
+
+    Refuses with 409 while attendance records, class schedules, marks or calendar
+    events reference the subject: attendance/marks are history, and nulling an
+    event's subject_id would turn a subject-specific cancellation into a
+    whole-day one. Deactivate the schedules / move the data first.
+    """
     result = await db.execute(select(Subject).where(Subject.id == subject_id))
     subject = result.scalar_one_or_none()
-    
+
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
-    
-    await db.delete(subject)
-    await db.commit()
-    
+
+    async def _count(model, column) -> int:
+        res = await db.execute(select(func.count()).select_from(model).where(column == subject_id))
+        return int(res.scalar() or 0)
+
+    references = {
+        "attendance_records": await _count(AttendanceRecord, AttendanceRecord.subject_id),
+        "class_schedules": await _count(ClassSchedule, ClassSchedule.subject_id),
+        "marks": await _count(Mark, Mark.subject_id),
+        "academic_events": await _count(AcademicEvent, AcademicEvent.subject_id),
+    }
+    if any(references.values()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Cannot delete a subject that is still referenced",
+                "references": references,
+                "suggestion": "Deactivate its schedules instead; subjects with attendance history are kept.",
+            },
+        )
+
+    try:
+        # Core DELETE: no ORM cascades (they would delete marks / null event scopes).
+        await db.execute(sa_delete(Subject).where(Subject.id == subject_id))
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "Cannot delete a subject that is still referenced by other records"},
+        )
+
     return {"message": "Subject deleted successfully"}

@@ -1,0 +1,13 @@
+Passive face anti-spoofing models (ONNX)
+
+Source: Silent-Face-Anti-Spoofing by Minivision
+https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
+License: Apache License 2.0 (see LICENSE in this folder)
+
+Files:
+- minifasnet_v2_2.7_80x80.onnx     <- resources/anti_spoof_models/2.7_80x80_MiniFASNetV2.pth
+- minifasnet_v1se_4.0_80x80.onnx   <- resources/anti_spoof_models/4_0_0_80x80_MiniFASNetV1SE.pth
+
+Modification: the original PyTorch weights were exported to ONNX (opset 13, dynamic batch)
+without changing them; outputs match the PyTorch models to within 1.2e-7.
+Input: 1x3x80x80 BGR float32, NOT divided by 255. Output: 3 logits; softmax class 1 = real face.

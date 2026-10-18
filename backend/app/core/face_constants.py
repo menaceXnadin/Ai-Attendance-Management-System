@@ -1,59 +1,39 @@
-"""Centralized facial recognition thresholds and quality parameters.
+"""Fixed face-engine limits and legacy recognition thresholds.
 
-All modules (services, routers) should import from here instead of hard-coding
-numeric literals, enabling consistent tuning and A/B experimentation.
+Tunable verification thresholds (match, liveness, quality gate, head turn...) are **not**
+here: they live in the ``face_verification`` system setting (``app/services/face_policy.py``,
+docs/system/face-verification.md §4). This module holds the engine's input limits and the
+constants older endpoints still import.
 
-Definitions:
-    DETECTION_MIN_CONFIDENCE: Minimum detector confidence to accept a face box.
-    REGISTRATION_MIN_CONFIDENCE: Stricter confidence required when persisting an embedding.
-    SIMILARITY_THRESHOLD: Cosine similarity (raw) required for positive identity match.
-    LIVE_SIMILARITY_THRESHOLD: Slightly lower threshold for provisional/live feedback.
-    EXCELLENT_MATCH_THRESHOLD / GOOD_MATCH_THRESHOLD: Buckets for UI quality labels.
-    MIN_EMBEDDING_NORM: Lower bound of embedding vector norm to consider features valid.
-    MIN_FACE_PIXEL_SIZE: Minimum width/height in pixels of detected face for quality.
-    MIN_FACE_AREA_PERCENT / MAX_FACE_AREA_PERCENT: Frame coverage bounds (percent of total image area).
-    MAX_CENTER_OFFSET: Allowed normalized offset of face center from image center.
-    MAX_DECODE_DIMENSION: Cap on largest side during decode to avoid excessive CPU cost.
+Engine input limits (docs/system/face-verification.md §3):
+    MAX_FRAME_BASE64_CHARS: a frame string longer than this is rejected as ``invalid_image``.
+    MAX_DECODE_PIXELS: decoded images with more pixels than this are rejected (decompression bombs).
+    MAX_DECODE_DIMENSION: larger images are downscaled to this longest side before detection.
+    FACE_COUNT_MIN_DET_SCORE: detections at or above this score count in ``faces_detected``.
+    QUALITY_CROP_SIZE: the face crop is resized to this square before sharpness/brightness.
+    ANTISPOOF_INPUT_SIZE: MiniFASNet input (square, pixels).
 
-Note: SIMILARITY_THRESHOLD aligns with settings.face_recognition_tolerance (0.6) at
-initialization; adjust here then remove per-file changes.
+Legacy:
+    DETECTION_MIN_CONFIDENCE: ``insightface_service.confidence_threshold`` for the legacy helpers.
 """
 
-# Detection & Registration
+# -- Engine input limits ------------------------------------------------------------------
+MAX_FRAME_BASE64_CHARS: int = 3_000_000
+MAX_DECODE_PIXELS: int = 40_000_000
+MAX_DECODE_DIMENSION: int = 1280
+FACE_COUNT_MIN_DET_SCORE: float = 0.5
+QUALITY_CROP_SIZE: int = 112
+ANTISPOOF_INPUT_SIZE: int = 80
+
+# -- Legacy ----------------------------------------------------------------------------------
 DETECTION_MIN_CONFIDENCE: float = 0.6
-REGISTRATION_MIN_CONFIDENCE: float = 0.7
-
-# Similarity thresholds (raw cosine values, NOT percentages)
-SIMILARITY_THRESHOLD: float = 0.6
-LIVE_SIMILARITY_THRESHOLD: float = 0.55
-
-# Quality categorization (raw cosine)
-EXCELLENT_MATCH_THRESHOLD: float = 0.80
-GOOD_MATCH_THRESHOLD: float = 0.70
-
-# Embedding quality
-MIN_EMBEDDING_NORM: float = 0.10
-
-# Face geometry / placement
-MIN_FACE_PIXEL_SIZE: int = 80
-MIN_FACE_AREA_PERCENT: float = 5.0
-MAX_FACE_AREA_PERCENT: float = 70.0
-MAX_CENTER_OFFSET: float = 0.30
-
-# Decode / performance safeguards
-MAX_DECODE_DIMENSION: int = 1280  # Downscale larger images to reduce inference time
 
 __all__ = [
-    "DETECTION_MIN_CONFIDENCE",
-    "REGISTRATION_MIN_CONFIDENCE",
-    "SIMILARITY_THRESHOLD",
-    "LIVE_SIMILARITY_THRESHOLD",
-    "EXCELLENT_MATCH_THRESHOLD",
-    "GOOD_MATCH_THRESHOLD",
-    "MIN_EMBEDDING_NORM",
-    "MIN_FACE_PIXEL_SIZE",
-    "MIN_FACE_AREA_PERCENT",
-    "MAX_FACE_AREA_PERCENT",
-    "MAX_CENTER_OFFSET",
+    "MAX_FRAME_BASE64_CHARS",
+    "MAX_DECODE_PIXELS",
     "MAX_DECODE_DIMENSION",
+    "FACE_COUNT_MIN_DET_SCORE",
+    "QUALITY_CROP_SIZE",
+    "ANTISPOOF_INPUT_SIZE",
+    "DETECTION_MIN_CONFIDENCE",
 ]

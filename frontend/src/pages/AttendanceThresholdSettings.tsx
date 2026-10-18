@@ -5,17 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Settings, 
-  Save, 
-  RotateCcw, 
-  Percent, 
-  AlertTriangle,
-  CheckCircle2,
-  Info
-} from 'lucide-react';
+import {
+  Settings20Regular,
+  Save20Regular,
+  ArrowCounterclockwise20Regular,
+  DataPie16Regular,
+  Warning16Filled,
+  CheckmarkCircle20Regular,
+  Info16Filled,
+} from '@fluentui/react-icons';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AttendanceThreshold {
   id: number;
@@ -30,12 +31,16 @@ interface AttendanceThreshold {
   is_active: boolean;
 }
 
+const messageBarClass =
+  'flex items-start gap-2 rounded-md px-3 py-2 text-body text-text-primary';
+
 const AttendanceThresholdSettings: React.FC = () => {
   const [thresholds, setThresholds] = useState<AttendanceThreshold[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const fetchThresholds = useCallback(async () => {
     try {
@@ -70,7 +75,7 @@ const AttendanceThresholdSettings: React.FC = () => {
   const saveThresholds = async () => {
     try {
       setSaving(true);
-      
+
       // Validate thresholds
       const errors = validateThresholds(thresholds);
       if (errors.length > 0) {
@@ -92,6 +97,8 @@ const AttendanceThresholdSettings: React.FC = () => {
         });
       }
 
+      api.attendancePolicy.invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['attendance-policy'] });
       toast({
         title: "Success",
         description: "Attendance thresholds updated successfully",
@@ -138,17 +145,17 @@ const AttendanceThresholdSettings: React.FC = () => {
 
   const validateThresholds = (thresholds: AttendanceThreshold[]): string[] => {
     const errors: string[] = [];
-    
+
     // Check for overlapping ranges
     for (let i = 0; i < thresholds.length; i++) {
       for (let j = i + 1; j < thresholds.length; j++) {
         const t1 = thresholds[i];
         const t2 = thresholds[j];
-        
+
         if (
-          (t1.min_percentage <= t2.min_percentage && 
+          (t1.min_percentage <= t2.min_percentage &&
            (t1.max_percentage === null || t1.max_percentage >= t2.min_percentage)) ||
-          (t2.min_percentage <= t1.min_percentage && 
+          (t2.min_percentage <= t1.min_percentage &&
            (t2.max_percentage === null || t2.max_percentage >= t1.min_percentage))
         ) {
           errors.push(`Overlapping ranges detected between ${t1.label} and ${t2.label}`);
@@ -161,7 +168,7 @@ const AttendanceThresholdSettings: React.FC = () => {
     for (let i = 0; i < sortedThresholds.length - 1; i++) {
       const current = sortedThresholds[i];
       const next = sortedThresholds[i + 1];
-      
+
       if (current.max_percentage !== null && current.max_percentage + 0.01 < next.min_percentage) {
         errors.push(`Gap detected between ${current.label} (${current.max_percentage}%) and ${next.label} (${next.min_percentage}%)`);
       }
@@ -183,40 +190,64 @@ const AttendanceThresholdSettings: React.FC = () => {
     return errors;
   };
 
+  // Threshold color names from the API -> Fluent status tokens
   const getColorClass = (color: string) => {
     const colorMap: Record<string, string> = {
-      blue: 'bg-blue-500',
-      green: 'bg-green-500',
-      yellow: 'bg-yellow-500',
-      red: 'bg-red-500',
+      blue: 'bg-status-info',
+      green: 'bg-status-success',
+      yellow: 'bg-status-warning',
+      red: 'bg-status-error',
     };
-    return colorMap[color] || 'bg-gray-500';
+    return colorMap[color] || 'bg-presence-offline';
+  };
+
+  const getTextColorClass = (color: string) => {
+    const colorMap: Record<string, string> = {
+      blue: 'text-status-info',
+      green: 'text-status-success',
+      yellow: 'text-status-warning',
+      red: 'text-status-error',
+    };
+    return colorMap[color] || 'text-text-secondary';
+  };
+
+  const getBadgeVariant = (color: string): 'info' | 'success' | 'warning' | 'destructive' | 'secondary' => {
+    const variantMap: Record<string, 'info' | 'success' | 'warning' | 'destructive'> = {
+      blue: 'info',
+      green: 'success',
+      yellow: 'warning',
+      red: 'destructive',
+    };
+    return variantMap[color] || 'secondary';
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-subtle border-t-brand" aria-hidden></div>
+          <p className="text-caption text-text-muted">Loading thresholds...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
-          <Settings className="h-8 w-8 text-blue-400" />
+    <div className="mx-auto max-w-6xl space-y-4">
+      <div>
+        <h1 className="flex items-center gap-2 text-page-title text-text-primary">
+          <Settings20Regular className="shrink-0 text-brand-foreground" aria-hidden />
           Attendance Threshold Settings
         </h1>
-        <p className="text-slate-400 mt-2">
+        <p className="text-body text-text-muted mt-1">
           Configure the attendance percentage thresholds for student performance categories
         </p>
       </div>
 
-      {/* Info Alert */}
-      <Alert className="mb-6 bg-blue-500/10 border-blue-500/30">
-        <Info className="h-4 w-4 text-blue-400" />
-        <AlertDescription className="text-blue-300">
+      {/* Info MessageBar */}
+      <Alert className={`${messageBarClass} border-status-info-border bg-status-info-subtle`}>
+        <span className="mt-0.5 shrink-0 text-status-info" aria-hidden><Info16Filled className="block" /></span>
+        <AlertDescription className="text-body text-text-primary">
           Changes to attendance thresholds will be applied immediately across all dashboards and reports.
           Ensure percentage ranges don't overlap and cover all possible values (0-100%).
         </AlertDescription>
@@ -224,166 +255,181 @@ const AttendanceThresholdSettings: React.FC = () => {
 
       {/* Warning if changes exist */}
       {hasChanges && (
-        <Alert className="mb-6 bg-yellow-500/10 border-yellow-500/30">
-          <AlertTriangle className="h-4 w-4 text-yellow-400" />
-          <AlertDescription className="text-yellow-300">
+        <Alert className={`${messageBarClass} border-status-warning-border bg-status-warning-subtle`}>
+          <span className="mt-0.5 shrink-0 text-status-warning" aria-hidden><Warning16Filled className="block" /></span>
+          <AlertDescription className="text-body text-text-primary">
             You have unsaved changes. Click "Save Changes" to apply your modifications.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Threshold Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {thresholds.map((threshold) => (
-          <Card key={threshold.id} className="bg-slate-800/50 border-slate-700/50">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`h-8 w-8 rounded-lg ${getColorClass(threshold.color)} flex items-center justify-center`}>
-                    <Percent className="h-4 w-4 text-white" />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        {/* Threshold Cards */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+          {thresholds.map((threshold) => (
+            <Card key={threshold.id} className="border-0 shadow overflow-hidden">
+              <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border-subtle px-5 py-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className={`h-8 w-8 shrink-0 rounded-md ${getColorClass(threshold.color)} grid place-items-center text-text-inverse`}>
+                    <DataPie16Regular aria-hidden />
                   </div>
-                  <div>
-                    <CardTitle className="text-slate-100">{threshold.label}</CardTitle>
-                    <CardDescription className="text-slate-400 text-sm">
+                  <div className="min-w-0">
+                    <CardTitle className="truncate text-subheading text-text-primary">{threshold.label}</CardTitle>
+                    <CardDescription className="text-caption text-text-muted">
                       Order: {threshold.order}
                     </CardDescription>
                   </div>
                 </div>
-                <Badge className={threshold.badge_style}>
+                <Badge variant={getBadgeVariant(threshold.color)} shape="pill">
                   {threshold.label}
                 </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor={`min-${threshold.id}`} className="text-slate-300">
-                    Minimum %
+              </CardHeader>
+              <CardContent className="space-y-4 p-5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`min-${threshold.id}`} className="text-body-strong text-text-primary">
+                      Minimum %
+                    </Label>
+                    <Input
+                      id={`min-${threshold.id}`}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={threshold.min_percentage}
+                      onChange={(e) => handleThresholdChange(threshold.id, 'min_percentage', parseFloat(e.target.value))}
+                      className="tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`max-${threshold.id}`} className="text-body-strong text-text-primary">
+                      Maximum % {threshold.max_percentage === null && <span className="font-normal text-text-muted">(No limit)</span>}
+                    </Label>
+                    <Input
+                      id={`max-${threshold.id}`}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={threshold.max_percentage ?? ''}
+                      onChange={(e) => handleThresholdChange(threshold.id, 'max_percentage', e.target.value ? parseFloat(e.target.value) : null)}
+                      placeholder="No upper limit"
+                      className="tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`label-${threshold.id}`} className="text-body-strong text-text-primary">
+                    Display Label
                   </Label>
                   <Input
-                    id={`min-${threshold.id}`}
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={threshold.min_percentage}
-                    onChange={(e) => handleThresholdChange(threshold.id, 'min_percentage', parseFloat(e.target.value))}
-                    className="bg-slate-700/50 border-slate-600 text-slate-100"
+                    id={`label-${threshold.id}`}
+                    value={threshold.label}
+                    onChange={(e) => handleThresholdChange(threshold.id, 'label', e.target.value)}
                   />
                 </div>
-                <div>
-                  <Label htmlFor={`max-${threshold.id}`} className="text-slate-300">
-                    Maximum % {threshold.max_percentage === null && '(No limit)'}
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`desc-${threshold.id}`} className="text-body-strong text-text-primary">
+                    Description
                   </Label>
                   <Input
-                    id={`max-${threshold.id}`}
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    value={threshold.max_percentage ?? ''}
-                    onChange={(e) => handleThresholdChange(threshold.id, 'max_percentage', e.target.value ? parseFloat(e.target.value) : null)}
-                    placeholder="No upper limit"
-                    className="bg-slate-700/50 border-slate-600 text-slate-100"
+                    id={`desc-${threshold.id}`}
+                    value={threshold.description}
+                    onChange={(e) => handleThresholdChange(threshold.id, 'description', e.target.value)}
                   />
                 </div>
-              </div>
 
-              <div>
-                <Label htmlFor={`label-${threshold.id}`} className="text-slate-300">
-                  Display Label
-                </Label>
-                <Input
-                  id={`label-${threshold.id}`}
-                  value={threshold.label}
-                  onChange={(e) => handleThresholdChange(threshold.id, 'label', e.target.value)}
-                  className="bg-slate-700/50 border-slate-600 text-slate-100"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor={`desc-${threshold.id}`} className="text-slate-300">
-                  Description
-                </Label>
-                <Input
-                  id={`desc-${threshold.id}`}
-                  value={threshold.description}
-                  onChange={(e) => handleThresholdChange(threshold.id, 'description', e.target.value)}
-                  className="bg-slate-700/50 border-slate-600 text-slate-100"
-                />
-              </div>
-
-              {/* Visual Range Indicator */}
-              <div className="pt-2">
-                <div className="text-xs text-slate-400 mb-1">Range:</div>
-                <div className="h-8 bg-slate-700/30 rounded-lg flex items-center justify-center">
-                  <span className={`text-sm font-medium text-${threshold.color}-300`}>
-                    {threshold.min_percentage}% 
+                {/* Visual Range Indicator */}
+                <div className="flex items-center justify-between rounded-md bg-surface-subtle px-3 py-2">
+                  <span className="text-caption text-text-muted">Range:</span>
+                  <span className={`text-body-strong tabular-nums ${getTextColorClass(threshold.color)}`}>
+                    {threshold.min_percentage}%
                     {threshold.max_percentage !== null ? ` - ${threshold.max_percentage}%` : '+'}
                   </span>
                 </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Current Configuration Preview */}
+        <Card className="h-fit border-0 shadow overflow-hidden lg:sticky lg:top-4">
+          <CardHeader className="space-y-0.5 border-b border-border-subtle px-5 py-4">
+            <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+              <CheckmarkCircle20Regular className="shrink-0 text-status-success" aria-hidden />
+              Current Configuration
+            </CardTitle>
+            <CardDescription className="text-caption text-text-muted">Preview of how thresholds will be applied</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            {/* 0-100% scale */}
+            <div className="px-5 pt-4" aria-hidden>
+              <div className="relative h-2 w-full overflow-hidden rounded-full bg-surface-subtle">
+                {thresholds.map((threshold) => {
+                  const start = Math.max(0, Math.min(100, threshold.min_percentage || 0));
+                  const end = Math.max(start, Math.min(100, threshold.max_percentage ?? 100));
+                  return (
+                    <div
+                      key={threshold.id}
+                      className={`absolute inset-y-0 ${getColorClass(threshold.color)}`}
+                      style={{ left: `${start}%`, width: `${end - start}%` }}
+                    />
+                  );
+                })}
               </div>
-            </CardContent>
-          </Card>
-        ))}
+              <div className="mt-1 flex justify-between text-caption text-text-muted tabular-nums">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+            <div className="divide-y divide-border-subtle py-2">
+              {thresholds.map((threshold) => (
+                <div key={threshold.id} className="flex items-center justify-between px-5 py-2.5">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-2.5 w-2.5 rounded-full ${getColorClass(threshold.color)}`}></div>
+                    <span className="text-body text-text-primary">{threshold.label}</span>
+                  </div>
+                  <span className="text-caption text-text-muted tabular-nums">
+                    {threshold.min_percentage}%{threshold.max_percentage !== null ? ` - ${threshold.max_percentage}%` : '+'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center justify-between gap-4">
+      {/* Sticky action bar */}
+      <div className="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-lg border-t border-border-subtle bg-surface-default px-5 py-3 shadow-md">
         <Button
           onClick={resetToDefaults}
           variant="outline"
           disabled={saving}
-          className="border-slate-600 text-slate-300 hover:bg-slate-700"
         >
-          <RotateCcw className="h-4 w-4 mr-2" />
+          <ArrowCounterclockwise20Regular aria-hidden />
           Reset to Defaults
         </Button>
 
         <Button
           onClick={saveThresholds}
           disabled={!hasChanges || saving}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
         >
           {saving ? (
             <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-on border-t-transparent" aria-hidden></span>
               Saving...
             </>
           ) : (
             <>
-              <Save className="h-4 w-4 mr-2" />
+              <Save20Regular aria-hidden />
               Save Changes
             </>
           )}
         </Button>
       </div>
-
-      {/* Current Configuration Preview */}
-      <Card className="mt-6 bg-slate-800/50 border-slate-700/50">
-        <CardHeader>
-          <CardTitle className="text-slate-100 flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-green-400" />
-            Current Configuration
-          </CardTitle>
-          <CardDescription>Preview of how thresholds will be applied</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {thresholds.map((threshold) => (
-              <div key={threshold.id} className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className={`h-3 w-3 rounded-full ${getColorClass(threshold.color)}`}></div>
-                  <span className="text-slate-200 font-medium">{threshold.label}</span>
-                </div>
-                <span className="text-slate-400 text-sm">
-                  {threshold.min_percentage}%{threshold.max_percentage !== null ? ` - ${threshold.max_percentage}%` : '+'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

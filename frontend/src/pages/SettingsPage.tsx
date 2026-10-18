@@ -1,34 +1,101 @@
 
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { 
-  Save, 
-  Bell, 
-  Printer, 
-  FileText, 
-  Users, 
-  Eye, 
-  Sliders,
-  Settings as SettingsIcon,
-  Check,
-  ArrowRight,
-  Shield,
-  Lock,
-  Upload,
-  Download,
-  ChevronRight
-} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import FacePolicySettingsCard from '@/components/face-admin/FacePolicySettingsCard';
+import {
+  Save20Regular,
+  Alert20Regular,
+  Print20Regular,
+  Document20Regular,
+  People20Regular,
+  Person20Regular,
+  Eye20Regular,
+  Options20Regular,
+  Settings20Regular,
+  Checkmark16Regular,
+  Shield20Regular,
+  LockClosed20Regular,
+  ArrowUpload20Regular,
+  ArrowDownload20Regular,
+  ChevronRight16Regular,
+  CalendarLtr20Regular,
+  Ribbon20Regular,
+  ScanPerson20Regular,
+} from '@fluentui/react-icons';
+
+/* ------------------------------------------------------------------ */
+/* Presentational helpers (Teams settings pattern)                     */
+/* ------------------------------------------------------------------ */
+
+const SettingsCard: React.FC<{
+  title: string;
+  description?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ title, description, icon, children }) => (
+  <Card className="border-0 shadow overflow-hidden">
+    <div className="flex items-start gap-3 px-5 py-4 border-b border-border-subtle">
+      {icon && (
+        <div className="h-8 w-8 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+          {icon}
+        </div>
+      )}
+      <div className="min-w-0">
+        <h2 className="text-subheading text-text-primary">{title}</h2>
+        {description && <p className="text-caption text-text-muted mt-0.5">{description}</p>}
+      </div>
+    </div>
+    <div className="divide-y divide-border-subtle">{children}</div>
+  </Card>
+);
+
+const SettingRow: React.FC<{
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  htmlFor?: string;
+  icon?: React.ReactNode;
+  children?: React.ReactNode;
+  stacked?: boolean;
+  className?: string;
+}> = ({ label, description, htmlFor, icon, children, stacked = false, className }) => (
+  <div
+    className={cn(
+      'px-5 py-4',
+      stacked ? 'space-y-3' : 'flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+      className
+    )}
+  >
+    <div className="flex items-start gap-3 min-w-0">
+      {icon && <span className="mt-0.5 shrink-0 text-text-muted">{icon}</span>}
+      <div className="min-w-0">
+        {htmlFor ? (
+          <Label htmlFor={htmlFor} className="text-body-strong text-text-primary cursor-pointer">
+            {label}
+          </Label>
+        ) : (
+          <div className="text-body-strong text-text-primary">{label}</div>
+        )}
+        {description && <p className="text-caption text-text-muted mt-0.5">{description}</p>}
+      </div>
+    </div>
+    {children && <div className={cn(stacked ? '' : 'shrink-0', icon && stacked ? 'sm:pl-8' : '')}>{children}</div>}
+  </div>
+);
+
+const navTriggerClass =
+  'group relative flex h-9 shrink-0 items-center gap-3 rounded-md px-3 text-body text-text-secondary whitespace-nowrap transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-surface-selected data-[state=active]:font-semibold data-[state=active]:text-text-primary';
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -36,6 +103,7 @@ const SettingsPage = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [reportFormat, setReportFormat] = useState('excel');
+  const [activeTab, setActiveTab] = useState('general');
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -49,594 +117,386 @@ const SettingsPage = () => {
     }, 1000);
   };
 
-  return (
-    <div className="p-6 md:p-8">
-      <div className="w-full">
-      <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-text-primary">
-              Settings
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400">
-              Manage your preferences and system configuration
-            </p>
-          </div>
-          <Button 
-            onClick={handleSave} 
-            disabled={isSaving}
-            className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-500/30 transition-all duration-200 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105"
-          >
-            {isSaving ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4" />
-                Save Changes
-              </>
-            )}
-          </Button>
-        </div>
+  const categories = [
+    { value: 'general', label: 'General', icon: Settings20Regular },
+    { value: 'system', label: 'System', icon: Options20Regular },
+    { value: 'face', label: 'Face verification', icon: ScanPerson20Regular },
+    { value: 'notifications', label: 'Notifications', icon: Alert20Regular },
+    { value: 'reports', label: 'Reports', icon: Document20Regular },
+    { value: 'account', label: 'Account', icon: People20Regular },
+  ];
 
-        {/* Tabs Section */}
-        <Tabs defaultValue="general" className="space-y-6">
-          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 p-2">
-            <TabsList className="w-full grid grid-cols-2 md:grid-cols-5 gap-2 bg-transparent">
-              <TabsTrigger 
-                value="general" 
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-blue-50 data-[state=active]:to-blue-100/50 dark:data-[state=active]:from-blue-950/50 dark:data-[state=active]:to-blue-900/30 data-[state=active]:text-blue-700 dark:data-[state=active]:text-blue-300 data-[state=active]:shadow-md transition-all duration-200 rounded-xl"
+  return (
+    <div className="w-full">
+      <div className="max-w-6xl mx-auto">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          orientation="vertical"
+          className="flex flex-col gap-6 md:flex-row"
+        >
+          {/* Left: Teams-style settings category list */}
+          <aside className="md:w-60 md:shrink-0">
+            <div className="mb-3 px-1 md:px-3">
+              <h1 className="text-section-title text-text-primary">Settings</h1>
+              <p className="text-caption text-text-muted mt-0.5">
+                Manage your preferences and system configuration
+              </p>
+            </div>
+            <TabsPrimitive.List
+              aria-label="Settings categories"
+              className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0"
+            >
+              {categories.map(({ value, label, icon: Icon }) => (
+                <TabsPrimitive.Trigger key={value} value={value} className={navTriggerClass}>
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-brand opacity-0 transition-opacity duration-150 group-data-[state=active]:opacity-100"
+                  />
+                  <Icon className="shrink-0 text-text-muted group-data-[state=active]:text-brand-foreground" aria-hidden />
+                  {label}
+                </TabsPrimitive.Trigger>
+              ))}
+            </TabsPrimitive.List>
+          </aside>
+
+          {/* Right: content panel */}
+          <div className="min-w-0 flex-1 space-y-4">
+            <TabsContent value="general" className="mt-0 space-y-4 animate-fade-in-up">
+              <SettingsCard
+                title="General Settings"
+                description="Configure general application preferences"
+                icon={<Settings20Regular />}
               >
-                <SettingsIcon className="h-4 w-4 mr-2" />
-                General
-              </TabsTrigger>
-              <TabsTrigger 
-                value="system"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-purple-50 data-[state=active]:to-purple-100/50 dark:data-[state=active]:from-purple-950/50 dark:data-[state=active]:to-purple-900/30 data-[state=active]:text-purple-700 dark:data-[state=active]:text-purple-300 data-[state=active]:shadow-md transition-all duration-200 rounded-xl"
-              >
-                <Sliders className="h-4 w-4 mr-2" />
-                System
-              </TabsTrigger>
-              <TabsTrigger 
-                value="notifications"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-amber-50 data-[state=active]:to-amber-100/50 dark:data-[state=active]:from-amber-950/50 dark:data-[state=active]:to-amber-900/30 data-[state=active]:text-amber-700 dark:data-[state=active]:text-amber-300 data-[state=active]:shadow-md transition-all duration-200 rounded-xl"
-              >
-                <Bell className="h-4 w-4 mr-2" />
-                Notifications
-              </TabsTrigger>
-              <TabsTrigger 
-                value="reports"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-emerald-50 data-[state=active]:to-emerald-100/50 dark:data-[state=active]:from-emerald-950/50 dark:data-[state=active]:to-emerald-900/30 data-[state=active]:text-emerald-700 dark:data-[state=active]:text-emerald-300 data-[state=active]:shadow-md transition-all duration-200 rounded-xl"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Reports
-              </TabsTrigger>
-              <TabsTrigger 
-                value="account"
-                className="data-[state=active]:bg-gradient-to-br data-[state=active]:from-rose-50 data-[state=active]:to-rose-100/50 dark:data-[state=active]:from-rose-950/50 dark:data-[state=active]:to-rose-900/30 data-[state=active]:text-rose-700 dark:data-[state=active]:text-rose-300 data-[state=active]:shadow-md transition-all duration-200 rounded-xl col-span-2 md:col-span-1"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Account
-              </TabsTrigger>
-            </TabsList>
-          </div>
-        
-        <TabsContent value="general" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-purple-500/5 pointer-events-none" />
-            <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                  <SettingsIcon className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">General Settings</CardTitle>
-                  <CardDescription className="mt-1">
-                    Configure general application preferences
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="relative p-6 md:p-8 space-y-6">
-              <div className="space-y-6">
-                <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-                
-                <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-emerald-300/50 dark:hover:border-emerald-700/50 transition-all duration-200">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg group-hover:scale-110 transition-transform duration-200">
-                      <Check className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div>
-                      <Label htmlFor="auto-save" className="text-base font-semibold cursor-pointer">Auto Save</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Automatically save changes as you work</p>
-                    </div>
-                  </div>
-                  <Switch id="auto-save" defaultChecked className="data-[state=checked]:bg-emerald-600" />
-                </div>
-                
-                <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-                
-                <div className="space-y-4 p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                      <FileText className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                      <Label className="text-base font-semibold">Items Per Page</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Number of items to display in tables</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-3 mt-4">
+                <SettingRow
+                  htmlFor="auto-save"
+                  label="Auto Save"
+                  description="Automatically save changes as you work"
+                >
+                  <Switch id="auto-save" defaultChecked />
+                </SettingRow>
+
+                <SettingRow label="Items Per Page" description="Number of items to display in tables">
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Items per page">
                     {[10, 25, 50, 100].map((value) => (
-                      <Button 
+                      <Button
                         key={value}
                         variant={itemsPerPage === value ? "default" : "outline"}
                         size="sm"
                         onClick={() => setItemsPerPage(value)}
-                        className={itemsPerPage === value 
-                          ? "bg-gradient-to-r from-purple-600 to-purple-700 shadow-lg shadow-purple-500/30 hover:shadow-xl hover:shadow-purple-500/40" 
-                          : "hover:bg-purple-50 dark:hover:bg-purple-950/30 hover:border-purple-300 dark:hover:border-purple-700"
-                        }
+                        className="min-w-[56px] tabular-nums"
+                        aria-pressed={itemsPerPage === value}
                       >
                         {value}
-                        {itemsPerPage === value && <Check className="ml-2 h-3 w-3" />}
+                        {itemsPerPage === value && <Checkmark16Regular aria-hidden />}
                       </Button>
                     ))}
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="system" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-border-subtle bg-surface-default shadow-sm overflow-hidden">
-            <CardHeader className="relative border-b border-border-subtle">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-action-primary-subtle rounded-lg">
-                  <Sliders className="h-5 w-5 text-action-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">System Configuration</CardTitle>
-                  <CardDescription className="mt-1">
-                    Configure system-wide settings and thresholds
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="relative p-6 md:p-8 space-y-4">
-              {/* Attendance Thresholds - Active */}
-              <Link to="/app/settings/attendance-thresholds" className="block group">
-                <div className="relative overflow-hidden p-6 rounded-xl border border-border-subtle bg-surface-canvas hover:border-action-primary transition-colors">
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="p-3 bg-action-primary rounded-xl text-white">
-                        <Sliders className="h-6 w-6 text-white" />
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
+
+            <TabsContent value="system" className="mt-0 space-y-4 animate-fade-in-up">
+              <SettingsCard
+                title="System Configuration"
+                description="Configure system-wide settings and thresholds"
+                icon={<Options20Regular />}
+              >
+                {/* Attendance Thresholds - Active */}
+                <Link
+                  to="/app/settings/attendance-thresholds"
+                  className="group flex flex-col gap-3 px-5 py-4 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <span className="mt-0.5 shrink-0 text-brand-foreground">
+                      <Options20Regular aria-hidden />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-body-strong text-text-primary">Attendance Thresholds</span>
+                        <Badge variant="success" shape="pill">Active</Badge>
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                            Attendance Thresholds
-                          </h3>
-                          <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 border-purple-300 dark:border-purple-700">
-                            Active
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1.5 leading-relaxed">
-                          Configure attendance status thresholds (Excellent, Good, Warning, Critical)
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="gap-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm hover:bg-purple-50 dark:hover:bg-purple-900/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 group-hover:border-purple-400 dark:group-hover:border-purple-600 shadow-sm hover:shadow-md transition-all duration-200"
-                      >
-                        Configure
-                        <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform duration-200" />
-                      </Button>
+                      <p className="text-caption text-text-muted mt-0.5">
+                        Configure attendance status thresholds (Excellent, Good, Warning, Critical)
+                      </p>
                     </div>
                   </div>
-                </div>
-              </Link>
-              
-              <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent my-6" />
-              
-              {/* Coming Soon Items */}
-              <div className="space-y-4">
+                  <span className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'shrink-0')}>
+                    Configure
+                    <ChevronRight16Regular aria-hidden />
+                  </span>
+                </Link>
+
+                {/* Coming Soon Items */}
                 {[
-                  { 
-                    icon: <FileText className="h-5 w-5" />, 
-                    title: "Academic Calendar", 
+                  {
+                    icon: <CalendarLtr20Regular aria-hidden />,
+                    title: "Academic Calendar",
                     description: "Configure semester dates and academic periods",
-                    color: "blue"
                   },
-                  { 
-                    icon: <Shield className="h-5 w-5" />, 
-                    title: "Grading System", 
+                  {
+                    icon: <Ribbon20Regular aria-hidden />,
+                    title: "Grading System",
                     description: "Configure grading thresholds and letter grades",
-                    color: "emerald"
                   }
                 ].map((item, index) => (
-                  <div 
+                  <SettingRow
                     key={index}
-                    className="relative overflow-hidden p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 opacity-60"
+                    icon={item.icon}
+                    label={
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="text-text-secondary">{item.title}</span>
+                        <Badge variant="secondary" shape="pill">Coming Soon</Badge>
+                      </span>
+                    }
+                    description={item.description}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className={`p-2.5 bg-${item.color}-100 dark:bg-${item.color}-900/30 rounded-lg`}>
-                          {item.icon}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                              {item.title}
-                            </h3>
-                            <Badge variant="outline" className="text-xs">
-                              Coming Soon
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-                            {item.description}
-                          </p>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        disabled
-                        className="gap-2 opacity-50"
-                      >
-                        Configure
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+                    <Button variant="outline" size="sm" disabled>
+                      Configure
+                      <ChevronRight16Regular aria-hidden />
+                    </Button>
+                  </SettingRow>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="notifications" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-transparent to-orange-500/5 pointer-events-none" />
-            <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg">
-                  <Bell className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Notification Settings</CardTitle>
-                  <CardDescription className="mt-1">
-                    Configure how you receive notifications
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="relative p-6 md:p-8 space-y-6">
-              <div className="space-y-6">
+              </SettingsCard>
+            </TabsContent>
+
+            <TabsContent value="face" className="mt-0 space-y-4 animate-fade-in-up">
+              {/* Saves itself (only changed keys) — the page's save bar below is hidden on this tab. */}
+              <FacePolicySettingsCard />
+            </TabsContent>
+
+            <TabsContent value="notifications" className="mt-0 space-y-4 animate-fade-in-up">
+              <SettingsCard
+                title="Notification Settings"
+                description="Configure how you receive notifications"
+                icon={<Alert20Regular />}
+              >
                 {[
-                  { 
-                    icon: <Bell className="h-5 w-5" />, 
-                    title: "Email Notifications", 
+                  {
+                    icon: <Alert20Regular aria-hidden />,
+                    title: "Email Notifications",
                     description: "Receive important updates via email",
                     id: "email-notif",
                     defaultChecked: true,
-                    color: "amber"
                   },
-                  { 
-                    icon: <Users className="h-5 w-5" />, 
-                    title: "Student Absence Alerts", 
+                  {
+                    icon: <People20Regular aria-hidden />,
+                    title: "Student Absence Alerts",
                     description: "Get notified when a student is marked absent",
                     id: "absence-alerts",
                     defaultChecked: true,
-                    color: "rose"
                   },
-                  { 
-                    icon: <Download className="h-5 w-5" />, 
-                    title: "System Updates", 
+                  {
+                    icon: <ArrowDownload20Regular aria-hidden />,
+                    title: "System Updates",
                     description: "Receive notifications about system updates and maintenance",
                     id: "system-updates",
                     defaultChecked: false,
-                    color: "blue"
                   }
                 ].map((item, index) => (
-                  <div key={index} className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-amber-300/50 dark:hover:border-amber-700/50 transition-all duration-200">
-                    <div className="flex items-center gap-4">
-                      <div className={`p-2.5 bg-${item.color}-100 dark:bg-${item.color}-900/30 rounded-lg group-hover:scale-110 transition-transform duration-200`}>
-                        {item.icon}
-                      </div>
-                      <div>
-                        <Label htmlFor={item.id} className="text-base font-semibold cursor-pointer">{item.title}</Label>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{item.description}</p>
-                      </div>
-                    </div>
-                    <Switch 
-                      id={item.id} 
-                      defaultChecked={item.defaultChecked}
-                      className="data-[state=checked]:bg-amber-600"
-                    />
-                  </div>
+                  <SettingRow
+                    key={index}
+                    icon={item.icon}
+                    htmlFor={item.id}
+                    label={item.title}
+                    description={item.description}
+                  >
+                    <Switch id={item.id} defaultChecked={item.defaultChecked} />
+                  </SettingRow>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="reports" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 via-transparent to-teal-500/5 pointer-events-none" />
-            <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                  <FileText className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Report Settings</CardTitle>
-                  <CardDescription className="mt-1">
-                    Configure report generation options
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="relative p-6 md:p-8 space-y-8">
-              {/* Report Format Selection */}
-              <div className="space-y-4 p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
-                    <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              </SettingsCard>
+            </TabsContent>
+
+            <TabsContent value="reports" className="mt-0 space-y-4 animate-fade-in-up">
+              <SettingsCard
+                title="Report Settings"
+                description="Configure report generation options"
+                icon={<Document20Regular />}
+              >
+                {/* Report Format Selection */}
+                <SettingRow
+                  icon={<Document20Regular aria-hidden />}
+                  label="Report Format"
+                  description="Choose your preferred export format"
+                >
+                  <div className="flex flex-wrap gap-2" role="group" aria-label="Report format">
+                    {[
+                      { value: 'pdf', label: 'PDF' },
+                      { value: 'excel', label: 'Excel' },
+                      { value: 'csv', label: 'CSV' }
+                    ].map((format) => (
+                      <Button
+                        key={format.value}
+                        variant={reportFormat === format.value ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setReportFormat(format.value)}
+                        aria-pressed={reportFormat === format.value}
+                      >
+                        <Document20Regular aria-hidden />
+                        {format.label}
+                        {reportFormat === format.value && <Checkmark16Regular aria-hidden />}
+                      </Button>
+                    ))}
                   </div>
-                  <div>
-                    <Label className="text-base font-semibold">Report Format</Label>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Choose your preferred export format</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3 mt-4">
-                  {[
-                    { value: 'pdf', label: 'PDF', icon: <FileText className="h-4 w-4" /> },
-                    { value: 'excel', label: 'Excel', icon: <FileText className="h-4 w-4" /> },
-                    { value: 'csv', label: 'CSV', icon: <FileText className="h-4 w-4" /> }
-                  ].map((format) => (
-                    <Button
-                      key={format.value}
-                      variant={reportFormat === format.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setReportFormat(format.value)}
-                      className={reportFormat === format.value
-                        ? "gap-2 bg-gradient-to-r from-emerald-600 to-emerald-700 shadow-lg shadow-emerald-500/30 hover:shadow-xl hover:shadow-emerald-500/40"
-                        : "gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:border-emerald-300 dark:hover:border-emerald-700"
-                      }
-                    >
-                      {format.icon}
-                      {format.label}
-                      {reportFormat === format.value && <Check className="ml-1 h-3 w-3" />}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              
-              <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-              
-              {/* School Logo Upload */}
-              <div className="space-y-4 p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Upload className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <Label htmlFor="school-logo" className="text-base font-semibold">School Logo</Label>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Upload your institution logo for reports (PNG, JPG, max 2MB)</p>
-                  </div>
-                </div>
-                <div className="relative mt-4">
-                  <Input 
-                    id="school-logo" 
-                    type="file" 
+                </SettingRow>
+
+                {/* School Logo Upload */}
+                <SettingRow
+                  stacked
+                  icon={<ArrowUpload20Regular aria-hidden />}
+                  htmlFor="school-logo"
+                  label="School Logo"
+                  description="Upload your institution logo for reports (PNG, JPG, max 2MB)"
+                >
+                  <Input
+                    id="school-logo"
+                    type="file"
                     accept="image/*"
-                    className="cursor-pointer file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-300 dark:hover:file:bg-blue-900/50"
+                    className="h-10 max-w-md cursor-pointer py-1.5 file:mr-3 file:rounded file:border-0 file:bg-brand-subtle file:px-3 file:py-1 file:text-caption-strong file:text-brand-foreground hover:file:bg-brand-subtle-hover"
                   />
-                </div>
-              </div>
-              
-              <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-              
-              {/* Additional Options */}
-              <div className="space-y-4">
-                <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-purple-300/50 dark:hover:border-purple-700/50 transition-all duration-200">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-purple-100 dark:bg-purple-900/30 rounded-lg group-hover:scale-110 transition-transform duration-200">
-                      <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                    </div>
-                    <div>
-                      <Label htmlFor="signature" className="text-base font-semibold cursor-pointer">Include Digital Signature</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Add authorized signature to generated reports</p>
-                    </div>
-                  </div>
-                  <Switch id="signature" defaultChecked className="data-[state=checked]:bg-purple-600" />
-                </div>
-                
-                <div className="space-y-3 p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-teal-100 dark:bg-teal-900/30 rounded-lg">
-                      <Printer className="h-4 w-4 text-teal-600 dark:text-teal-400" />
-                    </div>
-                    <div className="flex-1">
-                      <Label htmlFor="printer-settings" className="text-base font-semibold">Default Printer</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Set your preferred printer for quick access</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 mt-3">
-                    <Input 
-                      id="printer-settings" 
-                      placeholder="Select printer" 
+                </SettingRow>
+
+                {/* Additional Options */}
+                <SettingRow
+                  icon={<Document20Regular aria-hidden />}
+                  htmlFor="signature"
+                  label="Include Digital Signature"
+                  description="Add authorized signature to generated reports"
+                >
+                  <Switch id="signature" defaultChecked />
+                </SettingRow>
+
+                <SettingRow
+                  stacked
+                  icon={<Print20Regular aria-hidden />}
+                  htmlFor="printer-settings"
+                  label="Default Printer"
+                  description="Set your preferred printer for quick access"
+                >
+                  <div className="flex max-w-md items-center gap-2">
+                    <Input
+                      id="printer-settings"
+                      placeholder="Select printer"
                       defaultValue="HP LaserJet 4200"
                       className="flex-1"
                     />
-                    <Button variant="outline" size="icon" className="shrink-0 hover:bg-teal-50 dark:hover:bg-teal-950/30">
-                      <Printer className="h-4 w-4" />
+                    <Button variant="outline" size="icon" className="shrink-0" aria-label="Printer">
+                      <Print20Regular aria-hidden />
                     </Button>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="account" className="space-y-6 animate-in fade-in-50 duration-500">
-          <Card className="border-slate-200/60 dark:border-slate-800/60 shadow-xl shadow-slate-200/50 dark:shadow-slate-950/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-rose-500/5 via-transparent to-pink-500/5 pointer-events-none" />
-            <CardHeader className="relative border-b border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
-                  <Users className="h-5 w-5 text-rose-600 dark:text-rose-400" />
-                </div>
-                <div>
-                  <CardTitle className="text-xl">Account Settings</CardTitle>
-                  <CardDescription className="mt-1">
-                    Manage your account information and security
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="relative p-6 md:p-8 space-y-8">
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
+
+            <TabsContent value="account" className="mt-0 space-y-4 animate-fade-in-up">
               {/* Profile Information */}
-              <div className="space-y-5 p-6 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-br from-slate-50/50 via-white/50 to-blue-50/30 dark:from-slate-900/50 dark:via-slate-900/30 dark:to-blue-950/20">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                    <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <h3 className="text-lg font-semibold">Profile Information</h3>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm font-semibold">Email Address</Label>
-                    <Input 
-                      id="email" 
-                      value={user?.email || ''} 
-                      disabled 
-                      className="bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+              <SettingsCard
+                title="Profile Information"
+                description="Manage your account information and security"
+                icon={<Person20Regular />}
+              >
+                <div className="grid gap-4 px-5 py-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-body-strong text-text-primary">Email Address</Label>
+                    <Input
+                      id="email"
+                      value={user?.email || ''}
+                      disabled
+                      className="bg-surface-subtle"
                     />
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="first-name" className="text-sm font-semibold">First Name</Label>
-                      <Input 
-                        id="first-name" 
-                        placeholder="Enter your first name"
-                        className="border-slate-300 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-blue-500/20"
-                      />
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="first-name" className="text-body-strong text-text-primary">First Name</Label>
+                      <Input id="first-name" placeholder="Enter your first name" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="last-name" className="text-sm font-semibold">Last Name</Label>
-                      <Input 
-                        id="last-name" 
-                        placeholder="Enter your last name"
-                        className="border-slate-300 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 focus:ring-blue-500/20"
-                      />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="last-name" className="text-body-strong text-text-primary">Last Name</Label>
+                      <Input id="last-name" placeholder="Enter your last name" />
                     </div>
                   </div>
                 </div>
-              </div>
-              
-              <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-              
+              </SettingsCard>
+
               {/* Password Change */}
-              <div className="space-y-5 p-6 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-br from-slate-50/50 via-white/50 to-rose-50/30 dark:from-slate-900/50 dark:via-slate-900/30 dark:to-rose-950/20">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
-                    <Lock className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+              <SettingsCard title="Change Password" icon={<LockClosed20Regular />}>
+                <div className="grid gap-4 px-5 py-4">
+                  <div className="space-y-1.5 md:max-w-[calc(50%-0.5rem)]">
+                    <Label htmlFor="current-password" className="text-body-strong text-text-primary">Current Password</Label>
+                    <PasswordInput id="current-password" placeholder="Enter current password" />
                   </div>
-                  <h3 className="text-lg font-semibold">Change Password</h3>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="current-password" className="text-sm font-semibold">Current Password</Label>
-                    <PasswordInput 
-                      id="current-password" 
-                      placeholder="Enter current password"
-                      className="border-slate-300 dark:border-slate-700 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/20"
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="new-password" className="text-sm font-semibold">New Password</Label>
-                      <PasswordInput 
-                        id="new-password" 
-                        placeholder="Enter new password"
-                        className="border-slate-300 dark:border-slate-700 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/20"
-                      />
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="new-password" className="text-body-strong text-text-primary">New Password</Label>
+                      <PasswordInput id="new-password" placeholder="Enter new password" />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirm-password" className="text-sm font-semibold">Confirm Password</Label>
-                      <PasswordInput 
-                        id="confirm-password" 
-                        placeholder="Confirm new password"
-                        className="border-slate-300 dark:border-slate-700 focus:border-rose-500 dark:focus:border-rose-500 focus:ring-rose-500/20"
-                      />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="confirm-password" className="text-body-strong text-text-primary">Confirm Password</Label>
+                      <PasswordInput id="confirm-password" placeholder="Confirm new password" />
                     </div>
-                  </div>
-                  
-                  <div className="flex justify-end pt-2">
-                    <Button className="gap-2 bg-gradient-to-r from-rose-600 to-rose-700 hover:from-rose-700 hover:to-rose-800 shadow-lg shadow-rose-500/30 hover:shadow-xl hover:shadow-rose-500/40">
-                      <Save className="h-4 w-4" />
-                      Update Password
-                    </Button>
                   </div>
                 </div>
-              </div>
-              
-              <Separator className="bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent" />
-              
-              {/* Security Settings */}
-              <div className="space-y-4">
-                <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-emerald-300/50 dark:hover:border-emerald-700/50 transition-all duration-200">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg group-hover:scale-110 transition-transform duration-200">
-                      <Shield className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div>
-                      <Label htmlFor="2fa" className="text-base font-semibold cursor-pointer">Two-Factor Authentication</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Add an extra layer of security to your account</p>
-                    </div>
-                  </div>
-                  <Switch id="2fa" className="data-[state=checked]:bg-emerald-600" />
-                </div>
-                
-                <div className="flex items-center justify-between p-5 rounded-xl border border-slate-200/60 dark:border-slate-800/60 bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-900/50 hover:shadow-md hover:border-blue-300/50 dark:hover:border-blue-700/50 transition-all duration-200">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2.5 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                      <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                    </div>
-                    <div className="flex-1">
-                      <Label className="text-base font-semibold">Data Privacy</Label>
-                      <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">Manage how your data is collected and used</p>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="gap-2 hover:bg-blue-50 dark:hover:bg-blue-950/30 hover:border-blue-300 dark:hover:border-blue-700"
-                  >
-                    <Eye className="h-4 w-4" />
-                    Manage
+                <div className="flex justify-end px-5 py-3">
+                  <Button variant="outline">
+                    <Save20Regular aria-hidden />
+                    Update Password
                   </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+              </SettingsCard>
+
+              {/* Security Settings */}
+              <SettingsCard title="Security & Privacy" icon={<Shield20Regular />}>
+                <SettingRow
+                  icon={<Shield20Regular aria-hidden />}
+                  htmlFor="2fa"
+                  label="Two-Factor Authentication"
+                  description="Add an extra layer of security to your account"
+                >
+                  <Switch id="2fa" />
+                </SettingRow>
+
+                <SettingRow
+                  icon={<Eye20Regular aria-hidden />}
+                  label="Data Privacy"
+                  description="Manage how your data is collected and used"
+                >
+                  <Button variant="outline" size="sm">
+                    <Eye20Regular aria-hidden />
+                    Manage
+                  </Button>
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
+
+            {/* Sticky save bar (not for the face verification card, which has its own Save) */}
+            <div
+              className={cn(
+                'sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-lg border-t border-border-subtle bg-surface-default px-5 py-3 shadow-md',
+                activeTab === 'face' && 'hidden'
+              )}
+            >
+              <p className="hidden text-caption text-text-muted sm:block">
+                Review your changes, then save to apply them.
+              </p>
+              <Button onClick={handleSave} disabled={isSaving} className="ml-auto">
+                {isSaving ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-on border-t-transparent" aria-hidden />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save20Regular aria-hidden />
+                    Save Changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </Tabs>
       </div>
-    </div>
     </div>
   );
 };

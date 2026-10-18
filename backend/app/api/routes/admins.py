@@ -29,6 +29,17 @@ async def get_all_admins(
     admins = result.scalars().all()
     return admins
 
+@router.get("/me", response_model=AdminSchema)
+async def get_current_admin_info(
+    current_admin: Admin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get current admin information."""
+    # Refresh the admin with user relationship
+    await db.refresh(current_admin, ["user"])
+    return current_admin
+
+
 @router.get("/{admin_id}", response_model=AdminSchema)
 async def get_admin(
     admin_id: int,
@@ -211,7 +222,11 @@ async def delete_admin(
         )
     
     try:
-        # Delete admin profile (this will also delete the user due to cascade)
+        # Remove the admin profile and deactivate the login. The user row is kept
+        # (it may be referenced as attendance marked_by) but can no longer sign in;
+        # without this the role='admin' user would keep passing require_admin_role.
+        if admin.user is not None:
+            admin.user.is_active = False
         await db.delete(admin)
         await db.commit()
         
@@ -223,13 +238,3 @@ async def delete_admin(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete admin: {str(e)}"
         )
-
-@router.get("/me", response_model=AdminSchema)
-async def get_current_admin_info(
-    current_admin: Admin = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get current admin information."""
-    # Refresh the admin with user relationship
-    await db.refresh(current_admin, ["user"])
-    return current_admin

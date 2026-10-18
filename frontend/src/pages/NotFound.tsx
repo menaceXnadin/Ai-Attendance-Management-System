@@ -1,7 +1,7 @@
 import { useLocation, Link } from "react-router-dom";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { WarningAlt, Home, ArrowLeft } from "@carbon/icons-react";
+import { ArrowLeft16Regular, Home16Regular } from "@fluentui/react-icons";
 
 const NotFound = () => {
   const location = useLocation();
@@ -32,39 +32,43 @@ const NotFound = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-canvas px-4">
-      <div className="max-w-md w-full text-center p-8 bg-surface-default border border-border-subtle rounded-lg shadow-card space-y-6">
-        <div className="inline-flex p-3 rounded-full bg-status-warning/10 text-status-warning">
-          <WarningAlt className="w-8 h-8" />
-        </div>
-        
-        <div className="space-y-2">
-          <span className="text-xs font-mono font-semibold tracking-wider text-text-muted uppercase">404 Error</span>
-          <h1 className="text-2xl font-bold text-text-primary tracking-tight">Page Not Found</h1>
-          <p className="text-sm text-text-secondary">
-            The requested destination <code className="px-1.5 py-0.5 rounded bg-surface-canvas border border-border-subtle text-xs font-mono">{location.pathname}</code> does not exist or has been moved.
-          </p>
-        </div>
+    <main className="flex min-h-dvh items-center justify-center bg-surface-canvas px-4 py-12">
+      <div className="w-full max-w-lg text-center">
+        <p
+          aria-hidden="true"
+          className="select-none text-display tabular-nums text-text-muted sm:text-[64px] sm:leading-[72px]"
+        >
+          404
+        </p>
+        <span className="sr-only">404 Error</span>
 
-        <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-          <Link to={homePath}>
-            <Button size="sm" className="w-full sm:w-auto">
-              <Home className="w-4 h-4 mr-1.5" />
-              {homeLabel}
-            </Button>
-          </Link>
-          <Button 
-            variant="outline" 
-            size="sm"
+        <h1 className="mt-2 text-section-title text-text-primary">Page Not Found</h1>
+        <p className="mx-auto mt-2 max-w-md text-body text-text-muted">
+          The requested destination{' '}
+          <code className="break-all rounded-sm border border-border-subtle bg-surface-default px-1.5 py-0.5 font-mono text-caption text-text-secondary">
+            {location.pathname}
+          </code>{' '}
+          does not exist or has been moved.
+        </p>
+
+        <div className="mt-8 flex flex-col-reverse justify-center gap-2 sm:flex-row">
+          <Button
+            variant="outline"
             onClick={() => window.history.back()}
             className="w-full sm:w-auto"
           >
-            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            <ArrowLeft16Regular aria-hidden="true" />
             Go Back
+          </Button>
+          <Button asChild className="w-full sm:w-auto">
+            <Link to={homePath}>
+              <Home16Regular aria-hidden="true" />
+              {homeLabel}
+            </Link>
           </Button>
         </div>
       </div>
-    </div>
+    </main>
   );
 };
 

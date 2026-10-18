@@ -1,6 +1,7 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 type SemesterFilterProps = {
   value: number;
@@ -26,15 +27,15 @@ const SemesterFilter: React.FC<SemesterFilterProps> = ({
   const options = Array.from({ length: Math.max(0, max - min + 1) }, (_, i) => min + i);
 
   return (
-    <div className={className}>
-      <Label htmlFor="semester-select" className="text-slate-300 mb-1 block">
+    <div className={cn('flex flex-col gap-1', className)}>
+      <Label htmlFor="semester-select">
         {label}
       </Label>
       <Select value={String(value)} onValueChange={(v) => onChange(parseInt(v))}>
-        <SelectTrigger id="semester-select" className="w-[160px] bg-slate-800/60 border-slate-700 text-slate-200">
+        <SelectTrigger id="semester-select" className="w-[160px]">
           <SelectValue placeholder="Select semester" />
         </SelectTrigger>
-        <SelectContent className="bg-slate-900 border-slate-700 text-slate-200">
+        <SelectContent>
           {options.map((opt) => (
             <SelectItem key={opt} value={String(opt)}>
               Semester {opt}

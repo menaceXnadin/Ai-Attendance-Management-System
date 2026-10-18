@@ -1,6 +1,6 @@
 import * as React from "react"
 import { OTPInput, OTPInputContext } from "input-otp"
-import { Dot } from "lucide-react"
+import { CircleSmall20Filled } from "@fluentui/react-icons"
 
 import { cn } from "@/lib/utils"
 
@@ -39,8 +39,8 @@ const InputOTPSlot = React.forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative flex h-10 w-10 items-center justify-center border-y border-r border-input text-sm transition-all first:rounded-l-md first:border-l last:rounded-r-md",
-        isActive && "z-10 ring-2 ring-ring ring-offset-background",
+        "relative flex h-9 w-9 items-center justify-center border-y border-r border-border-default border-b-border-strong bg-surface-default text-body-strong text-text-primary transition-[border-color,box-shadow] duration-150 ease-fluent-standard first:rounded-l-md first:border-l last:rounded-r-md",
+        isActive && "z-10 border-b-brand shadow-[inset_0_-1px_0_0_var(--brand)]",
         className
       )}
       {...props}
@@ -48,7 +48,7 @@ const InputOTPSlot = React.forwardRef<
       {char}
       {hasFakeCaret && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className="h-4 w-px animate-caret-blink bg-foreground duration-1000" />
+          <div className="h-4 w-px animate-caret-blink bg-text-primary duration-1000" />
         </div>
       )}
     </div>
@@ -60,8 +60,8 @@ const InputOTPSeparator = React.forwardRef<
   React.ElementRef<"div">,
   React.ComponentPropsWithoutRef<"div">
 >(({ ...props }, ref) => (
-  <div ref={ref} role="separator" {...props}>
-    <Dot />
+  <div ref={ref} role="separator" className="text-text-muted" {...props}>
+    <CircleSmall20Filled aria-hidden />
   </div>
 ))
 InputOTPSeparator.displayName = "InputOTPSeparator"

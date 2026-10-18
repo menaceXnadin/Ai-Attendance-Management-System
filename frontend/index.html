@@ -1,15 +1,27 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AttendAI - Smart Attendance Management System</title>
-    <meta name="description" content="AI-powered attendance management system for educational institutions" />
-    <meta property="og:title" content="AttendAI - Smart Attendance Management System" />
-    <meta property="og:description" content="AI-powered attendance management system for educational institutions" />
+    <title>AttendAI · Class attendance for universities and colleges</title>
+    <meta name="description" content="Class-session attendance for universities and colleges: face check-in for students, registers for teachers and an audit trail for administrators." />
+    <meta property="og:title" content="AttendAI · Class attendance for universities and colleges" />
+    <meta property="og:description" content="Class-session attendance for universities and colleges: face check-in for students, registers for teachers and an audit trail for administrators." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/png" href="/main.png" />
+    <meta name="theme-color" content="#5B5FC7" />
+    <script>
+      // Apply the saved theme before first paint to avoid a light/dark flash.
+      (function () {
+        try {
+          var t = localStorage.getItem('attendai-theme') || 'light';
+          if (t === 'system') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          document.documentElement.classList.add(t);
+          document.documentElement.style.colorScheme = t;
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>

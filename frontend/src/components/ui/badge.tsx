@@ -3,29 +3,32 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Fluent 2 badge. Status variants use the tinted `-subtle` background with a
+ * matching `-border` stroke and status foreground; `brand` is the tinted
+ * Teams purple; `default` is filled brand.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded px-2 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 tabular-nums",
+  "inline-flex items-center gap-1 whitespace-nowrap border px-1.5 py-0.5 text-caption-strong tabular-nums transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-text-primary [&_svg]:size-3 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default:
-          "border border-transparent bg-primary text-primary-foreground",
-        secondary:
-          "border border-border bg-surface-subtle text-text-secondary",
+        default: "border-transparent bg-brand text-brand-on",
+        brand: "border-transparent bg-brand-subtle text-brand-foreground",
+        secondary: "border-border-subtle bg-surface-subtle text-text-secondary",
         destructive:
-          "border border-status-error-border bg-status-error-subtle text-status-error",
+          "border-status-error-border bg-status-error-subtle text-status-error",
         success:
-          "border border-status-success-border bg-status-success-subtle text-status-success",
+          "border-status-success-border bg-status-success-subtle text-status-success",
         warning:
-          "border border-status-warning-border bg-status-warning-subtle text-status-warning",
-        info:
-          "border border-status-info-border bg-status-info-subtle text-status-info",
-        outline: "border border-border text-text-primary bg-surface-default",
+          "border-status-warning-border bg-status-warning-subtle text-status-warning",
+        info: "border-status-info-border bg-status-info-subtle text-status-info",
+        outline: "border-border-default bg-transparent text-text-secondary",
       },
       shape: {
         rounded: "rounded",
-        pill: "rounded-full px-2.5",
-      }
+        pill: "rounded-full px-2",
+      },
     },
     defaultVariants: {
       variant: "default",

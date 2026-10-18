@@ -3,8 +3,12 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { TrendingUp, Award, BookOpen, Loader2 } from 'lucide-react';
+import {
+  Book20Regular,
+  Book24Regular,
+  DataTrending20Regular,
+  Ribbon20Regular,
+} from '@fluentui/react-icons';
 import { useAuth } from '@/contexts/useAuth';
 import { api } from '@/integrations/api/client';
 
@@ -71,8 +75,12 @@ const StudentMarksReport = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <Loader2 className="h-12 w-12 animate-spin text-brand-500 mb-4" />
-        <p className="text-muted-foreground">Loading marks data...</p>
+        <div
+          className="mb-4 h-8 w-8 animate-spin rounded-full border-[3px] border-brand-subtle border-t-brand"
+          role="progressbar"
+          aria-label="Loading"
+        />
+        <p className="text-body text-text-muted">Loading marks data...</p>
       </div>
     );
   }
@@ -80,116 +88,146 @@ const StudentMarksReport = () => {
   // Show empty state
   if (!marksData.length) {
     return (
-      <Card className="p-12">
-        <div className="text-center">
-          <BookOpen className="h-12 w-12 mx-auto text-muted-foreground opacity-30 mb-4" />
-          <h3 className="text-lg font-medium mb-2">No Marks Available</h3>
-          <p className="text-muted-foreground">
-            No marks have been recorded yet. Check back later for your exam results.
-          </p>
+      <div className="flex flex-col items-center rounded-lg bg-surface-default p-12 text-center shadow">
+        <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+          <Book24Regular aria-hidden />
         </div>
-      </Card>
+        <h3 className="text-subheading text-text-primary">No Marks Available</h3>
+        <p className="mt-1 max-w-sm text-body text-text-muted">
+          No marks have been recorded yet. Check back later for your exam results.
+        </p>
+      </div>
     );
   }
 
+  const gradeCells = [
+    { label: 'A+ Grades', value: gradeDistribution.aPlus, color: 'var(--chart-8)' },
+    { label: 'A Grades', value: gradeDistribution.a, color: 'var(--chart-3)' },
+    { label: 'B+ Grades', value: gradeDistribution.bPlus, color: 'var(--chart-2)' },
+    { label: 'Below B+', value: gradeDistribution.below, color: 'var(--text-muted)' },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Overall Average
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{averageMarks.toFixed(1)}%</div>
-            <p className="text-sm text-muted-foreground">Across all subjects</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Award className="h-4 w-4" />
-              Highest Score
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{highestScore}%</div>
-            <p className="text-sm text-muted-foreground">{highestSubject?.subject_name || 'N/A'}</p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <BookOpen className="h-4 w-4" />
-              Total Subjects
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{marksData.length}</div>
-            <p className="text-sm text-muted-foreground">Active courses</p>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section aria-label="Overall average" className="rounded-lg bg-surface-default p-4 shadow">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-caption text-text-muted">Overall Average</p>
+              <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{averageMarks.toFixed(1)}%</p>
+              <p className="mt-0.5 text-caption text-text-muted">Across all subjects</p>
+            </div>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <DataTrending20Regular aria-hidden />
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Highest score" className="rounded-lg bg-surface-default p-4 shadow">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-caption text-text-muted">Highest Score</p>
+              <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{highestScore}%</p>
+              <p className="mt-0.5 truncate text-caption text-text-muted">{highestSubject?.subject_name || 'N/A'}</p>
+            </div>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-status-success-subtle text-status-success">
+              <Ribbon20Regular aria-hidden />
+            </div>
+          </div>
+        </section>
+
+        <section aria-label="Total subjects" className="rounded-lg bg-surface-default p-4 shadow">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-caption text-text-muted">Total Subjects</p>
+              <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{marksData.length}</p>
+              <p className="mt-0.5 text-caption text-text-muted">Active courses</p>
+            </div>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-text-secondary">
+              <Book20Regular aria-hidden />
+            </div>
+          </div>
+        </section>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Subject-wise Performance</CardTitle>
-          <CardDescription>
+      <Card className="overflow-hidden border-0 bg-surface-default shadow">
+        <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+          <CardTitle className="text-subheading text-text-primary">Subject-wise Performance</CardTitle>
+          <CardDescription className="mt-0.5 text-caption text-text-muted">
             Your marks and grades for each subject
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
-            {marksData.map((subject, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <h4 className="font-medium">{subject.subject_name}</h4>
-                    <Badge variant={getGradeBadgeVariant(subject.grade)}>
-                      {subject.grade}
-                    </Badge>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-medium">{subject.marks_obtained}/{subject.total_marks}</p>
-                    <p className="text-sm text-muted-foreground">{subject.percentage}%</p>
-                  </div>
-                </div>
-                <Progress value={subject.percentage} className="h-2" />
-              </div>
-            ))}
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-body">
+              <thead>
+                <tr className="border-b border-border-subtle bg-surface-subtle text-left text-caption-strong text-text-secondary">
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Subject</th>
+                  <th scope="col" className="px-4 py-2.5 font-semibold">Grade</th>
+                  <th scope="col" className="px-4 py-2.5 text-right font-semibold">Marks</th>
+                  <th scope="col" className="w-[38%] px-4 py-2.5 font-semibold">Score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {marksData.map((subject, index) => (
+                  <tr
+                    key={index}
+                    className="border-b border-border-subtle transition-colors duration-150 ease-fluent-standard last:border-b-0 hover:bg-surface-hover"
+                  >
+                    <td className="px-4 py-2.5 text-body-strong text-text-primary">{subject.subject_name}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge shape="pill" variant={getGradeBadgeVariant(subject.grade)}>
+                        {subject.grade}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-text-secondary">
+                      {subject.marks_obtained}/{subject.total_marks}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-1 flex-1 overflow-hidden rounded-full bg-border-subtle"
+                          role="progressbar"
+                          aria-valuenow={subject.percentage}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                        >
+                          <div
+                            className="h-full rounded-full bg-brand transition-[width] duration-500 ease-fluent-decelerate"
+                            style={{ width: `${Math.min(100, Math.max(0, subject.percentage))}%` }}
+                          />
+                        </div>
+                        <span className="w-12 text-right text-body-strong tabular-nums text-text-primary">
+                          {subject.percentage}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Grade Distribution</CardTitle>
-          <CardDescription>
+      <Card className="border-0 bg-surface-default shadow">
+        <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+          <CardTitle className="text-subheading text-text-primary">Grade Distribution</CardTitle>
+          <CardDescription className="mt-0.5 text-caption text-text-muted">
             Your performance summary
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-yellow-600">{gradeDistribution.aPlus}</div>
-              <p className="text-sm text-muted-foreground">A+ Grades</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-green-600">{gradeDistribution.a}</div>
-              <p className="text-sm text-muted-foreground">A Grades</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-blue-600">{gradeDistribution.bPlus}</div>
-              <p className="text-sm text-muted-foreground">B+ Grades</p>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-600">{gradeDistribution.below}</div>
-              <p className="text-sm text-muted-foreground">Below B+</p>
-            </div>
+        <CardContent className="p-5">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {gradeCells.map((cell) => (
+              <div key={cell.label} className="rounded-md bg-surface-subtle p-3">
+                <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: cell.color }} aria-hidden />
+                  {cell.label}
+                </p>
+                <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{cell.value}</p>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

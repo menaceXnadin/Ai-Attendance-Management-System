@@ -4,11 +4,12 @@ import { api } from '@/integrations/api/client';
 import { format } from 'date-fns';
 import { useAuth } from '@/contexts/useAuth';
 import type { AttendanceFilters, Student, Subject, Schedule } from '@/integrations/api/types';
+import { getAuthToken } from '@/lib/authToken';
 
 export interface AttendanceRecord {
   id: string;
   date: string;
-  status: 'present' | 'absent' | 'late' | 'excused';
+  status: 'present' | 'absent' | 'late' | 'excused' | 'cancelled';
   studentName: string;
   studentRollNo: string;
   studentId: string;
@@ -99,7 +100,7 @@ export const useAttendanceData = () => {
         throw error;
       }
     },
-    enabled: !!user && !!localStorage.getItem('authToken'), // Fetch only when user and token are present
+    enabled: !!user && !!getAuthToken(), // Fetch only when user and token are present
     refetchOnWindowFocus: false, // Don't refetch when switching browser tabs
     retry: (failureCount, error) => {
       // Don't retry on authentication errors (401, 403)
@@ -136,7 +137,7 @@ export const useAttendanceData = () => {
       try {
         // Only fetch for daily-report tab
         if (activeTab !== 'daily-report') {
-          return [];
+          return { records: [] as AttendanceRecord[], totalCount: 0 };
         }
 
         // Build filters based on selections
@@ -202,7 +203,7 @@ export const useAttendanceData = () => {
         throw error;
       }
     },
-    enabled: !!user && !!localStorage.getItem('authToken') && activeTab === 'daily-report',
+    enabled: !!user && !!getAuthToken() && activeTab === 'daily-report',
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
       if (error && typeof error === 'object' && 'message' in error) {

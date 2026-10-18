@@ -78,43 +78,43 @@ const RegisterPage = () => {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-gray-50">
-        <Card className="w-full max-w-md">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">Create an Account</CardTitle>
-            <CardDescription className="text-center">
+      <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-surface-canvas">
+        <Card className="w-full max-w-[440px] rounded-lg border-transparent bg-surface-default shadow-xl">
+          <CardHeader className="space-y-1 p-8 pb-4 sm:px-11 sm:pt-11">
+            <CardTitle className="text-page-title text-text-primary">Create an Account</CardTitle>
+            <CardDescription className="text-body text-text-secondary">
               Enter your information to register
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit(onSubmit)}>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-8 sm:px-11">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="firstName">First Name</Label>
+                  <Label htmlFor="firstName" className="text-body-strong font-semibold text-text-primary">First Name</Label>
                   <Input
                     id="firstName"
                     type="text"
                     {...register('firstName', { required: "First name is required" })}
                   />
                   {errors.firstName && (
-                    <p className="text-sm text-red-500">{errors.firstName.message}</p>
+                    <p className="text-caption text-status-error">{errors.firstName.message}</p>
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="lastName">Last Name</Label>
+                  <Label htmlFor="lastName" className="text-body-strong font-semibold text-text-primary">Last Name</Label>
                   <Input
                     id="lastName"
                     type="text"
                     {...register('lastName', { required: "Last name is required" })}
                   />
                   {errors.lastName && (
-                    <p className="text-sm text-red-500">{errors.lastName.message}</p>
+                    <p className="text-caption text-status-error">{errors.lastName.message}</p>
                   )}
                 </div>
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email" className="text-body-strong font-semibold text-text-primary">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -127,12 +127,12 @@ const RegisterPage = () => {
                   })}
                 />
                 {errors.email && (
-                  <p className="text-sm text-red-500">{errors.email.message}</p>
+                  <p className="text-caption text-status-error">{errors.email.message}</p>
                 )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password" className="text-body-strong font-semibold text-text-primary">Password</Label>
                 <PasswordInput
                   id="password"
                   {...register('password', {
@@ -144,12 +144,12 @@ const RegisterPage = () => {
                   })}
                 />
                 {errors.password && (
-                  <p className="text-sm text-red-500">{errors.password.message}</p>
+                  <p className="text-caption text-status-error">{errors.password.message}</p>
                 )}
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirm Password</Label>
+                <Label htmlFor="confirmPassword" className="text-body-strong font-semibold text-text-primary">Confirm Password</Label>
                 <PasswordInput
                   id="confirmPassword"
                   {...register('confirmPassword', {
@@ -158,32 +158,32 @@ const RegisterPage = () => {
                   })}
                 />
                 {errors.confirmPassword && (
-                  <p className="text-sm text-red-500">{errors.confirmPassword.message}</p>
+                  <p className="text-caption text-status-error">{errors.confirmPassword.message}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="role">Register as</Label>
+                <Label htmlFor="role" className="text-body-strong font-semibold text-text-primary">Register as</Label>
                 <select
                   id="role"
                   {...register('role', { required: true })}
-                  className="w-full border rounded px-3 py-2"
+                  className="flex h-9 w-full rounded-md border border-border-default bg-surface-default px-3 py-1.5 text-body text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="student">Student/Employee</option>
                   <option value="admin">Admin/Teacher/Manager</option>
                 </select>
                 {errors.role && (
-                  <p className="text-sm text-red-500">Please select a role</p>
+                  <p className="text-caption text-status-error">Please select a role</p>
                 )}
               </div>
-              <Button type="submit" className="w-full bg-brand-500 hover:bg-brand-600">
+              <Button type="submit" className="w-full font-semibold">
                 Register
               </Button>
             </CardContent>
-            <CardFooter className="flex flex-col">
-              <p className="text-center text-sm text-gray-600">
+            <CardFooter className="flex flex-col px-8 pb-8 sm:px-11 sm:pb-11">
+              <p className="text-center text-body text-text-secondary">
                 Already have an account?{' '}
-                <Link to="/login" className="font-medium text-brand-500 hover:text-brand-400">
+                <Link to="/login" className="text-brand-foreground hover:text-brand-foreground-hover hover:underline">
                   Sign in
                 </Link>
               </p>

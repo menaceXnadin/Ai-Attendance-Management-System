@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthContext, AuthContextType } from './AuthContext';
 import { api } from '@/integrations/api/client';
 import { User } from '@/integrations/api/types';
+import { clearAuthToken, getAuthToken, setAuthToken } from '@/lib/authToken';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -13,7 +14,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       try {
         // Check both localStorage and sessionStorage for auth token
-        const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+        const token = getAuthToken();
         if (token) {
           // Check if token is expired
           const parts = token.split('.');
@@ -37,12 +38,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const refreshResult = await api.auth.refreshToken();
               setUser(refreshResult.user);
-              localStorage.setItem('authToken', refreshResult.token);
+              setAuthToken(refreshResult.token);
               setLoading(false);
               return;
             } catch (refreshError) {
               console.error('Token refresh failed:', refreshError);
-              localStorage.removeItem('authToken');
+              clearAuthToken();
               setUser(null);
               setLoading(false);
               return;
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch (error) {
             // Only log out if error is 401 (unauthorized), otherwise keep user and show error
             if (error?.response?.status === 401) {
-              localStorage.removeItem('authToken');
+              clearAuthToken();
               setUser(null);
             } else {
               console.error('Network or server error retrieving user:', error);
@@ -82,7 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Authenticate with backend API
       const authResponse = await api.auth.login(email, password);
       
-      // Store token based on remember me preference
+      // Store token based on remember me preference (clear any stale copy first)
+      clearAuthToken();
       const storage = rememberMe ? localStorage : sessionStorage;
       storage.setItem('authToken', authResponse.token);
       
@@ -104,8 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Sign out from our backend
     await api.auth.logout();
     // Clear tokens from both storages
-    localStorage.removeItem('authToken');
-    sessionStorage.removeItem('authToken');
+    clearAuthToken();
     setUser(null);
   };
 

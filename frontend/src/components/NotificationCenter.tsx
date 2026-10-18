@@ -1,10 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Bell, X, Calendar, AlertTriangle, CheckCircle, Info, Clock, Megaphone } from 'lucide-react';
+import {
+  Alert20Filled,
+  Alert20Regular,
+  AlertOff20Regular,
+  CheckmarkCircle20Regular,
+  Delete16Regular,
+  Dismiss20Regular,
+  DismissCircle20Regular,
+  ErrorCircle20Regular,
+  Info20Regular,
+  Megaphone20Regular,
+  Open12Regular,
+  Warning20Regular,
+} from '@fluentui/react-icons';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/useAuth';
 import { API_URL } from '@/config/api';
+import { getAuthToken } from '@/lib/authToken';
 
 interface ApiNotification {
   id: string;
@@ -43,7 +56,7 @@ const NotificationCenter: React.FC = () => {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) {
         setError("Authentication token not found.");
         return;
@@ -95,7 +108,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       await fetch(`${API_URL}/notifications/${id}/read`, { 
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -110,7 +123,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleMarkAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       await fetch(`${API_URL}/notifications/mark-all-read`, { 
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -125,7 +138,7 @@ const NotificationCenter: React.FC = () => {
 
   const handleRemoveNotification = async (id: string) => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       await fetch(`${API_URL}/notifications/${id}`, { 
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
@@ -139,30 +152,31 @@ const NotificationCenter: React.FC = () => {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+        return <Warning20Regular className="h-5 w-5" aria-hidden="true" />;
       case 'success':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckmarkCircle20Regular className="h-5 w-5" aria-hidden="true" />;
       case 'error':
-        return <X className="h-4 w-4 text-red-500" />;
+        return <DismissCircle20Regular className="h-5 w-5" aria-hidden="true" />;
       case 'announcement':
-        return <Megaphone className="h-4 w-4 text-purple-500" />;
+        return <Megaphone20Regular className="h-5 w-5" aria-hidden="true" />;
       default:
-        return <Info className="h-4 w-4 text-blue-500" />;
+        return <Info20Regular className="h-5 w-5" aria-hidden="true" />;
     }
   };
 
+  // Icon chip colours (Teams activity feed avatar slot)
   const getNotificationColor = (type: string) => {
     switch (type) {
       case 'warning':
-        return 'border-amber-200 bg-amber-50';
+        return 'bg-status-warning-subtle text-status-warning';
       case 'success':
-        return 'border-green-200 bg-green-50';
+        return 'bg-status-success-subtle text-status-success';
       case 'error':
-        return 'border-red-200 bg-red-50';
+        return 'bg-status-error-subtle text-status-error';
       case 'announcement':
-        return 'border-purple-200 bg-purple-50';
+        return 'bg-brand-subtle text-brand-foreground';
       default:
-        return 'border-blue-200 bg-blue-50';
+        return 'bg-status-info-subtle text-status-info';
     }
   };
 
@@ -183,138 +197,160 @@ const NotificationCenter: React.FC = () => {
   };
 
   return (
-    <div className="relative">
-      {/* Notification Bell */}
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
-        aria-label="Open notifications"
-      >
-        <Bell className="h-4 w-4" />
-        {unreadCount > 0 && (
-          <Badge className="absolute -top-1 -right-1 h-4 w-4 min-w-4 flex items-center justify-center p-0 bg-status-error text-white text-[10px] font-semibold border-0">
-            {unreadCount}
-          </Badge>
-        )}
-      </Button>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      {/* Activity bell */}
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors duration-150 ease-fluent-standard hover:bg-surface-default hover:text-text-primary active:bg-surface-pressed',
+            isOpen ? 'bg-surface-default text-brand-foreground' : 'text-text-secondary'
+          )}
+          aria-label={unreadCount > 0 ? `Open notifications (${unreadCount} unread)` : 'Open notifications'}
+        >
+          {isOpen ? (
+            <Alert20Filled className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <Alert20Regular className="h-5 w-5" aria-hidden="true" />
+          )}
+          {unreadCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-status-error px-1 text-overline tabular-nums text-text-inverse ring-2 ring-titlebar">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
 
-      {/* Notification Panel */}
-      {isOpen && (
-        <div className="absolute right-0 top-11 w-96 z-[999]">
-          <Card className="bg-surface-default border border-border-default shadow-lg overflow-hidden">
-            <CardHeader className="p-3.5 border-b border-border-subtle">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-semibold text-text-primary flex items-center gap-2">
-                  <Bell className="h-4 w-4 text-action-primary" />
-                  Notifications
-                </CardTitle>
-                <div className="flex items-center gap-1.5">
-                  {unreadCount > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleMarkAllAsRead}
-                      className="text-xs h-7 px-2 text-action-primary hover:bg-action-primary-subtle"
-                    >
-                      Mark all read
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setIsOpen(false)}
-                    className="h-7 w-7 text-text-muted hover:text-text-primary"
-                    aria-label="Close notification panel"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 max-h-96 overflow-y-auto">
-              {notifications.length === 0 ? (
-                <div className="p-8 text-center text-text-muted">
-                  <Bell className="h-8 w-8 mx-auto mb-2 opacity-30 text-text-muted" />
-                  <p className="text-xs">No notifications</p>
-                </div>
-              ) : error ? (
-                <div className="p-6 text-center text-status-error">
-                  <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-60" />
-                  <p className="text-xs font-medium">Error loading notifications:</p>
-                  <p className="text-xs text-text-muted mt-0.5">{error}</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-border-subtle">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-3 transition-colors hover:bg-surface-subtle cursor-pointer ${
-                        notification.read ? 'opacity-70 bg-surface-canvas/40' : 'bg-surface-default'
-                      }`}
-                      onClick={() => !notification.read && handleMarkAsRead(notification.id)}
-                    >
-                      <div className="flex items-start justify-between gap-2.5">
-                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                          <div className="mt-0.5 shrink-0">
-                            {getNotificationIcon(notification.type)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className="font-semibold text-text-primary text-xs flex items-center gap-1.5">
-                              <span className="truncate">{notification.title}</span>
-                              {!notification.read && (
-                                <span className="h-1.5 w-1.5 rounded-full bg-action-primary shrink-0"></span>
-                              )}
-                            </h4>
-                            <p className="text-text-secondary text-xs mt-0.5 leading-relaxed break-words">
-                              {notification.message}
-                            </p>
-                            <div className="flex items-center gap-3 mt-1.5">
-                              <div className="flex items-center gap-1 text-text-muted text-[11px]">
-                                <Clock className="h-3 w-3" />
-                                {formatTimestamp(notification.timestamp)}
-                              </div>
-                              {notification.actionable && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    notification.onAction?.();
-                                  }}
-                                  className="text-xs h-6 px-2 text-action-primary hover:bg-action-primary-subtle"
-                                >
-                                  {notification.actionText}
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveNotification(notification.id);
-                            }}
-                            className="h-6 w-6 p-0 text-text-muted hover:text-status-error shrink-0"
-                            aria-label="Delete notification"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      {/* Activity flyout */}
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        collisionPadding={8}
+        className="w-[min(380px,calc(100vw-16px))] overflow-hidden rounded-lg border-border-subtle bg-surface-raised p-0 text-text-primary shadow-lg"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-3">
+          <h2 className="text-subheading text-text-primary">Activity</h2>
+          <div className="flex items-center gap-1">
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllAsRead}
+                className="rounded-md px-2 py-1 text-caption-strong text-brand-foreground transition-colors duration-150 hover:bg-brand-subtle hover:text-brand-foreground-hover"
+              >
+                Mark all read
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-text-primary"
+              aria-label="Close notification panel"
+            >
+              <Dismiss20Regular className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
         </div>
-      )}
-    </div>
+
+        <div className="max-h-[min(440px,70vh)] overflow-y-auto">
+          {error ? (
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-status-error-subtle text-status-error">
+                <ErrorCircle20Regular className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <p className="text-body-strong text-text-primary">Error loading notifications</p>
+              <p className="mt-1 max-w-[280px] break-words text-caption text-text-muted">{error}</p>
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="flex flex-col items-center px-6 py-10 text-center">
+              <span className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-surface-subtle text-text-muted">
+                <AlertOff20Regular className="h-6 w-6" aria-hidden="true" />
+              </span>
+              <p className="text-body-strong text-text-primary">No notifications</p>
+              <p className="mt-1 text-caption text-text-muted">You&apos;re all caught up.</p>
+            </div>
+          ) : (
+            <ul className="py-1">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    className="group relative flex cursor-pointer items-start gap-3 py-2.5 pl-5 pr-3 transition-colors duration-150 hover:bg-surface-hover focus-visible:bg-surface-hover"
+                    onClick={() => !notification.read && handleMarkAsRead(notification.id)}
+                    onKeyDown={(e) => {
+                      if ((e.key === 'Enter' || e.key === ' ') && e.currentTarget === e.target) {
+                        e.preventDefault();
+                        if (!notification.read) handleMarkAsRead(notification.id);
+                      }
+                    }}
+                  >
+                    {!notification.read && (
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-2 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-brand-foreground"
+                      />
+                    )}
+                    <span
+                      className={cn(
+                        'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+                        getNotificationColor(notification.type)
+                      )}
+                    >
+                      {getNotificationIcon(notification.type)}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p
+                          className={cn(
+                            'min-w-0 truncate',
+                            notification.read ? 'text-body text-text-secondary' : 'text-body-strong text-text-primary'
+                          )}
+                        >
+                          {notification.title}
+                          {!notification.read && <span className="sr-only"> (unread)</span>}
+                        </p>
+                        <span className="shrink-0 text-caption text-text-muted">
+                          {formatTimestamp(notification.timestamp)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 break-words text-caption text-text-secondary">
+                        {notification.message}
+                      </p>
+                      {notification.actionable && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            notification.onAction?.();
+                          }}
+                          className="mt-1 inline-flex items-center gap-1 rounded-sm text-caption-strong text-brand-foreground hover:text-brand-foreground-hover hover:underline"
+                        >
+                          {notification.actionText}
+                          <Open12Regular className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveNotification(notification.id);
+                        }}
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-text-muted transition-colors duration-150 hover:bg-status-error-subtle hover:text-status-error focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+                        aria-label="Delete notification"
+                      >
+                        <Delete16Regular className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 

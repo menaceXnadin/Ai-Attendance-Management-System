@@ -1,35 +1,97 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import TeacherSidebar from '@/components/TeacherSidebar';
-import { BarChart3, ArrowLeft, TrendingUp, Users, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { api } from '@/integrations/api/client';
+import {
+  ArrowLeft20Regular,
+  ArrowSync20Regular,
+  CheckmarkCircle16Regular,
+  CheckmarkCircle20Regular,
+  Clock16Regular,
+  DataBarVertical20Regular,
+  DataBarVertical24Regular,
+  DataTrending20Regular,
+  DismissCircle16Regular,
+  DismissCircle20Regular,
+  People20Regular,
+  People24Regular,
+} from '@fluentui/react-icons';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { api, parseApiError, type MetricsBlock, type TermState, type TermSummary } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 import SemesterFilter from '@/components/filters/SemesterFilter';
+import TermStateBanner from '@/components/TermStateBanner';
+import { useAttendancePolicy } from '@/hooks/useAttendancePolicy';
+import { cn } from '@/lib/utils';
+import {
+  barWidth,
+  formatPercent,
+  metricTone,
+  readMetrics,
+  resolveBand,
+  TONE_BADGE,
+  TONE_CSS_VAR,
+  TONE_FILL,
+  toneForBand,
+} from '@/utils/metricsDisplay';
 
-interface StudentAttendance {
+interface StudentAttendance extends MetricsBlock {
+  id?: number;
   student_id: string;
   student_name: string;
-  total_classes: number;
-  present: number;
-  absent: number;
-  late: number;
-  attendance_percentage: number;
 }
 
-interface AnalyticsData {
+interface AnalyticsData extends MetricsBlock {
   subject_id: number;
   total_students: number;
   overall_stats: {
     present: number;
     absent: number;
     late: number;
+    excused?: number;
   };
   student_attendance: StudentAttendance[];
+  sessions?: { held?: number; unrecorded?: number; cancelled?: number; upcoming?: number };
+  term?: TermSummary | null;
+  term_state?: TermState;
 }
+
+/** Shared Recharts styling — every colour comes from theme CSS variables. */
+const AXIS_TICK = { fill: 'var(--text-muted)', fontSize: 12 };
+const CATEGORY_TICK = { fill: 'var(--text-secondary)', fontSize: 12 };
+const TOOLTIP_PROPS = {
+  cursor: { fill: 'var(--surface-hover)' },
+  contentStyle: {
+    background: 'var(--surface-raised)',
+    border: '1px solid var(--border-subtle)',
+    borderRadius: 4,
+    boxShadow: 'var(--shadow-16)',
+    color: 'var(--text-primary)',
+    fontSize: 12,
+    padding: '6px 10px',
+  },
+  labelStyle: { color: 'var(--text-primary)', fontWeight: 600, marginBottom: 2 },
+  itemStyle: { color: 'var(--text-secondary)', padding: 0 },
+};
 
 const TeacherSubjectAnalytics: React.FC = () => {
   const { subjectId } = useParams<{ subjectId: string }>();
@@ -40,6 +102,7 @@ const TeacherSubjectAnalytics: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialSemester = Number(searchParams.get('semester') || 1);
   const [semester, setSemester] = useState<number>(initialSemester);
+  const { data: policy } = useAttendancePolicy();
 
   const fetchAnalytics = useCallback(async () => {
     try {
@@ -48,10 +111,9 @@ const TeacherSubjectAnalytics: React.FC = () => {
       setAnalytics(data);
     } catch (err: unknown) {
       console.error('Error fetching analytics:', err);
-      const error = err as { message?: string };
       toast({
         title: 'Error',
-        description: error.message || 'Failed to load analytics',
+        description: parseApiError(err).message || 'Failed to load analytics',
         variant: 'destructive',
       });
     } finally {
@@ -76,9 +138,9 @@ const TeacherSubjectAnalytics: React.FC = () => {
     return (
       <TeacherSidebar>
         <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto" />
-            <p className="text-slate-300">Loading analytics...</p>
+          <div className="text-center space-y-3">
+            <ArrowSync20Regular className="mx-auto h-8 w-8 animate-spin text-brand-foreground" aria-hidden />
+            <p className="text-body text-text-muted">Loading analytics...</p>
           </div>
         </div>
       </TeacherSidebar>
@@ -88,180 +150,268 @@ const TeacherSubjectAnalytics: React.FC = () => {
   if (!analytics) {
     return (
       <TeacherSidebar>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="mx-auto max-w-7xl space-y-4">
           <Button
-            variant="outline"
-            className="mb-6 border-slate-600 text-slate-200"
+            variant="ghost"
+            size="sm"
+            className="-ml-2 text-text-secondary"
             onClick={() => navigate('/teacher')}
           >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+            <ArrowLeft20Regular aria-hidden />
             Back to Dashboard
           </Button>
-          <Card className="bg-slate-900/70 border-slate-700/80">
-            <CardContent className="pt-6">
-              <p className="text-slate-400 text-center">No analytics data available</p>
-            </CardContent>
-          </Card>
+          <div className="flex flex-col items-center rounded-lg bg-surface-default py-14 text-center shadow">
+            <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+              <DataBarVertical24Regular aria-hidden />
+            </div>
+            <p className="text-subheading text-text-primary">No analytics data available</p>
+          </div>
         </div>
       </TeacherSidebar>
     );
   }
 
-  const totalRecords = analytics.overall_stats.present + analytics.overall_stats.absent + analytics.overall_stats.late;
-  const overallPercentage = totalRecords > 0 
-    ? Math.round((analytics.overall_stats.present / totalRecords) * 100) 
-    : 0;
+  // All percentages come from the server; null = no counted classes yet.
+  const overall = readMetrics(analytics);
+  const overallStats = {
+    present: analytics.overall_stats?.present ?? 0,
+    absent: analytics.overall_stats?.absent ?? 0,
+    late: analytics.overall_stats?.late ?? 0,
+  };
+  const totalRecords = overallStats.present + overallStats.absent + overallStats.late;
+  const students = analytics.student_attendance ?? [];
+  const studentMetrics = students.map((st) => ({
+    student: st,
+    m: readMetrics(st, ['attendance_percentage', 'attendance_rate']),
+  }));
+
+  // ---- Chart data (counts only; presentation) ----
+  const recordsData = [
+    { label: 'Present', value: overallStats.present, color: 'var(--status-success)' },
+    { label: 'Late', value: overallStats.late, color: 'var(--status-warning)' },
+    { label: 'Absent', value: overallStats.absent, color: 'var(--status-error)' },
+  ];
+
+  // Students per policy band (server band first, else the server % classified by policy bands)
+  const bandsData = (() => {
+    const noData = studentMetrics.filter(({ m }) => !m.hasData).length;
+    const rows: Array<{ label: string; value: number; color: string }> = [];
+    if (policy?.bands.length) {
+      policy.bands.forEach((band) => {
+        const value = studentMetrics.filter(({ m }) => m.hasData && resolveBand(m, policy)?.name === band.name).length;
+        rows.push({
+          label: band.max === null ? `${band.label} (≥ ${band.min}%)` : `${band.label} (${band.min}–${band.max}%)`,
+          value,
+          color: TONE_CSS_VAR[toneForBand(band, policy)],
+        });
+      });
+    } else {
+      const byName = new Map<string, number>();
+      studentMetrics.forEach(({ m }) => {
+        if (m.hasData) byName.set(m.bandLabel || m.band || 'Unbanded', (byName.get(m.bandLabel || m.band || 'Unbanded') ?? 0) + 1);
+      });
+      byName.forEach((value, label) => rows.push({ label, value, color: TONE_CSS_VAR.info }));
+    }
+    if (noData > 0) rows.push({ label: 'No classes yet', value: noData, color: 'var(--border-default)' });
+    return rows;
+  })();
+
+  const sessionsSummary = analytics.sessions;
+
+  const kpis = [
+    { label: 'Total Students', value: analytics.total_students, icon: People20Regular, chip: 'bg-brand-subtle text-brand-foreground' },
+    { label: 'Present', value: overallStats.present, icon: CheckmarkCircle20Regular, chip: 'bg-status-success-subtle text-status-success' },
+    { label: 'Absent', value: overallStats.absent, icon: DismissCircle20Regular, chip: 'bg-status-error-subtle text-status-error' },
+    { label: 'Overall Rate', value: overall.hasData ? formatPercent(overall.percentage) : '—', icon: DataTrending20Regular, chip: 'bg-brand-subtle text-brand-foreground' },
+  ];
 
   return (
     <TeacherSidebar>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="mx-auto max-w-7xl space-y-4">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="mb-6 border-border-default text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
+          className="-ml-2 text-text-secondary"
           onClick={() => navigate('/teacher')}
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft20Regular aria-hidden />
           Back to Dashboard
         </Button>
 
-        {/* Quick Filter Bar */}
-        <div className="flex items-center justify-between mb-4">
-          <div />
+        {/* Header + filter */}
+        <div className="page-header !mb-2">
+          <div>
+            <h1 className="text-page-title text-text-primary">Attendance analytics</h1>
+            <p className="mt-1 text-body text-text-muted tabular-nums">
+              Semester {semester} · {totalRecords} counted records
+              {sessionsSummary && (
+                <>
+                  {' · '}
+                  {sessionsSummary.held ?? 0} held
+                  {(sessionsSummary.unrecorded ?? 0) > 0 && `, ${sessionsSummary.unrecorded} not recorded`}
+                  {(sessionsSummary.cancelled ?? 0) > 0 && `, ${sessionsSummary.cancelled} cancelled`}
+                </>
+              )}
+            </p>
+          </div>
           <SemesterFilter value={semester} onChange={setSemester} />
         </div>
 
-        {/* Overall Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Total Students</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums mt-1">{analytics.total_students}</h3>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-action-primary-subtle flex items-center justify-center">
-                  <Users className="w-5 h-5 text-action-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TermStateBanner termState={analytics.term_state} term={analytics.term} />
 
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Present</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-status-success tabular-nums mt-1">{analytics.overall_stats.present}</h3>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-status-success-subtle flex items-center justify-center">
-                  <CheckCircle className="w-5 h-5 text-status-success" />
-                </div>
+        {/* KPI tiles */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map(({ label, value, icon: Icon, chip }) => (
+            <div key={label} className="flex items-start justify-between gap-3 rounded-lg bg-surface-default p-4 shadow">
+              <div>
+                <p className="text-caption text-text-muted">{label}</p>
+                <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{value}</p>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Absent</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-status-error tabular-nums mt-1">{analytics.overall_stats.absent}</h3>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-status-error-subtle flex items-center justify-center">
-                  <XCircle className="w-5 h-5 text-status-error" />
-                </div>
+              <div className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-md', chip)}>
+                <Icon aria-hidden />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-medium text-text-muted uppercase tracking-wider">Overall Rate</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-action-primary tabular-nums mt-1">{overallPercentage}%</h3>
-                </div>
-                <div className="w-10 h-10 rounded-lg bg-action-primary-subtle flex items-center justify-center">
-                  <TrendingUp className="w-5 h-5 text-action-primary" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          ))}
         </div>
 
-        {/* Student Attendance List */}
-        <Card className="bg-surface-default border-border-subtle shadow-card">
-          <CardHeader className="border-b border-border-subtle pb-4">
-            <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-action-primary" />
-              Student Attendance Details
-            </CardTitle>
-            <CardDescription className="text-text-muted text-xs">
-              Individual attendance breakdown for all students
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {analytics.student_attendance.length === 0 ? (
-              <div className="text-center py-12 text-text-muted">
-                <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                <p className="text-xs">No attendance records available</p>
+        {/* Report charts */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <section className="rounded-lg bg-surface-default shadow">
+            <div className="border-b border-border-subtle px-5 py-4">
+              <h2 className="text-subheading text-text-primary">Attendance records</h2>
+              <p className="text-caption text-text-muted">Counted records this term, by status</p>
+            </div>
+            <div className="h-[180px] px-3 py-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={recordsData} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="var(--border-subtle)" />
+                  <XAxis type="number" allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={64} tick={CATEGORY_TICK} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    {...TOOLTIP_PROPS}
+                    formatter={(value: number) => [value, 'Records']}
+                  />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                    {recordsData.map((d) => (
+                      <Cell key={d.label} fill={d.color} />
+                    ))}
+                    <LabelList dataKey="value" position="right" fill="var(--text-primary)" fontSize={12} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+
+          <section className="rounded-lg bg-surface-default shadow">
+            <div className="border-b border-border-subtle px-5 py-4">
+              <h2 className="text-subheading text-text-primary">Students by attendance band</h2>
+              <p className="text-caption text-text-muted">
+                Number of students in each policy band{policy ? ` (minimum ${policy.minimum_percentage}%)` : ''}
+              </p>
+            </div>
+            <div className="h-[180px] px-3 py-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={bandsData} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 4 }}>
+                  <CartesianGrid horizontal={false} stroke="var(--border-subtle)" />
+                  <XAxis type="number" allowDecimals={false} tick={AXIS_TICK} axisLine={false} tickLine={false} />
+                  <YAxis type="category" dataKey="label" width={132} tick={CATEGORY_TICK} axisLine={false} tickLine={false} />
+                  <Tooltip {...TOOLTIP_PROPS} formatter={(value: number) => [value, 'Students']} />
+                  <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}>
+                    {bandsData.map((d) => (
+                      <Cell key={d.label} fill={d.color} />
+                    ))}
+                    <LabelList dataKey="value" position="right" fill="var(--text-primary)" fontSize={12} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        </div>
+
+        {/* Student Attendance DataGrid */}
+        <section className="overflow-hidden rounded-lg bg-surface-default shadow">
+          <div className="flex items-center gap-3 border-b border-border-subtle px-5 py-4">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <DataBarVertical20Regular aria-hidden />
+            </div>
+            <div>
+              <h2 className="text-subheading text-text-primary">Student Attendance Details</h2>
+              <p className="text-caption text-text-muted">Individual attendance breakdown for all students</p>
+            </div>
+          </div>
+
+          {students.length === 0 ? (
+            <div className="flex flex-col items-center py-14 text-center">
+              <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                <People24Regular aria-hidden />
               </div>
-            ) : (
-              <div className="space-y-3">
-                {analytics.student_attendance.map((student) => (
-                  <div
-                    key={student.student_id}
-                    className="p-4 bg-surface-canvas/60 rounded-lg border border-border-subtle hover:bg-surface-subtle transition-colors"
-                  >
-                    <div className="flex items-start justify-between mb-2.5">
-                      <div>
-                        <h4 className="font-semibold text-text-primary text-sm">{student.student_name}</h4>
-                        <p className="text-xs text-text-muted">{student.student_id}</p>
-                      </div>
-                      <Badge
-                        variant={
-                          student.attendance_percentage >= 90
-                            ? 'success'
-                            : student.attendance_percentage >= 75
-                            ? 'warning'
-                            : 'destructive'
-                        }
-                        className="tabular-nums"
-                      >
-                        {student.attendance_percentage}%
-                      </Badge>
-                    </div>
-                    <Progress
-                      value={student.attendance_percentage}
-                      className="h-1.5 mb-3 bg-surface-subtle"
-                    />
-                    <div className="grid grid-cols-3 gap-4 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <CheckCircle className="w-3.5 h-3.5 text-status-success" />
-                        <span className="text-text-secondary">
-                          Present: <span className="font-semibold text-text-primary tabular-nums">{student.present}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <XCircle className="w-3.5 h-3.5 text-status-error" />
-                        <span className="text-text-secondary">
-                          Absent: <span className="font-semibold text-text-primary tabular-nums">{student.absent}</span>
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5 text-status-warning" />
-                        <span className="text-text-secondary">
-                          Late: <span className="font-semibold text-text-primary tabular-nums">{student.late}</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              <p className="text-subheading text-text-primary">No attendance records available</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Student</TableHead>
+                  <TableHead className="hidden text-right normal-case tracking-normal text-caption-strong text-text-secondary sm:table-cell">Classes</TableHead>
+                  <TableHead className="text-right normal-case tracking-normal text-caption-strong text-text-secondary">
+                    <span className="inline-flex items-center gap-1"><CheckmarkCircle16Regular className="text-status-success" aria-hidden />Present</span>
+                  </TableHead>
+                  <TableHead className="text-right normal-case tracking-normal text-caption-strong text-text-secondary">
+                    <span className="inline-flex items-center gap-1"><DismissCircle16Regular className="text-status-error" aria-hidden />Absent</span>
+                  </TableHead>
+                  <TableHead className="text-right normal-case tracking-normal text-caption-strong text-text-secondary">
+                    <span className="inline-flex items-center gap-1"><Clock16Regular className="text-status-warning" aria-hidden />Late</span>
+                  </TableHead>
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Attendance</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {studentMetrics.map(({ student, m }) => {
+                  const tone = metricTone(m, policy);
+                  return (
+                    <TableRow key={student.id ?? student.student_id} className="hover:bg-surface-hover">
+                      <TableCell className="py-2.5">
+                        <p className="text-body-strong text-text-primary">{student.student_name}</p>
+                        <p className="font-mono text-caption text-text-muted">{student.student_id}</p>
+                      </TableCell>
+                      <TableCell className="hidden py-2.5 text-right text-body tabular-nums text-text-secondary sm:table-cell">
+                        {m.considered ?? student.total_classes ?? 0}
+                      </TableCell>
+                      <TableCell className="py-2.5 text-right text-body tabular-nums text-text-primary">{m.present}</TableCell>
+                      <TableCell className="py-2.5 text-right text-body tabular-nums text-text-primary">{m.absent}</TableCell>
+                      <TableCell className="py-2.5 text-right text-body tabular-nums text-text-primary">{m.late}</TableCell>
+                      <TableCell className="py-2.5">
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="hidden h-1.5 w-24 overflow-hidden rounded-full bg-surface-subtle ring-1 ring-inset ring-border-subtle md:block"
+                            role="progressbar"
+                            aria-valuenow={m.percentage ?? undefined}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-label={`${student.student_name} attendance`}
+                          >
+                            <div
+                              className={cn('h-full rounded-full', TONE_FILL[tone])}
+                              style={{ width: `${barWidth(m.percentage)}%` }}
+                            />
+                          </div>
+                          <Badge variant={TONE_BADGE[tone]} shape="pill" className="tabular-nums">
+                            {m.hasData ? formatPercent(m.percentage) : 'No classes yet'}
+                          </Badge>
+                          {m.provisional && (
+                            <span className="hidden text-caption text-text-muted lg:inline" title="Some sessions are not recorded yet">
+                              provisional
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </section>
       </div>
     </TeacherSidebar>
   );

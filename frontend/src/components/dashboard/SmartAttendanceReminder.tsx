@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Bell, X, Clock, Camera } from 'lucide-react';
+import { Alert20Regular, Dismiss16Regular, Clock20Regular, Camera20Regular } from '@fluentui/react-icons';
 import { useToast } from '@/hooks/use-toast';
 
 interface SmartAttendanceReminderProps {
@@ -71,69 +71,70 @@ const SmartAttendanceReminder: React.FC<SmartAttendanceReminderProps> = ({
   };
 
   const urgency = getUrgencyLevel();
-  
+
   const getAlertStyles = () => {
     switch (urgency) {
       case 'high':
-        return 'border-red-200 bg-red-50 text-red-800';
+        return 'bg-status-error-subtle text-status-error';
       case 'medium':
-        return 'border-yellow-200 bg-yellow-50 text-yellow-800';
+        return 'bg-status-warning-subtle text-status-warning';
       default:
-        return 'border-blue-200 bg-blue-50 text-blue-800';
+        return 'bg-status-info-subtle text-status-info';
     }
   };
 
   const getUrgencyMessage = () => {
     switch (urgency) {
       case 'high':
-        return "⚠️ It's getting late! Don't forget to mark your attendance.";
+        return "It's getting late! Don't forget to mark your attendance.";
       case 'medium':
-        return "⏰ Gentle reminder to mark your attendance for today.";
+        return "Gentle reminder to mark your attendance for today.";
       default:
-        return "📚 Good morning! Time to mark your attendance.";
+        return "Good morning! Time to mark your attendance.";
     }
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-md animate-in slide-in-from-right duration-300">
-      <Alert className={`${getAlertStyles()} border shadow-lg backdrop-blur-sm`}>
+    <div className="fixed right-4 top-4 z-50 w-[calc(100vw-2rem)] max-w-sm animate-in fade-in-0 slide-in-from-right-4 duration-300">
+      <Alert className="rounded-lg border border-border-subtle bg-surface-raised p-4 text-text-primary shadow-lg">
         <div className="flex items-start gap-3">
-          <Bell className="h-5 w-5 mt-0.5 animate-pulse" />
-          <div className="flex-1 space-y-2">
-            <AlertDescription className="font-medium">
+          <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${getAlertStyles()}`}>
+            <Alert20Regular aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1 space-y-1">
+            <AlertDescription className="text-body-strong text-text-primary">
               {getUrgencyMessage()}
             </AlertDescription>
-            <AlertDescription className="text-sm opacity-90">
+            <AlertDescription className="text-caption text-text-muted">
               Current time: {getCurrentTimeString()}
             </AlertDescription>
             <div className="flex gap-2 pt-2">
               <Button
                 size="sm"
                 variant="default"
-                className="h-8 px-3 text-xs"
                 onClick={handleMarkAttendance}
               >
-                <Camera className="h-3 w-3 mr-1" />
+                <Camera20Regular aria-hidden />
                 Mark Now
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-3 text-xs"
                 onClick={handleDismiss}
               >
-                <Clock className="h-3 w-3 mr-1" />
+                <Clock20Regular aria-hidden />
                 Later
               </Button>
             </div>
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-auto p-1 hover:bg-transparent"
+            size="icon-sm"
+            className="h-6 w-6 shrink-0 text-text-muted hover:text-text-primary"
             onClick={handleDismiss}
+            aria-label="Dismiss reminder"
           >
-            <X className="h-4 w-4" />
+            <Dismiss16Regular aria-hidden />
           </Button>
         </div>
       </Alert>

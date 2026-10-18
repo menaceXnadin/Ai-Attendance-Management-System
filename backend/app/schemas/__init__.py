@@ -131,6 +131,8 @@ class TeacherCreate(TeacherBase):
     user: UserCreate
 
 class TeacherUpdate(BaseModel):
+    # Display name; also written to users.full_name (the name shown everywhere).
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
     faculty_id: Optional[int] = None
     department: Optional[str] = None
     phone_number: Optional[str] = None
@@ -243,16 +245,6 @@ class Mark(MarkBase):
         from_attributes = True
 
 # Face Recognition schemas
-class FaceRecognitionRequest(BaseModel):
-    image_data: str  # Base64 encoded image
-    subject_id: int
-
-class FaceRegistrationRequest(BaseModel):
-    image_data: Union[str, List[str]]  # Single Base64 string or list of Base64 encoded images
-    
-class MultiImageFaceRegistrationRequest(BaseModel):
-    images: List[str]  # List of Base64 encoded images
-
 class FaceRecognitionResponse(BaseModel):
     success: bool
     student_id: Optional[int] = None

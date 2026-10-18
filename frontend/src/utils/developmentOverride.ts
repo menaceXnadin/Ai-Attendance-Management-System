@@ -1,9 +1,12 @@
-// Development toggle for bypassing all restrictions during development
-// This creates a persistent toggle that survives page refreshes
+// Developer preview flag (persisted in localStorage).
+//
+// This flag is UI-only: it lets developers see a "preview" hint in the student
+// schedule. It does NOT bypass check-in rules — the server decides whether a
+// check-in window is open (DOMAIN_RULES §13.9) and rejects anything else.
 
 export const DEVELOPMENT_OVERRIDE_KEY = 'dev_override_all_restrictions';
 
-// Check if development override is enabled
+// Check if the developer preview flag is enabled
 export const isDevelopmentOverrideEnabled = (): boolean => {
   try {
     return localStorage.getItem(DEVELOPMENT_OVERRIDE_KEY) === 'true';
@@ -12,34 +15,31 @@ export const isDevelopmentOverrideEnabled = (): boolean => {
   }
 };
 
-// Enable development override
+// Enable the developer preview flag
 export const enableDevelopmentOverride = (): void => {
   try {
     localStorage.setItem(DEVELOPMENT_OVERRIDE_KEY, 'true');
-    console.log('🔧 Development Override ENABLED - All restrictions bypassed');
   } catch (error) {
-    console.error('Failed to enable development override:', error);
+    console.error('Failed to enable developer preview:', error);
   }
 };
 
-// Disable development override
+// Disable the developer preview flag
 export const disableDevelopmentOverride = (): void => {
   try {
     localStorage.removeItem(DEVELOPMENT_OVERRIDE_KEY);
-    console.log('🔒 Development Override DISABLED - Normal restrictions apply');
   } catch (error) {
-    console.error('Failed to disable development override:', error);
+    console.error('Failed to disable developer preview:', error);
   }
 };
 
-// Toggle development override
+// Toggle the developer preview flag
 export const toggleDevelopmentOverride = (): boolean => {
   const isEnabled = isDevelopmentOverrideEnabled();
   if (isEnabled) {
     disableDevelopmentOverride();
     return false;
-  } else {
-    enableDevelopmentOverride();
-    return true;
   }
+  enableDevelopmentOverride();
+  return true;
 };

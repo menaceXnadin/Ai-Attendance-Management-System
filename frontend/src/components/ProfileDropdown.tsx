@@ -1,4 +1,13 @@
 import React from 'react';
+import { PersonCircle20Regular, SignOut20Regular } from '@fluentui/react-icons';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { ShellAvatar } from '@/components/layout/ShellAccountMenu';
 
 interface ProfileDropdownProps {
   name: string;
@@ -6,41 +15,54 @@ interface ProfileDropdownProps {
   onSignOut: () => void;
 }
 
+const itemClass =
+  'flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-body text-text-primary outline-none transition-colors duration-150 focus:bg-surface-hover focus:text-text-primary data-[highlighted]:bg-surface-hover';
+
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ name, onViewProfile, onSignOut }) => {
   const [open, setOpen] = React.useState(false);
 
   return (
-    <div className="relative">
-      <button
-        className="flex items-center justify-center w-8 h-8 rounded-full bg-action-primary text-white text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-action-primary focus:ring-offset-2"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Open profile menu"
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-90"
+          aria-label="Open profile menu"
+        >
+          <span className="sr-only">Open profile menu</span>
+          <ShellAvatar name={name} size="md" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        sideOffset={6}
+        className="w-56 rounded-lg border-border-subtle bg-surface-raised p-1 text-text-primary shadow-lg"
       >
-        <span className="sr-only">Open profile menu</span>
-        {name ? name.charAt(0).toUpperCase() : 'U'}
-      </button>
-      {open && (
-        <div className="absolute right-0 mt-2 w-48 bg-surface-default border border-border-default rounded-md shadow-lg z-50 py-1">
-          <div className="px-3.5 py-2.5 border-b border-border-subtle">
-            <span className="block text-[11px] text-text-muted">Welcome back,</span>
-            <span className="block text-xs font-semibold text-text-primary truncate">{name}</span>
+        <div className="flex items-center gap-3 px-3 py-2.5">
+          <ShellAvatar name={name} size="md" />
+          <div className="min-w-0">
+            <span className="block text-caption text-text-muted">Welcome back,</span>
+            <span className="block truncate text-body-strong text-text-primary">{name}</span>
           </div>
-          <button
-            className="w-full text-left px-3.5 py-2 text-xs text-text-primary hover:bg-surface-subtle transition-colors"
-            onClick={() => { setOpen(false); onViewProfile(); }}
-          >
-            View Profile
-          </button>
-          <div className="border-t border-border-subtle my-1" />
-          <button
-            className="w-full text-left px-3.5 py-2 text-xs text-status-error hover:bg-status-error-subtle transition-colors"
-            onClick={() => { setOpen(false); onSignOut(); }}
-          >
-            Sign Out
-          </button>
         </div>
-      )}
-    </div>
+        <DropdownMenuSeparator className="mx-0 my-1 bg-border-subtle" />
+        <DropdownMenuItem
+          className={itemClass}
+          onSelect={() => { setOpen(false); onViewProfile(); }}
+        >
+          <PersonCircle20Regular className="h-5 w-5 shrink-0 text-text-secondary" aria-hidden="true" />
+          View Profile
+        </DropdownMenuItem>
+        <DropdownMenuSeparator className="mx-0 my-1 bg-border-subtle" />
+        <DropdownMenuItem
+          className={itemClass}
+          onSelect={() => { setOpen(false); onSignOut(); }}
+        >
+          <SignOut20Regular className="h-5 w-5 shrink-0 text-text-secondary" aria-hidden="true" />
+          Sign Out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

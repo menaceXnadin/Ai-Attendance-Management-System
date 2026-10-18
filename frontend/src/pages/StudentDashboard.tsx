@@ -1,36 +1,110 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Calendar, 
-  User, 
-  Time,
-  Book,
-  CheckmarkFilled,
-  CloseFilled,
-  Camera,
-  Security,
-  Activity,
-  ArrowRight,
-  Renew
-} from '@carbon/icons-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useToast } from '@/hooks/use-toast';
+import {
+  Camera20Regular,
+  CalendarLtr20Regular,
+  CalendarLtr24Regular,
+  CheckmarkCircle16Filled,
+  CheckmarkCircle20Regular,
+  ChevronRight20Regular,
+  ClipboardTaskListLtr20Regular,
+  Clock16Regular,
+  DismissCircle20Regular,
+  LockClosed16Regular,
+  Location16Regular,
+  Pulse20Regular,
+  ShieldCheckmark20Regular,
+  Warning16Regular,
+} from '@fluentui/react-icons';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/useAuth';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/integrations/api/client';
-import { Attendance } from '@/integrations/api/types';
-import FaceRegistration from '@/components/FaceRegistration';
+import { api, type RecordStatus, type StudentTodayClass } from '@/integrations/api/client';
 import StudentSidebar from '@/components/StudentSidebar';
 import TodayClassSchedule from '@/components/TodayClassSchedule';
-import { getTodayLocalDate } from '@/utils/dateUtils';
+import TermStateBanner from '@/components/TermStateBanner';
+import { STUDENT_TODAY_QUERY_KEY } from '@/hooks/useTimeRestrictions';
+import { useAttendancePolicy } from '@/hooks/useAttendancePolicy';
+import { formatClock, isClassCancelled } from '@/utils/timeRestrictions';
+import {
+  formatPercent,
+  localDateString,
+  meetsMinimum,
+  metricTone,
+  parseLocalDate,
+  readMetrics,
+  resolveBand,
+  TONE_CSS_VAR,
+  TONE_TEXT,
+  type MetricTone,
+} from '@/utils/metricsDisplay';
+
+/* ---------- Presentational helpers (Fluent 2) ---------- */
+
+const ProgressRing: React.FC<{ value: number | null; tone: MetricTone }> = ({ value, tone }) => {
+  const size = 56;
+  const stroke = 6;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const pct = value === null || !Number.isFinite(value) ? 0 : Math.max(0, Math.min(100, value));
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="shrink-0 -rotate-90"
+      role="img"
+      aria-label={value === null ? 'No attendance data yet' : `${formatPercent(value)} attendance`}
+    >
+      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--border-subtle)" strokeWidth={stroke} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="none"
+        stroke={TONE_CSS_VAR[tone]}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={circumference * (1 - pct / 100)}
+        style={{ transition: 'stroke-dashoffset 600ms cubic-bezier(0.1, 0.9, 0.2, 1)' }}
+      />
+    </svg>
+  );
+};
+
+interface KpiTileProps {
+  label: string;
+  value: React.ReactNode;
+  caption?: React.ReactNode;
+  icon?: React.ReactNode;
+  chipClassName?: string;
+  aside?: React.ReactNode;
+  footer?: React.ReactNode;
+}
+
+const KpiTile: React.FC<KpiTileProps> = ({ label, value, caption, icon, chipClassName, aside, footer }) => (
+  <div className="flex flex-col gap-3 rounded-lg bg-surface-default p-4 shadow">
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-caption text-text-muted">{label}</p>
+        <p className="mt-1 truncate text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{value}</p>
+        {caption && <p className="mt-0.5 truncate text-caption text-text-muted">{caption}</p>}
+      </div>
+      {aside ?? (
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${chipClassName ?? 'bg-brand-subtle text-brand-foreground'}`}>
+          {icon}
+        </div>
+      )}
+    </div>
+    {footer}
+  </div>
+);
 
 const StudentDashboard: React.FC = () => {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [showFaceRegistration, setShowFaceRegistration] = useState(false);
-  const [hasMarkedAttendanceToday, setHasMarkedAttendanceToday] = useState(false);
+  const { data: policy } = useAttendancePolicy();
 
   // Fetch student data from backend
   const { data: studentData, isLoading: isLoadingStudent } = useQuery({
@@ -53,43 +127,12 @@ const StudentDashboard: React.FC = () => {
     enabled: !!user?.email,
   });
 
-  // Fetch attendance summary
-  const { data: attendanceSummary, isLoading: isLoadingAttendance } = useQuery({
+  // Fetch attendance summary (§13.12 metrics: percentage/has_data/eligible/band...)
+  const { data: attendanceSummary, isLoading: isLoadingAttendance, isError: summaryFailed } = useQuery({
     queryKey: ['attendance-summary', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return null;
-      try {
-        return await api.studentAttendance.getSummary();
-      } catch (error) {
-        console.error('Error fetching attendance summary:', error);
-        return { 
-          present: 0, 
-          absent: 0, 
-          late: 0, 
-          total_academic_days: 0, 
-          percentage_present: 0,
-          days_with_any_attendance: 0,
-          partial_attendance_percentage: 0,
-          semester_start_date: '',
-          semester_end_date: ''
-        };
-      }
-    },
+    queryFn: () => api.studentAttendance.getSummary(),
     enabled: !!user?.id,
-  });
-
-  // Fetch dynamic academic metrics
-  const { data: academicMetrics } = useQuery({
-    queryKey: ['academic-metrics-current'],
-    queryFn: async () => {
-      try {
-        return await api.academicMetrics.getCurrentSemester();
-      } catch (error) {
-        console.error('Error fetching academic metrics:', error);
-        return { total_academic_days: 0, total_periods: 0 };
-      }
-    },
-    staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   // Check if attendance has been marked today and get records
@@ -98,7 +141,7 @@ const StudentDashboard: React.FC = () => {
     queryFn: async () => {
       if (!user?.id || !studentData?.id) return { hasAttendance: false, records: [] };
       try {
-        const today = getTodayLocalDate();
+        const today = localDateString();
         const response = await api.attendance.getAll({
           studentId: studentData.id,
           date: today,
@@ -116,372 +159,431 @@ const StudentDashboard: React.FC = () => {
     refetchOnWindowFocus: true,
   });
 
-  // Fetch today's real schedule data
-  const { data: todaySchedules = [], isLoading: isLoadingSchedules } = useQuery({
-    queryKey: ['student-today-schedules-dashboard', studentData?.faculty_id, studentData?.semester],
-    queryFn: async () => {
-      if (!studentData?.semester || !studentData?.faculty_id) return [];
-      try {
-        return await api.schedules.getStudentToday();
-      } catch (error) {
-        console.error('Error fetching student today schedules:', error);
-        return [];
-      }
-    },
+  // Today's classes — same query (and cache) as the check-in card
+  const { data: todayContext, isLoading: isLoadingSchedules } = useQuery({
+    queryKey: STUDENT_TODAY_QUERY_KEY,
+    queryFn: () => api.schedules.getStudentTodayContext(),
     enabled: !!studentData?.semester && !!studentData?.faculty_id,
+    refetchInterval: 30 * 1000,
+    staleTime: 15 * 1000,
+    retry: 1,
   });
-
-  const todayAttendance = todayAttendanceData?.hasAttendance || false;
+  const todaySchedules: StudentTodayClass[] = todayContext?.classes ?? [];
   const todayAttendanceRecords = todayAttendanceData?.records || [];
-  
-  const relevantAttendanceRecords = todayAttendanceRecords.filter((record) => {
-    const extendedRecord = record as Attendance & { classId?: string };
-    return todaySchedules.some((schedule) => 
-      schedule.subject_id === parseInt(record.subjectId, 10) || 
-      schedule.subject_id === parseInt(extendedRecord.classId || '0', 10)
-    );
-  });
 
-  React.useEffect(() => {
-    if (todayAttendance) {
-      setHasMarkedAttendanceToday(true);
-    }
-  }, [todayAttendance]);
+  /** Server `my_status` first; legacy fallback matches today's records by subject. */
+  const myStatusFor = (schedule: StudentTodayClass): RecordStatus | null => {
+    if ('my_status' in schedule) return schedule.my_status ?? null;
+    const record = todayAttendanceRecords.find((r) => Number(r.subjectId) === schedule.subject_id);
+    const st = record ? String(record.status).toLowerCase() : '';
+    return ['present', 'late', 'absent', 'excused'].includes(st) ? (st as RecordStatus) : null;
+  };
+  const verifiedToday = todaySchedules.filter((s) => {
+    const st = myStatusFor(s);
+    return st === 'present' || st === 'late';
+  }).length;
 
   if (isLoadingStudent || isLoadingAttendance) {
     return (
       <StudentSidebar>
-        <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="text-center space-y-3">
-            <Renew size={28} className="animate-spin text-action-primary mx-auto" />
-            <p className="text-xs text-text-muted">Loading student portal...</p>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="space-y-3 text-center">
+            <div
+              className="mx-auto h-8 w-8 animate-spin rounded-full border-[3px] border-brand-subtle border-t-brand"
+              role="progressbar"
+              aria-label="Loading"
+            />
+            <p className="text-caption text-text-muted">Loading student portal...</p>
           </div>
         </div>
       </StudentSidebar>
     );
   }
 
+  // Presentation-only derived values (all numbers come from the server)
+  const metrics = readMetrics(attendanceSummary);
+  const tone = metricTone(metrics, policy);
+  const band = resolveBand(metrics, policy);
+  const eligible = meetsMinimum(metrics, policy);
+  const minimum = policy?.minimum_percentage;
+  const termState = attendanceSummary?.term_state ?? policy?.term_state;
+  const term = attendanceSummary?.term ?? null;
+  const termStart = (attendanceSummary?.semester_start_date as string | undefined) || term?.start_date;
+  const termEnd = (attendanceSummary?.semester_end_date as string | undefined) || term?.end_date;
+  const termProgress = (() => {
+    if (!termStart || !termEnd || termState === 'between_terms') return null;
+    const start = parseLocalDate(String(termStart).slice(0, 10));
+    const end = parseLocalDate(String(termEnd).slice(0, 10));
+    const totalDays = Math.ceil((end.getTime() - start.getTime()) / 86400000);
+    if (!(totalDays > 0)) return null;
+    const elapsedDays = Math.max(0, Math.ceil((Date.now() - start.getTime()) / 86400000));
+    return {
+      percent: Math.min(100, Math.round((elapsedDays / totalDays) * 100)),
+      remainingDays: Math.max(0, totalDays - elapsedDays),
+    };
+  })();
+  const attendedCount = metrics.attended ?? metrics.present + metrics.late;
+  const consideredCount = metrics.considered ?? metrics.present + metrics.late + metrics.absent;
+  const rateCaption = summaryFailed
+    ? 'Attendance summary unavailable'
+    : metrics.hasData
+      ? `${attendedCount} of ${consideredCount} classes attended`
+      : 'No classes recorded yet';
+  const rateFooter = (() => {
+    if (!metrics.hasData) return { text: 'Shown once classes are recorded', cls: 'text-text-muted', ok: null as boolean | null };
+    const provisional = metrics.provisional ? ' · provisional' : '';
+    const label = band?.label ? `${band.label} · ` : '';
+    if (eligible === true) {
+      return { text: `${label}meets ${minimum !== undefined ? `${minimum}% ` : ''}minimum${provisional}`, cls: TONE_TEXT[tone], ok: true };
+    }
+    if (eligible === false) {
+      return { text: `${label}below ${minimum !== undefined ? `${minimum}% ` : 'the '}minimum${provisional}`, cls: TONE_TEXT[tone], ok: false };
+    }
+    return { text: `${band?.label ?? 'Attendance'}${provisional}`, cls: TONE_TEXT[tone], ok: null };
+  })();
+  // Face enrolment state from the student payload (`face_encoding` is always null now).
+  const faceRegistered = !!studentData?.face_registered;
+  const faceDeleted = !faceRegistered && studentData?.face_enrollment_status === 'deleted';
+  const displayName = studentData?.name || user?.name || 'Student';
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
     <StudentSidebar>
-      <div className="space-y-6 max-w-7xl mx-auto py-2">
-        {/* Header Section */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-border-subtle">
+      <div className="mx-auto max-w-7xl space-y-6 py-2">
+        {/* Greeting header */}
+        <header className="page-header mb-0">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
+            <h1 className="text-page-title text-text-primary">
               Welcome, {studentData?.name?.split(' ')[0] || user?.name?.split(' ')[0] || 'Student'}
             </h1>
-            <p className="text-sm text-text-muted mt-0.5">
+            <p className="mt-1 text-caption text-text-muted">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs py-1 px-2.5 gap-1.5 border-status-success/30 bg-status-success/10 text-status-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-status-success inline-block" />
+            <Badge variant="success" shape="pill" className="gap-1.5 py-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-status-success" aria-hidden />
               <span>Enrollment Active</span>
             </Badge>
           </div>
         </header>
 
-        {/* Quick Stats Grid */}
-        <section aria-label="Student Metrics" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Semester Attendance */}
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Attendance Rate</p>
-                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <Calendar size={16} />
-                </div>
-              </div>
-              <div>
-                <p className={`text-2xl font-bold tabular-nums ${
-                  (attendanceSummary?.percentage_present || 0) >= 75 ? 'text-status-success' : 'text-status-warning'
-                }`}>
-                  {attendanceSummary?.percentage_present || 0}%
-                </p>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {attendanceSummary?.present || 0} of {attendanceSummary?.total_academic_days || academicMetrics?.total_academic_days || 0} days recorded
-                </p>
-              </div>
-              <div className="h-1.5 w-full bg-surface-subtle rounded-full overflow-hidden">
-                <div 
-                  className={`h-full rounded-full transition-all ${
-                    (attendanceSummary?.percentage_present || 0) >= 75 ? 'bg-status-success' : 'bg-status-warning'
-                  }`}
-                  style={{ width: `${Math.min(100, attendanceSummary?.percentage_present || 0)}%` }}
-                />
-              </div>
-            </CardContent>
-          </Card>
+        <TermStateBanner termState={termState} term={term} />
 
-          {/* Semester Timeline Progress */}
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Term Progress</p>
-                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <Activity size={16} />
-                </div>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-text-primary tabular-nums">
-                  {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
-                    (() => {
-                      const now = new Date();
-                      const start = new Date(attendanceSummary.semester_start_date);
-                      const end = new Date(attendanceSummary.semester_end_date);
-                      const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                      const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                      return `${Math.min(100, Math.round((elapsedDays / totalDays) * 100))}%`;
-                    })()
-                  ) : 'Term Active'}
-                </p>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? (
-                    (() => {
-                      const start = new Date(attendanceSummary.semester_start_date);
-                      const end = new Date(attendanceSummary.semester_end_date);
-                      const now = new Date();
-                      const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                      const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                      const remainingDays = Math.max(0, totalDays - elapsedDays);
-                      return `${remainingDays} days remaining`;
-                    })()
-                  ) : 'Semester timeline'}
-                </p>
-              </div>
-              <div className="h-1.5 w-full bg-surface-subtle rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-action-primary rounded-full transition-all"
-                  style={{ width: `${attendanceSummary?.semester_start_date && attendanceSummary?.semester_end_date ? ((() => {
-                    const now = new Date();
-                    const start = new Date(attendanceSummary.semester_start_date);
-                    const end = new Date(attendanceSummary.semester_end_date);
-                    const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-                    const elapsedDays = Math.max(0, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-                    return Math.min(100, Math.round((elapsedDays / totalDays) * 100));
-                  })()) : 50}%` }}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Student ID */}
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Student ID</p>
-                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <User size={16} />
-                </div>
-              </div>
-              <div>
-                <p className="text-xl font-bold font-mono text-text-primary tabular-nums">
-                  {studentData?.studentId || studentData?.student_id || 'N/A'}
-                </p>
-                <p className="text-xs text-text-muted mt-0.5 truncate">
-                  {studentData?.faculty || 'Enrolled Division'} • Sem {studentData?.semester || 1}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Biometric Status */}
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Biometrics</p>
-                <div className="h-8 w-8 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <Security size={16} />
-                </div>
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5">
-                  {studentData?.face_encoding ? (
-                    <>
-                      <CheckmarkFilled size={16} className="text-status-success" />
-                      <span className="text-lg font-bold text-status-success">Registered</span>
-                    </>
-                  ) : (
-                    <>
-                      <Time size={16} className="text-status-warning" />
-                      <span className="text-lg font-bold text-status-warning">Action Needed</span>
-                    </>
-                  )}
-                </div>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {studentData?.face_encoding ? 'Face recognition enabled' : 'Biometric capture required'}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-          
-        {/* Today's Class Schedule with Check-in Component */}
-        <TodayClassSchedule 
-          studentData={studentData}
-          todayAttendance={todayAttendanceRecords}
-          onAttendanceMarked={() => {
-            setHasMarkedAttendanceToday(true);
-            refetchTodayAttendance?.();
-            toast({
-              title: "Attendance Recorded",
-              description: "Your attendance was verified and recorded.",
-            });
-          }}
-        />
-
-        {/* Today's Timetable Status Overview */}
-        <section aria-label="Today's Timetable Status">
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardHeader className="py-4 border-b border-border-subtle">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div>
-                  <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-                    <Book size={18} className="text-action-primary" />
-                    Today's Attendance Status
-                  </CardTitle>
-                  <CardDescription className="text-xs text-text-muted mt-0.5">
-                    {todaySchedules.length} course session{todaySchedules.length === 1 ? '' : 's'} scheduled for today
-                  </CardDescription>
-                </div>
-                {hasMarkedAttendanceToday && (
-                  <Badge variant="outline" className="text-xs text-status-success border-status-success/30 bg-status-success/10 py-1 px-2.5">
-                    <CheckmarkFilled size={12} className="mr-1 inline" />
-                    {relevantAttendanceRecords.filter((r) => r.status === 'present').length} Verified
-                  </Badge>
+        {/* Attendance health KPIs */}
+        <section aria-label="Student Metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiTile
+            label="Attendance Rate"
+            value={metrics.hasData ? formatPercent(metrics.percentage) : '—'}
+            caption={rateCaption}
+            aside={<ProgressRing value={metrics.percentage} tone={tone} />}
+            footer={
+              <p className={`flex items-center gap-1 text-caption-strong ${rateFooter.cls}`}>
+                {rateFooter.ok === true ? (
+                  <CheckmarkCircle16Filled className="shrink-0" aria-hidden />
+                ) : rateFooter.ok === false ? (
+                  <Warning16Regular className="shrink-0" aria-hidden />
+                ) : null}
+                {rateFooter.text}
+                {metrics.unrecorded > 0 && (
+                  <span className="font-normal text-text-muted">
+                    {' '}({metrics.unrecorded} unrecorded class{metrics.unrecorded === 1 ? '' : 'es'})
+                  </span>
                 )}
+              </p>
+            }
+          />
+
+          <KpiTile
+            label="Present"
+            value={metrics.present}
+            caption={metrics.late > 0 ? `+ ${metrics.late} late arrival${metrics.late === 1 ? '' : 's'}` : 'Classes attended on time'}
+            icon={<CheckmarkCircle20Regular aria-hidden />}
+            chipClassName="bg-status-success-subtle text-status-success"
+          />
+
+          <KpiTile
+            label="Absent"
+            value={metrics.absent}
+            caption={metrics.excused > 0 ? `Classes missed · ${metrics.excused} excused` : 'Classes missed'}
+            icon={<DismissCircle20Regular aria-hidden />}
+            chipClassName="bg-status-error-subtle text-status-error"
+          />
+
+          <KpiTile
+            label="Term Progress"
+            value={termProgress ? `${termProgress.percent}%` : termState === 'between_terms' ? 'Break' : '—'}
+            caption={
+              termProgress
+                ? `${termProgress.remainingDays} days remaining`
+                : termState === 'between_terms'
+                  ? 'Between terms'
+                  : 'Term dates unavailable'
+            }
+            icon={<Pulse20Regular aria-hidden />}
+            footer={
+              <div className="h-1 w-full overflow-hidden rounded-full bg-border-subtle">
+                <div
+                  className="h-full rounded-full bg-brand transition-[width] duration-500 ease-fluent-decelerate"
+                  style={{ width: `${termProgress ? termProgress.percent : 0}%` }}
+                />
               </div>
-            </CardHeader>
-            <CardContent className="p-4">
-              <div className="space-y-2">
-                {isLoadingSchedules ? (
-                  <div className="py-8 text-center text-xs text-text-muted">
-                    Loading timetable...
-                  </div>
-                ) : todaySchedules.length > 0 ? (
-                  todaySchedules.map((schedule) => {
-                    const attendanceRecord = todayAttendanceRecords.find((record) => {
-                      const recordSubjectIdInt = parseInt(record.subjectId, 10);
-                      const scheduleSubjectIdInt = parseInt(schedule.subject_id.toString(), 10);
-                      return !isNaN(recordSubjectIdInt) && !isNaN(scheduleSubjectIdInt) && recordSubjectIdInt === scheduleSubjectIdInt;
-                    });
-                    
-                    let statusText = 'Pending';
-                    let statusBadgeClass = 'bg-surface-subtle text-text-muted border-border-default';
+            }
+          />
+        </section>
 
-                    if (schedule.is_cancelled) {
-                      statusText = 'Cancelled';
-                      statusBadgeClass = 'bg-surface-subtle text-text-muted border-border-default';
-                    } else if (attendanceRecord) {
-                      const recordStatus = attendanceRecord.status?.toLowerCase() || '';
-                      if (recordStatus === 'present') {
-                        statusText = 'Present';
-                        statusBadgeClass = 'bg-status-success/10 text-status-success border-status-success/30';
-                      } else if (recordStatus === 'absent') {
-                        statusText = 'Absent';
-                        statusBadgeClass = 'bg-status-danger/10 text-status-danger border-status-danger/30';
-                      } else if (recordStatus === 'late') {
-                        statusText = 'Late';
-                        statusBadgeClass = 'bg-status-warning/10 text-status-warning border-status-warning/30';
-                      }
-                    }
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* Main column */}
+          <div className="min-w-0 space-y-6 lg:col-span-2">
+            {/* Today's Class Schedule with Check-in Component */}
+            <TodayClassSchedule
+              studentData={studentData}
+              todayAttendance={todayAttendanceRecords}
+              onAttendanceMarked={() => {
+                void refetchTodayAttendance?.();
+              }}
+            />
 
-                    return (
-                      <div 
-                        key={schedule.id} 
-                        className="p-3 rounded-md border border-border-default bg-surface-default hover:bg-surface-subtle transition-colors flex items-center justify-between gap-3"
-                      >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${schedule.is_cancelled ? 'line-through text-text-muted' : 'text-text-primary'} truncate`}>
-                            {schedule.subject_name}
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
-                            <span className="font-mono">{schedule.time_slot_display}</span>
-                            <span>•</span>
-                            <span>{schedule.classroom || 'Room N/A'}</span>
-                            {schedule.is_cancelled && schedule.cancellation_reason && (
-                              <span className="text-status-warning">({schedule.cancellation_reason})</span>
-                            )}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className={`text-xs py-0.5 px-2 font-medium ${statusBadgeClass}`}>
-                          {statusText}
-                        </Badge>
+            {/* Today's Timetable Status Overview */}
+            <section aria-label="Today's Timetable Status">
+              <Card className="border-0 bg-surface-default shadow">
+                <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-2">
+                      <ClipboardTaskListLtr20Regular className="mt-0.5 shrink-0 text-brand-foreground" aria-hidden />
+                      <div>
+                        <CardTitle className="text-subheading text-text-primary">
+                          Today's Attendance Status
+                        </CardTitle>
+                        <CardDescription className="mt-0.5 text-caption text-text-muted">
+                          {todaySchedules.length} course session{todaySchedules.length === 1 ? '' : 's'} scheduled for today
+                        </CardDescription>
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="text-center py-8 text-text-muted">
-                    <Calendar size={28} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-sm font-medium text-text-primary">No classes scheduled today</p>
-                    <p className="text-xs text-text-muted mt-0.5">Enjoy your free study hours</p>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* Quick Actions Grid */}
-        <section aria-label="Student Services" className="space-y-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Student Services & Portals
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Link to="/student/calendar" className="block group">
-              <Card className="border border-border-default bg-surface-default hover:border-action-primary transition-colors shadow-none p-4 h-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
-                      <Calendar size={20} />
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary group-hover:text-action-primary transition-colors">
+                    {verifiedToday > 0 && (
+                      <Badge variant="success" shape="pill" className="gap-1 self-start sm:self-auto">
+                        <CheckmarkCircle16Filled className="shrink-0" aria-hidden />
+                        {verifiedToday} Checked in
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-2">
+                  {isLoadingSchedules ? (
+                    <div className="py-8 text-center text-caption text-text-muted">
+                      Loading timetable...
+                    </div>
+                  ) : todaySchedules.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {todaySchedules.map((schedule) => {
+                        const mine = myStatusFor(schedule);
+                        const cancelled = isClassCancelled(schedule);
+                        let statusText = 'Not recorded';
+                        let statusBadgeClass = 'bg-surface-subtle text-text-secondary border-border-default';
+
+                        if (cancelled) {
+                          statusText = 'Cancelled';
+                          statusBadgeClass = 'bg-surface-subtle text-text-muted border-border-subtle';
+                        } else if (mine === 'present') {
+                          statusText = 'Present';
+                          statusBadgeClass = 'bg-status-success-subtle text-status-success border-status-success-border';
+                        } else if (mine === 'late') {
+                          statusText = 'Late';
+                          statusBadgeClass = 'bg-status-warning-subtle text-status-warning border-status-warning-border';
+                        } else if (mine === 'absent') {
+                          statusText = 'Absent';
+                          statusBadgeClass = 'bg-status-error-subtle text-status-error border-status-error-border';
+                        } else if (mine === 'excused') {
+                          statusText = 'Excused';
+                          statusBadgeClass = 'bg-status-info-subtle text-status-info border-status-info-border';
+                        } else if (schedule.checkin_window?.state === 'open') {
+                          statusText = 'Check-in open';
+                          statusBadgeClass = 'bg-brand-subtle text-brand-foreground border-brand-stroke/50';
+                        } else if (schedule.checkin_window?.state === 'not_open') {
+                          statusText = 'Upcoming';
+                          statusBadgeClass = 'bg-status-info-subtle text-status-info border-status-info-border';
+                        }
+
+                        return (
+                          <li
+                            key={`${schedule.session_id ?? schedule.id}-${schedule.start_time}`}
+                            className="flex items-center justify-between gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className={`truncate text-body-strong ${cancelled ? 'text-text-muted line-through' : 'text-text-primary'}`}>
+                                {schedule.subject_name}
+                              </p>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-caption text-text-muted">
+                                <span className="inline-flex items-center gap-1 tabular-nums">
+                                  <Clock16Regular className="shrink-0" aria-hidden />
+                                  {schedule.time_slot_display || `${formatClock(schedule.start_time)} – ${formatClock(schedule.end_time)}`}
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                  <Location16Regular className="shrink-0" aria-hidden />
+                                  {schedule.classroom || 'Room N/A'}
+                                </span>
+                                {cancelled && schedule.cancellation_reason && (
+                                  <span className="inline-flex items-center gap-1 text-status-warning">
+                                    <Warning16Regular className="shrink-0" aria-hidden />
+                                    {schedule.cancellation_reason}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-0.5 text-caption-strong ${statusBadgeClass}`}>
+                              {statusText}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="flex flex-col items-center py-8 text-center">
+                      <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                        <CalendarLtr24Regular aria-hidden />
+                      </div>
+                      <p className="text-subheading text-text-primary">No classes scheduled today</p>
+                      <p className="mt-1 text-body text-text-muted">
+                        {todayContext?.day_status === 'holiday'
+                          ? 'Today is a holiday.'
+                          : todayContext?.day_status === 'weekly_off'
+                            ? 'Today is your weekly day off.'
+                            : todayContext?.day_status === 'exam'
+                              ? 'Regular classes are suspended for exams.'
+                              : 'Enjoy your free study hours'}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </section>
+          </div>
+
+          {/* Side column */}
+          <aside className="space-y-6">
+            {/* Profile summary (Student ID + Biometrics) */}
+            <Card className="border-0 bg-surface-default shadow">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <div className="grid h-12 w-12 place-items-center rounded-full bg-brand-subtle text-body-strong text-brand-foreground">
+                      {initials}
+                    </div>
+                    <span
+                      className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-presence-available ring-2 ring-[var(--surface-default)]"
+                      aria-hidden
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-subheading text-text-primary">{displayName}</p>
+                    <p className="truncate text-caption text-text-muted">
+                      {studentData?.faculty || 'Enrolled Division'} • Sem {studentData?.semester || 1}
+                    </p>
+                  </div>
+                </div>
+
+                <dl className="mt-4 divide-y divide-border-subtle border-t border-border-subtle">
+                  <div className="flex items-center justify-between gap-3 py-3">
+                    <dt className="text-body text-text-muted">Student ID</dt>
+                    <dd className="truncate font-mono text-body-strong tabular-nums text-text-primary">
+                      {studentData?.studentId || studentData?.student_id || 'N/A'}
+                    </dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3 pt-3">
+                    <dt className="flex items-center gap-1.5 text-body text-text-muted">
+                      <ShieldCheckmark20Regular className="shrink-0" aria-hidden />
+                      Biometrics
+                    </dt>
+                    <dd className="flex flex-col items-end text-right">
+                      {faceRegistered ? (
+                        <Badge variant="success" shape="pill" className="gap-1">
+                          <CheckmarkCircle16Filled className="shrink-0" aria-hidden />
+                          Registered
+                        </Badge>
+                      ) : faceDeleted ? (
+                        <Badge variant="warning" shape="pill" className="gap-1">
+                          <LockClosed16Regular className="shrink-0" aria-hidden />
+                          Locked
+                        </Badge>
+                      ) : (
+                        <Badge variant="warning" shape="pill" className="gap-1">
+                          <Clock16Regular className="shrink-0" aria-hidden />
+                          Action Needed
+                        </Badge>
+                      )}
+                      <span className="mt-1 text-caption text-text-muted">
+                        {faceRegistered
+                          ? 'Face check-in enabled'
+                          : faceDeleted
+                            ? 'Ask an administrator to reset it'
+                            : 'Register your face to check in'}
+                      </span>
+                    </dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
+
+            {/* Quick Actions */}
+            <section aria-label="Student Services">
+              <Card className="border-0 bg-surface-default shadow">
+                <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+                  <CardTitle className="text-subheading text-text-primary">
+                    Student Services & Portals
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-0.5 p-2">
+                  <Link
+                    to="/student/calendar"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+                  >
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+                      <CalendarLtr20Regular aria-hidden />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-body-strong text-text-primary">
                         Academic Calendar
                       </h3>
-                      <p className="text-xs text-text-muted mt-0.5">
+                      <p className="mt-0.5 text-caption text-text-muted">
                         Inspect term dates, institutional breaks, and class timetables
                       </p>
                     </div>
-                  </div>
-                  <ArrowRight size={16} className="text-text-muted group-hover:text-action-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                </div>
-              </Card>
-            </Link>
+                    <ChevronRight20Regular className="shrink-0 text-text-muted transition-colors group-hover:text-text-primary" aria-hidden />
+                  </Link>
 
-            <Link to="/face-registration" className="block group">
-              <Card className="border border-border-default bg-surface-default hover:border-action-primary transition-colors shadow-none p-4 h-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
-                      <Camera size={20} />
+                  <Link
+                    to="/face-registration"
+                    className="group flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+                  >
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+                      <Camera20Regular aria-hidden />
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary group-hover:text-action-primary transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-body-strong text-text-primary">
                         Face Biometrics Setup
                       </h3>
-                      <p className="text-xs text-text-muted mt-0.5">
-                        {studentData?.face_encoding ? 'Manage or update your facial recognition profile' : 'Complete initial facial registration for automated check-ins'}
+                      <p className="mt-0.5 text-caption text-text-muted">
+                        {faceRegistered
+                          ? 'View or delete your face registration'
+                          : faceDeleted
+                            ? 'Registration locked — an administrator must reset it'
+                            : 'Register your face once to check in with the camera'}
                       </p>
                     </div>
-                  </div>
-                  <ArrowRight size={16} className="text-text-muted group-hover:text-action-primary group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
-                </div>
+                    <ChevronRight20Regular className="shrink-0 text-text-muted transition-colors group-hover:text-text-primary" aria-hidden />
+                  </Link>
+                </CardContent>
               </Card>
-            </Link>
-          </div>
-        </section>
+            </section>
+          </aside>
+        </div>
 
-        {/* Face Registration Modal */}
-        <FaceRegistration
-          isOpen={showFaceRegistration}
-          onSuccess={() => {
-            setShowFaceRegistration(false);
-            window.location.reload();
-          }}
-          onCancel={() => setShowFaceRegistration(false)}
-        />
       </div>
     </StudentSidebar>
   );

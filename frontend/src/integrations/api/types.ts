@@ -34,14 +34,18 @@ export interface Student {
   phone_number?: string;     // Add phone number field
   emergency_contact?: string; // Add emergency contact field
   profileImage?: string | null;
-  face_encoding?: number[] | null; // Face encoding for recognition
+  /** Always null: embeddings never leave the server. Use `face_registered`. */
+  face_encoding?: number[] | null;
+  face_registered?: boolean;
+  face_registered_at?: string | null;
+  face_enrollment_status?: 'none' | 'enrolled' | 'reset' | 'deleted';
 }
 
 export interface StudentCreateData {
   name: string;         // Maps to user.full_name 
   email: string;        // Maps to user.email
   password: string;     // Maps to user.password
-  studentId: string;    // Maps to student_id
+  studentId?: string;   // Maps to student_id; omit to let the server generate it
   faculty_id: number;   // Maps to faculty_id (required)
   semester: number;     // Maps to semester
   year: number;         // Maps to year

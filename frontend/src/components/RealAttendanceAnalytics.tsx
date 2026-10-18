@@ -2,17 +2,18 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { 
-  BarChart3, 
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Calendar,
-  Target,
-  Activity,
-  AlertTriangle,
-  CheckCircle
-} from 'lucide-react';
+import {
+  DataBarVertical20Regular,
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  People20Regular,
+  CalendarLtr20Regular,
+  Target20Regular,
+  Pulse20Regular,
+  Warning20Regular,
+  CheckmarkCircle20Regular,
+  Lightbulb20Regular,
+} from '@fluentui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 
@@ -41,14 +42,14 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
   if (isLoading) {
     return (
       <div className={`space-y-6 ${className}`}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardContent className="p-6">
+            <Card key={i}>
+              <CardContent className="p-4">
                 <div className="animate-pulse">
-                  <div className="h-4 bg-slate-700 rounded w-3/4 mb-2"></div>
-                  <div className="h-8 bg-slate-700 rounded w-1/2 mb-2"></div>
-                  <div className="h-3 bg-slate-700 rounded w-full"></div>
+                  <div className="h-3 bg-surface-selected rounded w-3/4 mb-3"></div>
+                  <div className="h-7 bg-surface-selected rounded w-1/2 mb-3"></div>
+                  <div className="h-3 bg-surface-selected rounded w-full"></div>
                 </div>
               </CardContent>
             </Card>
@@ -65,14 +66,14 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
     totalClasses: sidebarStats?.total_classes || 0,
   };
 
-  const weeklyTrend = attendanceSummary ? 
+  const weeklyTrend = attendanceSummary ?
     ((attendanceSummary.percentagePresent - data.attendanceRate) || 0) : 0;
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-status-success', bgColor: 'bg-status-success-subtle', variant: 'success' as const };
+    if (rate >= 85) return { status: 'Good', color: 'text-status-info', bgColor: 'bg-status-info-subtle', variant: 'info' as const };
+    if (rate >= 75) return { status: 'Warning', color: 'text-status-warning', bgColor: 'bg-status-warning-subtle', variant: 'warning' as const };
+    return { status: 'Critical', color: 'text-status-error', bgColor: 'bg-status-error-subtle', variant: 'destructive' as const };
   };
 
   const attendanceStatus = getAttendanceStatus(data.attendanceRate);
@@ -80,80 +81,77 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
 
   return (
     <div className={`space-y-6 ${className}`}>
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Overview KPI tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Total Students */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Total Students</p>
-                <div className="text-2xl font-bold text-blue-400">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Total Students</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">
                   {data.totalStudents}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-caption text-text-muted">
                   Enrolled students
                 </p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                <Users className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+                <People20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Present Today */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Present Today</p>
-                <div className="text-2xl font-bold text-green-400">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Present Today</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">
                   {data.presentToday}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-caption text-text-muted">
                   out of {data.totalStudents} students
                 </p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-status-success-subtle text-status-success grid place-items-center">
+                <CheckmarkCircle20Regular aria-hidden />
               </div>
             </div>
             <div className="mt-3">
-              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-2" />
+              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-1.5" />
             </div>
           </CardContent>
         </Card>
 
         {/* Attendance Rate */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Attendance Rate</p>
-                <div className="text-2xl font-bold text-action-primary">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Attendance Rate</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">
                   {data.attendanceRate}%
                 </div>
-                <div className="flex items-center gap-1 mt-1">
+                <div className="flex items-center gap-1">
                   {weeklyTrend >= 0 ? (
-                    <TrendingUp className="h-3 w-3 text-green-400" />
+                    <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />
                   ) : (
-                    <TrendingDown className="h-3 w-3 text-red-400" />
+                    <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />
                   )}
-                  <span className={`text-xs ${weeklyTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`text-caption tabular-nums ${weeklyTrend >= 0 ? 'text-status-success' : 'text-status-error'}`}>
                     {Math.abs(weeklyTrend).toFixed(1)}% trend
                   </span>
                 </div>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-action-primary flex items-center justify-center">
-                <BarChart3 className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+                <DataBarVertical20Regular aria-hidden />
               </div>
             </div>
             <div className="mt-3">
-              <Badge variant="outline" className={`${attendanceStatus.bgColor} ${attendanceStatus.color} border-current`}>
+              <Badge variant={attendanceStatus.variant} shape="pill">
                 {attendanceStatus.status}
               </Badge>
             </div>
@@ -161,21 +159,20 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
         </Card>
 
         {/* Classes */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Active Classes</p>
-                <div className="text-2xl font-bold text-orange-400">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Active Classes</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">
                   {data.totalClasses}
                 </div>
-                <p className="text-xs text-slate-500">
+                <p className="text-caption text-text-muted">
                   Available classes
                 </p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+                <CalendarLtr20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
@@ -183,27 +180,36 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
       </div>
 
       {/* Detailed Analytics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Today's Breakdown */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Activity className="h-5 w-5 text-blue-400" />
+            <CardTitle className="flex items-center gap-2">
+              <Pulse20Regular className="shrink-0 text-text-muted" aria-hidden />
               Today's Breakdown
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <span className="text-slate-300">Present</span>
-              <Badge className="bg-green-500/20 text-green-300">{data.presentToday}</Badge>
+          <CardContent className="p-0 pb-2">
+            <div className="flex items-center justify-between border-b border-border-subtle px-5 py-2.5">
+              <span className="inline-flex items-center gap-2 text-body text-text-secondary">
+                <span className="h-2 w-2 rounded-full bg-status-success" aria-hidden />
+                Present
+              </span>
+              <Badge variant="success" shape="pill">{data.presentToday}</Badge>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <span className="text-slate-300">Absent</span>
-              <Badge className="bg-red-500/20 text-red-300">{absentToday}</Badge>
+            <div className="flex items-center justify-between border-b border-border-subtle px-5 py-2.5">
+              <span className="inline-flex items-center gap-2 text-body text-text-secondary">
+                <span className="h-2 w-2 rounded-full bg-status-error" aria-hidden />
+                Absent
+              </span>
+              <Badge variant="destructive" shape="pill">{absentToday}</Badge>
             </div>
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-              <span className="text-slate-300">Rate</span>
-              <Badge className={`${attendanceStatus.bgColor} ${attendanceStatus.color}`}>
+            <div className="flex items-center justify-between px-5 py-2.5">
+              <span className="inline-flex items-center gap-2 text-body text-text-secondary">
+                <span className="h-2 w-2 rounded-full bg-chart-1" aria-hidden />
+                Rate
+              </span>
+              <Badge variant={attendanceStatus.variant} shape="pill">
                 {data.attendanceRate}%
               </Badge>
             </div>
@@ -211,72 +217,72 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
         </Card>
 
         {/* Performance Metrics */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Target className="h-5 w-5 text-green-400" />
+            <CardTitle className="flex items-center gap-2">
+              <Target20Regular className="shrink-0 text-text-muted" aria-hidden />
               Performance
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-slate-300">Overall Attendance</span>
-                <span className="text-white">{data.attendanceRate}%</span>
+              <div className="flex justify-between mb-1.5">
+                <span className="text-body text-text-secondary">Overall Attendance</span>
+                <span className="text-body-strong text-text-primary tabular-nums">{data.attendanceRate}%</span>
               </div>
-              <Progress value={data.attendanceRate} className="h-2" />
+              <Progress value={data.attendanceRate} className="h-1.5" />
             </div>
             <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-slate-300">Today's Presence</span>
-                <span className="text-white">{Math.round((data.presentToday / data.totalStudents) * 100)}%</span>
+              <div className="flex justify-between mb-1.5">
+                <span className="text-body text-text-secondary">Today's Presence</span>
+                <span className="text-body-strong text-text-primary tabular-nums">{Math.round((data.presentToday / data.totalStudents) * 100)}%</span>
               </div>
-              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-2" />
+              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-1.5" />
             </div>
             <div>
-              <div className="flex justify-between mb-2">
-                <span className="text-slate-300">System Health</span>
-                <span className="text-white">100%</span>
+              <div className="flex justify-between mb-1.5">
+                <span className="text-body text-text-secondary">System Health</span>
+                <span className="text-body-strong text-text-primary tabular-nums">100%</span>
               </div>
-              <Progress value={100} className="h-2" />
+              <Progress value={100} className="h-1.5" />
             </div>
           </CardContent>
         </Card>
 
         {/* Insights */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Target className="h-5 w-5 text-purple-400" />
+            <CardTitle className="flex items-center gap-2">
+              <Lightbulb20Regular className="shrink-0 text-text-muted" aria-hidden />
               Smart Insights
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {data.attendanceRate >= 90 && (
-              <div className="flex items-center gap-2 p-2 rounded bg-green-500/10 border border-green-500/20">
-                <CheckCircle className="h-4 w-4 text-green-400" />
-                <span className="text-green-300 text-sm">Excellent attendance rate!</span>
+              <div className="flex items-center gap-2 rounded-md border border-status-success-border bg-status-success-subtle px-3 py-2">
+                <CheckmarkCircle20Regular className="shrink-0 text-status-success" aria-hidden />
+                <span className="text-body text-text-primary">Excellent attendance rate!</span>
               </div>
             )}
-            
+
             {data.attendanceRate < 75 && (
-              <div className="flex items-center gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20">
-                <AlertTriangle className="h-4 w-4 text-amber-400" />
-                <span className="text-amber-300 text-sm">Attendance needs improvement</span>
+              <div className="flex items-center gap-2 rounded-md border border-status-warning-border bg-status-warning-subtle px-3 py-2">
+                <Warning20Regular className="shrink-0 text-status-warning" aria-hidden />
+                <span className="text-body text-text-primary">Attendance needs improvement</span>
               </div>
             )}
-            
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Data Updated</span>
-              <div className="flex items-center gap-1">
-                <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
-                <span className="text-blue-300 text-sm">Live</span>
+
+            <div className="flex items-center justify-between rounded-md bg-surface-subtle px-3 py-2">
+              <span className="text-body text-text-secondary">Data Updated</span>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-presence-available" aria-hidden></span>
+                <span className="text-body-strong text-text-primary">Live</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between p-2 rounded bg-slate-800/50">
-              <span className="text-slate-300">Total Records</span>
-              <Badge className="bg-blue-500/20 text-blue-300">
+            <div className="flex items-center justify-between rounded-md bg-surface-subtle px-3 py-2">
+              <span className="text-body text-text-secondary">Total Records</span>
+              <Badge variant="secondary">
                 {sidebarStats?.total_attendance_records || 0}
               </Badge>
             </div>

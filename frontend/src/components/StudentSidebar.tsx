@@ -1,17 +1,25 @@
 import * as React from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/useAuth';
 import { api } from '@/integrations/api/client';
 import { AppShell, type NavGroup } from '@/components/layout/AppShell';
 import {
-  Dashboard,
-  Time,
-  Calendar,
-  Notification,
-  User,
-  Camera,
-} from '@carbon/icons-react';
+  Home20Regular,
+  Home20Filled,
+  ClipboardTaskListLtr20Regular,
+  ClipboardTaskListLtr20Filled,
+  CalendarLtr20Regular,
+  CalendarLtr20Filled,
+  Alert20Regular,
+  Alert20Filled,
+  PersonCircle20Regular,
+  PersonCircle20Filled,
+  Camera20Regular,
+  Camera20Filled,
+  ScanPerson20Regular,
+  ScanPerson20Filled,
+} from '@fluentui/react-icons';
 
 interface StudentSidebarProps {
   children: React.ReactNode;
@@ -19,6 +27,7 @@ interface StudentSidebarProps {
 
 const StudentSidebar = ({ children }: StudentSidebarProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { signOut, user } = useAuth();
 
   // Check face registration status
@@ -41,11 +50,13 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
     enabled: !!user?.email,
   });
 
-  const isFaceRegistered = !!studentData?.face_encoding;
+  // `face_encoding` is always null in payloads; use `face_registered`.
+  const isFaceRegistered = !!studentData?.face_registered;
 
   const getPageInfo = () => {
     const path = location.pathname;
     if (path === '/student' || path === '/student/dashboard') return { title: 'Student Dashboard', description: 'Overview of your academic attendance' };
+    if (path.startsWith('/student/attendance/mark')) return { title: 'Check in', description: 'Face check-in for your current class' };
     if (path.includes('/student/attendance')) return { title: 'My Attendance', description: 'Attendance records and session history' };
     if (path.includes('/student/calendar')) return { title: 'Academic Calendar', description: 'Institutional dates, exams, and holidays' };
     if (path.includes('/student/notifications')) return { title: 'Notifications', description: 'Student announcements and alerts' };
@@ -60,15 +71,17 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
     {
       groupLabel: 'Student Portal',
       items: [
-        { label: 'Dashboard', to: '/student', icon: Dashboard, end: true },
-        { label: 'My Attendance', to: '/student/attendance', icon: Time, end: true },
-        { label: 'Academic Calendar', to: '/student/calendar', icon: Calendar },
-        { label: 'Notifications', to: '/student/notifications', icon: Notification },
-        { label: 'My Profile', to: '/student/profile', icon: User },
+        { label: 'Dashboard', to: '/student', icon: Home20Regular, activeIcon: Home20Filled, end: true },
+        { label: 'Check in', to: '/student/attendance/mark', icon: ScanPerson20Regular, activeIcon: ScanPerson20Filled },
+        { label: 'My Attendance', to: '/student/attendance', icon: ClipboardTaskListLtr20Regular, activeIcon: ClipboardTaskListLtr20Filled, end: true },
+        { label: 'Academic Calendar', to: '/student/calendar', icon: CalendarLtr20Regular, activeIcon: CalendarLtr20Filled },
+        { label: 'Notifications', to: '/student/notifications', icon: Alert20Regular, activeIcon: Alert20Filled },
+        { label: 'My Profile', to: '/student/profile', icon: PersonCircle20Regular, activeIcon: PersonCircle20Filled },
         {
           label: 'Face Registration',
           to: '/face-registration',
-          icon: Camera,
+          icon: Camera20Regular,
+          activeIcon: Camera20Filled,
           badge: isFaceRegistered ? 'Ready' : undefined
         },
       ]
@@ -83,6 +96,7 @@ const StudentSidebar = ({ children }: StudentSidebarProps) => {
       onSignOut={signOut}
       pageTitle={pageInfo.title}
       pageDescription={pageInfo.description}
+      onViewProfile={() => navigate('/student/profile')}
     >
       {children}
     </AppShell>

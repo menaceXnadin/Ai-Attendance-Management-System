@@ -1,19 +1,481 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+"""Attendance routes (``/api/attendance``).
+
+All business rules live in the domain services (DOMAIN_RULES §5-§8, §13); these routes parse
+input, enforce role guards, delegate, commit, and translate :class:`DomainError`:
+
+* writes -> ``attendance_recording.record_attendance`` (register submissions use ``submit=True``)
+* sessions -> ``class_sessions`` (materialize / resolve / cancel / uncancel / make-up / unrecorded)
+* percentages and day statuses -> ``attendance_metrics``
+* auto-absent -> ``auto_absent_service``
+* "today/now" -> ``app.core.clock``
+
+Services flush; routes own the transaction (commit on success, rollback on a DomainError).
+"""
+from collections import Counter
+from datetime import date, datetime, time, timedelta
+from typing import Any, Iterable, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, case, extract
-from sqlalchemy.orm import selectinload, joinedload
-from typing import List, Optional
-from datetime import datetime, date, timedelta
-from collections import defaultdict
+
+from app.api.dependencies import (
+    get_current_user,
+    get_teacher_cohorts,
+    get_teacher_for_user,
+    has_role,
+    require_admin_or_teacher,
+    require_admin_role,
+    resolve_student_scope,
+)
+from app.core.clock import app_now, app_today
 from app.core.database import get_db
-from app.models import AttendanceRecord, Student, Subject, Faculty, AttendanceStatus, AttendanceMethod, User, AcademicEvent, EventType, UserRole, ClassSchedule
-from app.utils.attendance import normalize_attendance_status
-from app.api.dependencies import get_current_user
+from app.models import (
+    AcademicEvent,
+    AttendanceAuditLog,
+    AttendanceRecord,
+    ClassSchedule,
+    ClassSession,
+    EventType,
+    Faculty,
+    FaceVerificationAttempt,
+    SessionStatus,
+    Student,
+    Subject,
+    Teacher,
+    User,
+)
+from app.services.attendance_metrics import (
+    compute_student_day_statuses,
+    compute_student_metrics,
+    compute_students_overall,
+)
+from app.services.attendance_policy import get_attendance_policy
+from app.services.attendance_recording import Entry, checkin_window, record_attendance, set_metrics_exclusion
 from app.services.auto_absent_service import auto_absent_service
-from app.services.automatic_semester import AutomaticSemesterService
-from app.services.accurate_attendance_calculator import calculate_subject_wise_attendance
+from app.services import presence_code as presence_codes
+from app.services.face_policy import get_face_policy
+from app.services.class_sessions import (
+    actor_owns_session,
+    clear_review,
+    cancel_session,
+    count_schedules_without_teacher,
+    create_makeup_session,
+    ensure_sessions_for,
+    get_teacher_id,
+    is_unrecorded,
+    list_unrecorded_sessions,
+    lock_session,
+    resolve_session_for,
+    roster_conditions,
+    roster_start_sql,
+    session_end_at,
+    session_roster_ids,
+    session_start_at,
+    uncancel_session,
+)
+from app.services.domain_errors import DomainError
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
+
+UNMARKED_LEGACY_STATUS = "no_data"
+
+
+# ============================================================================ helpers
+
+
+def _domain_http(err: DomainError) -> HTTPException:
+    """DomainError -> HTTPException (contract v1).
+
+    Per-entry validation errors become ``400 {detail: {code: "invalid_entries", message, errors}}``;
+    everything else keeps the service's status with ``detail = {code, message, details, **details}``.
+    """
+    if err.code == "validation_failed":
+        detail = {
+            "code": "invalid_entries",
+            "message": err.message,
+            "errors": err.details.get("errors", []),
+            "details": err.details,
+        }
+        if "session_id" in err.details:
+            detail["session_id"] = err.details["session_id"]
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    detail = err.to_dict()
+    for key, value in err.details.items():
+        detail.setdefault(key, value)
+    return HTTPException(status_code=err.http_status, detail=detail)
+
+
+async def _fail(db: AsyncSession, err: DomainError) -> HTTPException:
+    await db.rollback()
+    return _domain_http(err)
+
+
+def _bad_request(message: str, code: str = "invalid_request") -> HTTPException:
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": code, "message": message})
+
+
+def _parse_date(value: Any, field: str = "date") -> date:
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}. Use YYYY-MM-DD")
+
+
+def _parse_time(value: Any, field: str = "start_time") -> time:
+    if isinstance(value, time):
+        return value
+    raw = str(value or "").strip()
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except ValueError:
+            continue
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid {field}. Use HH:MM")
+
+
+def _opt_int(value: Any, field: str) -> Optional[int]:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise _bad_request(f"{field} must be an integer")
+
+
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+def _status_str(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    return str(getattr(value, "value", value)).lower()
+
+
+def _iso(value: Any) -> Optional[str]:
+    return value.isoformat() if value is not None else None
+
+
+def _hhmm(value: Optional[time]) -> Optional[str]:
+    return value.strftime("%H:%M") if value is not None else None
+
+
+async def _teacher_id_or_403(db: AsyncSession, user: Any) -> int:
+    tid = await get_teacher_id(db, user)
+    if tid is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher profile not found")
+    return tid
+
+
+async def _ensure_can_manage(db: AsyncSession, user: Any, session: ClassSession) -> None:
+    """Admin, or the teacher who owns the session (snapshot or schedule teacher)."""
+    if has_role(user, "admin"):
+        return
+    if has_role(user, "teacher") and await actor_owns_session(db, user, session):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={"code": "not_session_teacher", "message": "You are not the teacher of this class session"},
+    )
+
+
+async def _get_session_or_404(db: AsyncSession, session_id: int) -> ClassSession:
+    session = (await db.execute(select(ClassSession).where(ClassSession.id == session_id))).scalars().first()
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "session_not_found", "message": f"Class session {session_id} not found"},
+        )
+    return session
+
+
+# ---------------------------------------------------------------------------- batch lookups
+
+
+async def _schedule_teachers(db: AsyncSession, schedule_ids: Iterable[Optional[int]]) -> dict[int, Optional[int]]:
+    ids = sorted({i for i in schedule_ids if i is not None})
+    if not ids:
+        return {}
+    rows = await db.execute(select(ClassSchedule.id, ClassSchedule.teacher_id).where(ClassSchedule.id.in_(ids)))
+    return {sid: tid for sid, tid in rows.all()}
+
+
+async def _teacher_names(db: AsyncSession, teacher_ids: Iterable[Optional[int]]) -> dict[int, Optional[str]]:
+    ids = sorted({i for i in teacher_ids if i is not None})
+    if not ids:
+        return {}
+    rows = await db.execute(
+        select(Teacher.id, Teacher.name, User.full_name)
+        .outerjoin(User, User.id == Teacher.user_id)
+        .where(Teacher.id.in_(ids))
+    )
+    return {tid: (full_name or name) for tid, name, full_name in rows.all()}
+
+
+async def _record_counts(db: AsyncSession, session_ids: Iterable[int]) -> dict[int, dict[str, int]]:
+    ids = sorted({int(i) for i in session_ids})
+    if not ids:
+        return {}
+    rows = await db.execute(
+        select(AttendanceRecord.session_id, AttendanceRecord.status, func.count(AttendanceRecord.id))
+        .where(AttendanceRecord.session_id.in_(ids))
+        .group_by(AttendanceRecord.session_id, AttendanceRecord.status)
+    )
+    out: dict[int, dict[str, int]] = {}
+    for sid, rstatus, n in rows.all():
+        bucket = out.setdefault(sid, {"total": 0})
+        bucket[_status_str(rstatus)] = bucket.get(_status_str(rstatus), 0) + int(n)
+        bucket["total"] += int(n)
+    return out
+
+
+async def _roster_sizes(db: AsyncSession, keys: Iterable[tuple[int, int, date]]) -> dict[tuple[int, int, date], int]:
+    """Roster size per (faculty_id, semester, session_date) (Rule §13.7), one query for all cohorts."""
+    keys = set(keys)
+    cohorts = {(f, s) for f, s, _ in keys if f is not None and s is not None}
+    if not cohorts:
+        return {k: 0 for k in keys}
+    rows = await db.execute(
+        select(Student.faculty_id, Student.semester, roster_start_sql())
+        .join(User, User.id == Student.user_id)
+        .where(
+            or_(*[and_(Student.faculty_id == f, Student.semester == s) for f, s in cohorts]),
+            func.coalesce(User.is_active, True).is_(True),
+        )
+    )
+    starts: dict[tuple[int, int], list[date]] = {}
+    for f, s, start in rows.all():
+        starts.setdefault((f, s), []).append(start)
+    return {(f, s, d): sum(1 for st in starts.get((f, s), []) if st is None or st <= d) for f, s, d in keys}
+
+
+async def _serialize_sessions(db: AsyncSession, sessions: list[ClassSession]) -> list[dict[str, Any]]:
+    """Session payloads with names, teacher, roster size and record counts (batch queries)."""
+    if not sessions:
+        return []
+    now = app_now()
+    policy = await get_attendance_policy(db)
+    subjects = {
+        sid: (name, code)
+        for sid, name, code in (await db.execute(
+            select(Subject.id, Subject.name, Subject.code).where(Subject.id.in_({s.subject_id for s in sessions}))
+        )).all()
+    }
+    faculties = {
+        fid: name
+        for fid, name in (await db.execute(
+            select(Faculty.id, Faculty.name).where(Faculty.id.in_({s.faculty_id for s in sessions}))
+        )).all()
+    }
+    sched_teacher = await _schedule_teachers(db, (s.schedule_id for s in sessions))
+    teacher_of = {s.id: (s.teacher_id if s.teacher_id is not None else sched_teacher.get(s.schedule_id)) for s in sessions}
+    names = await _teacher_names(db, teacher_of.values())
+    counts = await _record_counts(db, (s.id for s in sessions))
+    rosters = await _roster_sizes(db, ((s.faculty_id, s.semester, s.session_date) for s in sessions))
+    out = []
+    for s in sessions:
+        subj_name, subj_code = subjects.get(s.subject_id, (None, None))
+        c = counts.get(s.id, {})
+        tid = teacher_of.get(s.id)
+        out.append({
+            "id": s.id,
+            "session_id": s.id,
+            "schedule_id": s.schedule_id,
+            "kind": s.kind,
+            "status": s.status,
+            "session_date": s.session_date.isoformat(),
+            "start_time": _hhmm(s.start_time),
+            "end_time": _hhmm(s.end_time),
+            "subject_id": s.subject_id,
+            "subject_name": subj_name,
+            "subject_code": subj_code,
+            "faculty_id": s.faculty_id,
+            "faculty_name": faculties.get(s.faculty_id),
+            "semester": s.semester,
+            "term_id": s.term_id,
+            "teacher_id": tid,
+            "teacher_name": names.get(tid) if tid is not None else None,
+            "cancelled": s.status == SessionStatus.cancelled,
+            "cancellation_reason": s.cancellation_reason,
+            "cancelled_at": _iso(s.cancelled_at),
+            "cancelled_by_event_id": s.cancelled_by_event_id,
+            "attendance_taken_at": _iso(s.attendance_taken_at),
+            "submitted_at": _iso(s.submitted_at),
+            "finalized_at": _iso(s.finalized_at),
+            "review_required": bool(s.review_required),
+            "review_reason": s.review_reason,
+            "unrecorded": is_unrecorded(s.status, s.session_date, s.end_time, now, policy.finalize_grace_minutes,
+                                        tracking_start_date=policy.tracking_start_date,
+                                        roster_size=rosters.get((s.faculty_id, s.semester, s.session_date), 0)),
+            "roster_size": rosters.get((s.faculty_id, s.semester, s.session_date), 0),
+            "recorded_count": c.get("total", 0),
+            "status_counts": {k: c.get(k, 0) for k in ("present", "late", "absent", "excused")},
+        })
+    return out
+
+
+async def _register_students(db: AsyncSession, session: ClassSession) -> list[dict[str, Any]]:
+    """Roster of a session + its records; students without a record have ``status: None``."""
+    roster = await session_roster_ids(db, session)
+    records = {
+        r.student_id: r
+        for r in (await db.execute(
+            select(AttendanceRecord).where(AttendanceRecord.session_id == session.id)
+        )).scalars().all()
+    }
+    ids = roster | set(records)
+    if not ids:
+        return []
+    rows = (await db.execute(
+        select(Student.id, Student.student_id, User.full_name, User.email, Student.semester, Student.faculty_id)
+        .join(User, User.id == Student.user_id)
+        .where(Student.id.in_(ids))
+        .order_by(User.full_name, Student.id)
+    )).all()
+    out = []
+    for sid, number, name, email, semester, faculty_id in rows:
+        rec = records.get(sid)
+        out.append({
+            "student_id": sid,
+            "student_number": number,
+            "name": name,
+            "email": email,
+            "semester": semester,
+            "faculty_id": faculty_id,
+            "in_roster": sid in roster,
+            "status": _status_str(rec.status) if rec else None,
+            "source": rec.source if rec else None,
+            "record_id": rec.id if rec else None,
+            "excluded_from_metrics": bool(rec.excluded_from_metrics) if rec else False,
+            "exclusion_reason": rec.exclusion_reason if rec else None,
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------- recording
+
+
+def _parse_entries(items: Any, *, key: str) -> list[Entry]:
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise _bad_request(f"'{key}' must be a list")
+    entries = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise _bad_request(f"Every item of '{key}' must be an object")
+        entries.append(Entry(student_id=item.get("student_id"), status=item.get("status"), reason=item.get("reason")))
+    return entries
+
+
+async def _record_snapshot(db: AsyncSession, session_id: int) -> dict[int, tuple]:
+    rows = await db.execute(
+        select(AttendanceRecord.student_id, AttendanceRecord.id, AttendanceRecord.status, AttendanceRecord.source,
+               AttendanceRecord.excluded_from_metrics, AttendanceRecord.marked_by, AttendanceRecord.notes)
+        .where(AttendanceRecord.session_id == session_id)
+    )
+    return {r[0]: tuple(r[1:]) for r in rows.all()}
+
+
+async def _write(
+    db: AsyncSession,
+    *,
+    actor: Any,
+    session: ClassSession,
+    entries: list[Entry],
+    reason: Optional[str],
+    submit: bool,
+    confirm_held: bool,
+    mark_remaining_absent: bool,
+    context: Optional[dict] = None,
+):
+    """Run ``record_attendance`` and derive per-student outcomes (created/updated/unchanged) by
+    diffing the session's records before/after the write (under the session row lock)."""
+    await lock_session(db, session.id)
+    before = await _record_snapshot(db, session.id)
+    result = await record_attendance(
+        db, actor=actor, session=session, entries=entries, reason=(reason or None),
+        submit=submit, confirm_held=confirm_held, mark_remaining_absent=mark_remaining_absent, context=context,
+    )
+    after = await _record_snapshot(db, session.id)
+    results = []
+    for sid, final_status in result.statuses.items():
+        if sid not in before:
+            outcome = "created"
+        elif before[sid] != after.get(sid):
+            outcome = "updated"
+        else:
+            outcome = "unchanged"
+        results.append({
+            "student_id": sid,
+            "status": final_status,
+            "outcome": outcome,
+            "record_id": result.record_ids.get(sid),
+        })
+    results.sort(key=lambda r: r["student_id"])
+    return result, results
+
+
+async def _cohort_of_students(db: AsyncSession, student_ids: list[Any]) -> tuple[int, int]:
+    ids = []
+    for sid in student_ids:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        raise _bad_request("No valid student ids provided")
+    rows = (await db.execute(
+        select(Student.faculty_id, Student.semester).where(Student.id.in_(ids)).distinct()
+    )).all()
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student {ids[0]} not found")
+    if len(rows) > 1:
+        raise _bad_request(
+            "The students belong to different cohorts; pass faculty_id and semester (or session_id)",
+            code="ambiguous_cohort",
+        )
+    return rows[0][0], rows[0][1]
+
+
+async def _resolve_write_session(
+    db: AsyncSession,
+    data: dict,
+    *,
+    student_ids: list[Any],
+    default_today: bool = True,
+) -> ClassSession:
+    """``session_id`` -> that session; else subject_id + date [+ start_time] + cohort (explicit
+    ``faculty_id``/``semester`` or the students' common cohort) -> ``resolve_session_for``."""
+    session_id = _opt_int(data.get("session_id"), "session_id")
+    subject_id = _opt_int(data.get("subject_id"), "subject_id")
+    if session_id is not None:
+        session = await _get_session_or_404(db, session_id)
+        if subject_id is not None and session.subject_id != subject_id:
+            raise _bad_request("session_id does not belong to subject_id", code="session_subject_mismatch")
+        return session
+    if subject_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="subject_id is required and cannot be null")
+    raw_date = data.get("date")
+    session_date = _parse_date(raw_date) if raw_date else app_today()
+    start_time = _parse_time(data["start_time"]) if data.get("start_time") else None
+    faculty_id = _opt_int(data.get("faculty_id"), "faculty_id")
+    semester = _opt_int(data.get("semester"), "semester")
+    if faculty_id is None or semester is None:
+        faculty_id, semester = await _cohort_of_students(db, student_ids)
+    return await resolve_session_for(
+        db, subject_id=subject_id, faculty_id=faculty_id, semester=semester,
+        session_date=session_date, start_time=start_time,
+    )
+
+
+# ============================================================================ records list
+
 
 @router.get("")
 async def get_attendance_records(
@@ -32,26 +494,22 @@ async def get_attendance_records(
     db: AsyncSession = Depends(get_db)
 ):
     """Get attendance records with optional filters, including student and subject names."""
-    
-    # Auto-filter for students: if the current user is a student, only show their own records
-    if current_user.role == UserRole.student:
-        # Find the student record for this user
-        student_query = select(Student).where(Student.user_id == current_user.id)
-        student_result = await db.execute(student_query)
-        student = student_result.scalar_one_or_none()
-        if student:
-            # Override student_id filter to current student's ID
-            student_id = student.id
-        else:
-            # Student record not found, return empty
-            return {
-                "records": [],
-                "total": 0,
-                "hasMore": False
-            }
-    
-    # Join with Student, User, Subject, and ClassSchedule tables to get names and semester info
-    # Also check for cancelled classes in academic_events
+
+    # Students only ever see their own records.
+    if has_role(current_user, "student"):
+        student = (await db.execute(select(Student).where(Student.user_id == current_user.id))).scalars().first()
+        if student is None:
+            return {"records": [], "total": 0, "hasMore": False}
+        student_id = student.id
+
+    # Teachers only see records of cohorts they teach (DOMAIN_RULES §10).
+    teacher_cohorts = None
+    if has_role(current_user, "teacher"):
+        teacher = await get_teacher_for_user(db, current_user)
+        teacher_cohorts = await get_teacher_cohorts(db, teacher.id) if teacher is not None else set()
+        if not teacher_cohorts:
+            return {"records": [], "total": 0, "hasMore": False}
+
     query = select(
         AttendanceRecord,
         Student.student_id.label('student_number'),
@@ -59,14 +517,17 @@ async def get_attendance_records(
         Subject.name.label('subject_name'),
         Subject.code.label('subject_code'),
         AcademicEvent.id.label('cancelled_event_id'),
-        # Use the PostgreSQL ->> operator which works for json and jsonb to get text
-        AcademicEvent.notification_settings.op('->>')('cancellation_reason').label('cancellation_reason')
+        AcademicEvent.notification_settings.op('->>')('cancellation_reason').label('cancellation_reason'),
+        ClassSession.status.label('session_status'),
+        ClassSession.cancellation_reason.label('session_cancellation_reason'),
     ).join(
         Student, AttendanceRecord.student_id == Student.id
     ).join(
         User, Student.user_id == User.id
     ).outerjoin(
         Subject, AttendanceRecord.subject_id == Subject.id
+    ).outerjoin(
+        ClassSession, ClassSession.id == AttendanceRecord.session_id
     ).outerjoin(
         ClassSchedule, and_(
             ClassSchedule.subject_id == Subject.id,
@@ -80,9 +541,12 @@ async def get_attendance_records(
             AcademicEvent.is_active == True
         )
     )
-    
-    # Apply filters
+
     conditions = []
+    if teacher_cohorts is not None:
+        conditions.append(or_(*[
+            and_(Student.faculty_id == fid, Student.semester == sem) for fid, sem in sorted(teacher_cohorts)
+        ]))
     if student_id:
         conditions.append(AttendanceRecord.student_id == student_id)
     if subject_id:
@@ -92,22 +556,15 @@ async def get_attendance_records(
     if semester:
         conditions.append(ClassSchedule.semester == semester)
     if status:
-        # Normalize status to match enum values
         status_lower = status.lower()
-        if status_lower in ['present', 'absent', 'late', 'cancelled']:
+        if status_lower in ['present', 'absent', 'late', 'excused', 'cancelled']:
             conditions.append(AttendanceRecord.status == status_lower)
     if date:
-        target_date = datetime.strptime(date, "%Y-%m-%d").date()
-        conditions.append(AttendanceRecord.date == target_date)
+        conditions.append(AttendanceRecord.date == _parse_date(date))
     if start_date and end_date:
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-        conditions.append(and_(
-            AttendanceRecord.date >= start,
-            AttendanceRecord.date <= end
-        ))
-    
-    # Apply search filter (case-insensitive) against student name and student_number
+        start = _parse_date(start_date, "start_date")
+        end = _parse_date(end_date, "end_date")
+        conditions.append(and_(AttendanceRecord.date >= start, AttendanceRecord.date <= end))
     if search:
         pattern = f"%{search.lower()}%"
         conditions.append(or_(
@@ -117,13 +574,8 @@ async def get_attendance_records(
 
     if conditions:
         query = query.where(and_(*conditions))
-    
-    # Use distinct to prevent duplicates from ClassSchedule join
-    query = query.distinct()
-    
-    # Get total count before applying pagination
-    # Count with same joins/filters to reflect search and joins
-    # Use distinct count to prevent duplicates from ClassSchedule join
+    query = query.distinct()  # the ClassSchedule join can duplicate rows
+
     count_query = select(func.count(func.distinct(AttendanceRecord.id))).select_from(AttendanceRecord)
     count_query = count_query.join(Student, AttendanceRecord.student_id == Student.id)
     count_query = count_query.join(User, Student.user_id == User.id)
@@ -136,54 +588,43 @@ async def get_attendance_records(
     )
     if conditions:
         count_query = count_query.where(and_(*conditions))
-    total_count_result = await db.execute(count_query)
-    total_count = total_count_result.scalar() or 0
-    
-    # Order by date descending (most recent first), then by id descending
-    query = query.order_by(AttendanceRecord.date.desc(), AttendanceRecord.id.desc())
-    
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    records = result.all()
-    
-    # Transform to match frontend expectations with student and subject names
+    total_count = (await db.execute(count_query)).scalar() or 0
+
+    query = query.order_by(AttendanceRecord.date.desc(), AttendanceRecord.id.desc()).offset(skip).limit(limit)
+    records = (await db.execute(query)).all()
+
     attendance_list = []
-    for record_data in records:
-        record = record_data[0]  # AttendanceRecord object
-        student_number = record_data[1]  # student_id from Student table
-        student_name = record_data[2] or "Unknown Student"  # full name from User table
-        subject_name = record_data[3] or "Unknown Subject"  # subject name
-        subject_code = record_data[4] or "N/A"  # subject code
-        cancelled_event_id = record_data[5]  # cancelled event ID (if exists)
-        cancellation_reason = record_data[6]  # cancellation reason (if exists)
-        
-        # DEBUG: Log the subject_id value
-        print(f"[DEBUG BACKEND] Record ID {record.id}: subject_id = {record.subject_id}, type = {type(record.subject_id)}")
-        print(f"[DEBUG BACKEND] Converted subjectId = {str(record.subject_id) if record.subject_id and record.subject_id != 0 else ''}")
-        print(f"[DEBUG BACKEND] Status: raw={record.status}, value={record.status.value if hasattr(record.status, 'value') else str(record.status)}, lower={record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower()}")
-        
+    for row in records:
+        record = row[0]
+        session_cancelled = row.session_status == SessionStatus.cancelled
         attendance_list.append({
             "id": str(record.id),
             "studentId": str(record.student_id),
-            "studentNumber": student_number,  # Student ID (e.g., "STU001")
-            "studentName": student_name,      # Full name from User table
+            "studentNumber": row.student_number,
+            "studentName": row.student_name or "Unknown Student",
             "subjectId": str(record.subject_id) if record.subject_id and record.subject_id != 0 else "",
-            "subjectName": subject_name,      # Subject name
-            "subjectCode": subject_code,      # Subject code
-            "classId": str(record.subject_id) if record.subject_id and record.subject_id != 0 else "",  # Keep for backward compatibility
+            "subjectName": row.subject_name or "Unknown Subject",
+            "subjectCode": row.subject_code or "N/A",
+            "classId": str(record.subject_id) if record.subject_id and record.subject_id != 0 else "",
             "date": record.date.strftime("%Y-%m-%d"),
             "timeIn": record.time_in.strftime("%H:%M:%S") if record.time_in else None,
             "timeOut": record.time_out.strftime("%H:%M:%S") if record.time_out else None,
-            "status": record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower(),
-            "method": record.method.value.lower() if hasattr(record.method, 'value') else str(record.method).lower(),
+            "status": _status_str(record.status),
+            "method": _status_str(record.method),
             "confidence_score": float(record.confidence_score) if record.confidence_score else None,
             "location": record.location,
             "notes": record.notes,
             "marked_by": str(record.marked_by) if record.marked_by else "system",
-            "is_cancelled": cancelled_event_id is not None,
-            "cancellation_reason": cancellation_reason
+            "is_cancelled": row.cancelled_event_id is not None or session_cancelled,
+            "cancellation_reason": row.session_cancellation_reason if session_cancelled else row.cancellation_reason,
+            # session model (Rule §6.1 / §13.5)
+            "session_id": record.session_id,
+            "session_status": row.session_status,
+            "source": record.source,
+            "excluded_from_metrics": bool(record.excluded_from_metrics),
+            "exclusion_reason": record.exclusion_reason,
         })
-    
+
     return {
         "records": attendance_list,
         "total": total_count,
@@ -192,288 +633,163 @@ async def get_attendance_records(
         "hasMore": (skip + limit) < total_count
     }
 
+
+# ============================================================================ metrics
+
+
 @router.get("/summary")
 async def get_attendance_summary(
     student_id: Optional[int] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    term_id: Optional[int] = None,
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get semester-based attendance summary statistics."""
-    
-    # Apply filters for the base query
-    conditions = []
-    
-    # If student_id is not provided and current user is a student, get their student_id
-    if not student_id and current_user.role == UserRole.student:
-        # Find the student record for this user
-        student_query = select(Student).where(Student.user_id == current_user.id)
-        student_result = await db.execute(student_query)
-        student_record = student_result.scalar_one_or_none()
-        
-        if student_record:
-            student_id = student_record.id
+    """Attendance summary from ``attendance_metrics`` (Rule §8, §13.12).
+
+    Legacy fields keep their names (now session-based: ``present``/``absent``/``late``/``excused``
+    are session counts, ``total`` = considered + excused, ``percentage_present`` = the metrics
+    percentage, 0 when there is no data); §13.12 fields are added. ``end_date`` acts as the
+    "as of" date; the window is always the reporting term (``term_id`` overrides).
+    Without ``student_id``: admins get the aggregate over all students, teachers over the
+    students of the cohorts they teach.
+    """
+    # Students: always their own id (another student's id -> 403).
+    # Teachers: only students of cohorts they teach. Admins: any / all.
+    student_id = await resolve_student_scope(current_user, student_id, db)
+    if start_date:
+        _parse_date(start_date, "start_date")
+    as_of = _parse_date(end_date, "end_date") if end_date else None
+
+    day_counts: Counter = Counter()
+    subjects: Optional[list] = None
+    window = None
+    try:
+        if student_id is not None:
+            metrics = await compute_student_metrics(db, student_id, term_id=term_id, as_of=as_of)
+            overall = metrics.overall
+            term = metrics.term_context.term.summary() if metrics.term_context.term else None
+            term_state = metrics.term_state
+            window = metrics.window
+            subjects = metrics.per_subject
+            if window is not None:
+                days = await compute_student_day_statuses(db, student_id, window[0], window[1])
+                day_counts = Counter(d["status"] for d in days)
         else:
-            raise HTTPException(
-                status_code=404,
-                detail="Student record not found for current user"
-            )
-    
-    if student_id:
-        conditions.append(AttendanceRecord.student_id == student_id)
-    
-    # If no date range provided, use automatic semester detection
-    if not start_date or not end_date:
-        period = AutomaticSemesterService.get_current_period()
-        start = period.start_date
-        end = period.end_date
-    else:
-        start = datetime.strptime(start_date, "%Y-%m-%d").date()
-        end = datetime.strptime(end_date, "%Y-%m-%d").date()
-    
-    conditions.append(and_(
-        AttendanceRecord.date >= start,
-        AttendanceRecord.date <= end
-    ))
+            ids = None
+            if not has_role(current_user, "admin"):
+                teacher = await get_teacher_for_user(db, current_user)
+                cohorts = await get_teacher_cohorts(db, teacher.id) if teacher is not None else set()
+                ids = []
+                if cohorts:
+                    ids = [r[0] for r in (await db.execute(
+                        select(Student.id).where(or_(*[
+                            and_(Student.faculty_id == f, Student.semester == s) for f, s in cohorts
+                        ]))
+                    )).all()]
+            agg = await compute_students_overall(db, student_ids=ids, term_id=term_id, as_of=as_of)
+            overall = agg["aggregate"]
+            term = agg["term"]
+            term_state = agg["term_state"]
+    except DomainError as err:
+        raise await _fail(db, err)
 
-    # Calculate total academic days using new dynamic calculation
-    # Only count CLASS events with attendance_required=TRUE
-    async def get_academic_days_from_calendar(start_date: date, end_date: date) -> int:
-        """Get total academic days from calendar events (class days with attendance required)"""
-        class_days_query = select(func.count(AcademicEvent.id)).where(
-            and_(
-                AcademicEvent.start_date >= start_date,
-                AcademicEvent.start_date <= end_date,
-                AcademicEvent.event_type == EventType.CLASS,
-                AcademicEvent.attendance_required == True,  # NEW: Only count attendance-required days
-                AcademicEvent.is_active == True
-            )
-        )
-        
-        result = await db.execute(class_days_query)
-        return result.scalar() or 0
-    
-    total_semester_days = await get_academic_days_from_calendar(start, end)
-
-    # Get all unique academic days when student had attendance records
-    unique_days_query = select(
-        AttendanceRecord.date,
-        func.count(AttendanceRecord.id).label('record_count'),
-        func.sum(
-            case((AttendanceRecord.status == 'present', 1), else_=0)
-        ).label('present_count')
-    ).where(and_(*conditions)).group_by(AttendanceRecord.date)
-    
-    result = await db.execute(unique_days_query)
-    daily_attendance = result.all()
-    
-    # Calculate attendance metrics based on actual semester days
-    days_with_attendance_records = len(daily_attendance)  # Days student had classes
-    days_present = 0
-    days_with_partial_attendance = 0
-    
-    for day_record in daily_attendance:
-        date_obj = day_record.date
-        total_subjects_that_day = day_record.record_count
-        present_subjects_that_day = day_record.present_count
-        
-        # NEW RULE: All subjects attended = present, none = absent, anything in between = partial
-        if present_subjects_that_day == total_subjects_that_day:
-            days_present += 1
-        if present_subjects_that_day > 0 and present_subjects_that_day < total_subjects_that_day:
-            days_with_partial_attendance += 1
-    
-    # Calculate percentages based on total semester days
-    attendance_percentage = (days_present / total_semester_days * 100) if total_semester_days > 0 else 0
-    partial_attendance_percentage = (days_with_partial_attendance / total_semester_days * 100) if total_semester_days > 0 else 0
-    
-    # Get detailed status breakdown for additional info
-    status_query = select(
-        AttendanceRecord.status,
-        func.count().label('count')
-    ).where(and_(*conditions)).group_by(AttendanceRecord.status)
-    
-    status_result = await db.execute(status_query)
-    status_counts = status_result.all()
-    
-    # Count individual records for detailed breakdown
-    present_records = 0
-    absent_records = 0
-    late_records = 0
-    excused_records = 0
-    
-    for status_row in status_counts:
-        status_name = status_row[0].value.lower() if hasattr(status_row[0], 'value') else str(status_row[0]).lower()
-        count = status_row[1]
-        if status_name == 'present':
-            present_records = count
-        elif status_name == 'absent':
-            absent_records = count
-        elif status_name == 'late':
-            late_records = count
-        elif status_name == 'excused':
-            excused_records = count
-    
-    total_records = present_records + absent_records + late_records + excused_records
-    
-    return {
-        # SEMESTER-BASED METRICS (Primary)
-        "present": days_present,  # Days with ALL subjects attended
-        "absent": total_semester_days - days_present - days_with_partial_attendance,  # Days with NO attendance
-        "late": 0,  # Not applicable for day-based calculation
-        "excused": 0,  # Could be enhanced to track excused days
-        "total": total_semester_days,  # Total academic days in semester
-        "percentage_present": round(attendance_percentage, 1),
-        
-        # ADDITIONAL SEMESTER METRICS
-        "days_with_any_attendance": days_with_partial_attendance,
-        "partial_attendance_percentage": round(partial_attendance_percentage, 1),
-        "semester_start_date": start.isoformat(),
-        "semester_end_date": end.isoformat(),
-        "days_with_records": days_with_attendance_records,  # Days student actually had classes
-        
-        # DETAILED RECORD-BASED METRICS (For detailed views)
-        "present_records": present_records,
-        "absent_records": absent_records,
-        "late_records": late_records,
-        "excused_records": excused_records,
+    class_days = day_counts["present"] + day_counts["absent"] + day_counts["partial"]
+    partial_days = day_counts["partial"]
+    total_records = overall["present"] + overall["absent"] + overall["late"] + overall["excused"]
+    response = {
+        "present": overall["present"],
+        "absent": overall["absent"],
+        "late": overall["late"],
+        "excused": overall["excused"],
+        "total": overall["total_classes"],
+        "percentage_present": overall["percentage_present"],
+        "days_with_any_attendance": partial_days,
+        "partial_attendance_percentage": round(partial_days / class_days * 100, 1) if class_days else 0.0,
+        "semester_start_date": term["start_date"] if term else None,
+        "semester_end_date": term["end_date"] if term else None,
+        "days_with_records": class_days,
+        "present_records": overall["present"],
+        "absent_records": overall["absent"],
+        "late_records": overall["late"],
+        "excused_records": overall["excused"],
         "total_records": total_records,
-        "percentage_present_records": round((present_records / total_records * 100) if total_records > 0 else 0, 1)
+        "percentage_present_records": overall["percentage_present"],
+        # Rule §13.12
+        "term": term,
+        "term_state": term_state,
+        "window": {"start": window[0].isoformat(), "end": window[1].isoformat()} if window else None,
+        "scope": "student" if student_id is not None else "aggregate",
     }
+    for key, value in overall.items():
+        response.setdefault(key, value)
+    if subjects is not None:
+        response["subjects"] = subjects
+    return response
 
-@router.post("")
-async def create_attendance_record(
-    attendance_data: dict,
+
+@router.get("/student-subject-breakdown/{student_id}")
+async def get_student_subject_breakdown(
+    student_id: int,
+    month: Optional[int] = None,
+    year: Optional[int] = None,
+    accurate: bool = True,  # kept for compatibility; there is a single calculation now
+    term_id: Optional[int] = None,
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new attendance record."""
-    # Validate required fields
-    if "subject_id" not in attendance_data or attendance_data["subject_id"] is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="subject_id is required and cannot be null"
-        )
-    
-    # Create new attendance record with proper field structure
-    current_time = datetime.now()
-    attendance = AttendanceRecord(
-        student_id=attendance_data["student_id"],
-        date=current_time.date(),  # Date only
-        time_in=current_time,  # Time when attendance was marked
-        status=attendance_data["status"].upper(),
-        marked_by=current_user.id,
-        confidence_score=attendance_data.get("confidence_score", 1.0),
-        notes=attendance_data.get("notes"),
-        subject_id=attendance_data["subject_id"]  # Now required (validated above)
-    )
-    
-    db.add(attendance)
-    await db.commit()
-    await db.refresh(attendance)
-    
-    return {
-        "id": str(attendance.id),
-        "studentId": str(attendance.student_id),
-        "classId": "1",  # Default class ID
-        "date": attendance.date.strftime("%Y-%m-%d"),
-    "status": attendance.status.value.lower() if hasattr(attendance.status, 'value') else str(attendance.status).lower(),
-        "confidence_score": attendance.confidence_score,
-        "marked_by": str(attendance.marked_by)
-    }
+    """Per-subject attendance for a student from ``attendance_metrics`` (Rule §8, §13.12).
 
-@router.get("/students-by-subject")
-async def get_students_by_subject(
-    faculty_id: int,
-    semester: int,
-    subject_id: int,
-    date: Optional[str] = None,
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get students by faculty, semester, and subject with their attendance status."""
-    # If no date provided, use today
-    if not date:
-        date = datetime.now().strftime("%Y-%m-%d")
-    
-    target_date = datetime.strptime(date, "%Y-%m-%d").date()
-    today = datetime.now().date()
-    
-    # SYSTEM INACTIVE DETECTION: Check if system had ANY activity on this date
-    # Query for any attendance record created on the same day as target_date
-    global_activity_query = select(func.count(AttendanceRecord.id)).where(
-        and_(
-            func.date(AttendanceRecord.date) == target_date,
-            func.date(AttendanceRecord.created_at) == target_date
-        )
-    )
-    global_activity_result = await db.execute(global_activity_query)
-    system_was_active = (global_activity_result.scalar() or 0) > 0
-    
-    print(f"[SYSTEM DETECTION] Date: {target_date}, Today: {today}, System Active: {system_was_active}")
-    
-    # Get students by faculty and semester
-    students_query = select(Student).options(
-        selectinload(Student.user)
-    ).where(
-        and_(
-            Student.faculty_id == faculty_id,
-            Student.semester == semester
-        )
-    )
-    
-    students_result = await db.execute(students_query)
-    students = students_result.scalars().all()
-    
-    # Get attendance records for these students on the specified date and subject
-    attendance_query = select(AttendanceRecord).where(
-        and_(
-            AttendanceRecord.subject_id == subject_id,
-            AttendanceRecord.date == target_date,
-            AttendanceRecord.student_id.in_([s.id for s in students])
-        )
-    )
-    
-    attendance_result = await db.execute(attendance_query)
-    attendance_records = attendance_result.scalars().all()
-    
-    # Create a map of student_id to attendance status
-    attendance_map = {record.student_id: record.status for record in attendance_records}
-    
-    # Prepare response
-    students_with_attendance = []
-    for student in students:
-        # Determine default status intelligently
-        if student.id in attendance_map:
-            status = attendance_map[student.id]
-        elif target_date > today:
-            status = "no_data"  # Future date
-        elif target_date == today:
-            status = "no_data"  # Today - classes may not have happened
-        elif not system_was_active and target_date < today:
-            status = "system_inactive"  # Past date with no system activity
-            print(f"[DEBUG] Student {student.id} on {target_date}: SYSTEM_INACTIVE")
-        else:
-            status = "absent"  # Past date, system was active, but student has no record
-            print(f"[DEBUG] Student {student.id} on {target_date}: ABSENT (system was active)")
-        students_with_attendance.append({
-            "id": student.id,
-            "student_id": student.student_id,
-            "name": student.user.full_name if student.user else "Unknown",
-            "email": student.user.email if student.user else "",
-            "semester": student.semester,
-            "status": status.value.lower() if hasattr(status, 'value') else str(status).lower(),
-            "faculty_id": student.faculty_id
+    Figures are always term-to-date (the reporting term, or ``term_id``). ``month``/``year`` only
+    move the "as of" date to the end of that month (``scope``/``as_of``/``month_filter_applied``
+    say so explicitly) — the metrics service has no arbitrary date-range window.
+    """
+    # Ownership: students -> self only, teachers -> students of cohorts they teach, admins -> anyone.
+    await resolve_student_scope(current_user, student_id, db)
+
+    today = app_today()
+    as_of = None
+    target_month = target_year = None
+    if month is not None or year is not None:
+        target_month = month if month is not None else today.month
+        target_year = year if year is not None else today.year
+        if target_month < 1 or target_month > 12:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Month must be between 1 and 12")
+        next_month = date(target_year + (target_month == 12), target_month % 12 + 1, 1)
+        as_of = min(next_month - timedelta(days=1), today)
+
+    try:
+        metrics = await compute_student_metrics(db, student_id, term_id=term_id, as_of=as_of)
+    except DomainError as err:
+        raise await _fail(db, err)
+
+    credits = {
+        sid: c for sid, c in (await db.execute(
+            select(Subject.id, Subject.credits).where(Subject.id.in_([s["subject_id"] for s in metrics.per_subject] or [0]))
+        )).all()
+    }
+    subjects = [{**s, "credits": credits.get(s["subject_id"]) or 3} for s in metrics.per_subject]
+    term = metrics.term_context.term
+    response: dict[str, Any] = {
+        "subjects": subjects,
+        "calculation_method": "held_sessions",
+        "scope": "term_to_date",
+        "as_of": (as_of or today).isoformat(),
+        "month_filter_applied": False,
+        "term": term.summary() if term else None,
+        "term_state": metrics.term_state,
+        "window": {"start": metrics.window[0].isoformat(), "end": metrics.window[1].isoformat()} if metrics.window else None,
+        "overall": metrics.overall,
+    }
+    if target_month is not None:
+        response.update({
+            "month": target_month,
+            "year": target_year,
+            "month_name": date(target_year, target_month, 1).strftime("%B"),
         })
-    
-    return {
-        "students": students_with_attendance,
-        "date": date,
-        "faculty_id": faculty_id,
-        "semester": semester,
-        "subject_id": subject_id
-    }
+    return response
+
 
 @router.get("/calendar")
 async def get_calendar_attendance(
@@ -482,234 +798,698 @@ async def get_calendar_attendance(
     current_user = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get pre-aggregated attendance data for calendar display.
-    Returns daily summaries for a specific month, optimized for calendar views.
-    """
-    try:
-        # Get student for current user
-        student_id = None
-        student_record = None
-        if current_user.role == UserRole.student:
-            student_query = select(Student).options(
-                selectinload(Student.faculty_rel)
-            ).where(Student.user_id == current_user.id)
-            student_result = await db.execute(student_query)
-            student_record = student_result.scalar_one_or_none()
-            
-            if student_record:
-                student_id = student_record.id
-            else:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Student record not found for current user"
-                )
-        else:
-            raise HTTPException(
-                status_code=403,
-                detail="Calendar endpoint is only available for students"
-            )
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"Error getting student record: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error retrieving student information: {str(e)}"
-        )
+    """Student's own month calendar from ``compute_student_day_statuses`` (Rule §8).
 
-    if not student_record.faculty_id or not student_record.semester:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Student {current_user.full_name} is not enrolled in a faculty or semester."
-        )
-
+    ``status`` values: present, absent, partial, excused, cancelled, unrecorded, no_class, future,
+    holiday, weekly_off, exam, between_terms (a day nobody recorded is ``unrecorded``, never absent).
+    """
+    if not has_role(current_user, "student"):
+        raise HTTPException(status_code=403, detail="Calendar endpoint is only available for students")
+    student = (await db.execute(select(Student).where(Student.user_id == current_user.id))).scalars().first()
+    if student is None:
+        raise HTTPException(status_code=404, detail="Student record not found for current user")
     try:
-        # Calculate month date range
-        try:
-            start_date = date(year, month, 1)
-            # Get last day of month
-            if month == 12:
-                end_date = date(year + 1, 1, 1) - timedelta(days=1)
-            else:
-                end_date = date(year, month + 1, 1) - timedelta(days=1)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid year or month"
-            )
-        
-        # Fetch all academic events for the student's faculty and semester in the month
-        # This is the correct way to determine if there are classes on a specific day
-        events_query = select(AcademicEvent).where(
-            and_(
-                AcademicEvent.start_date.between(start_date, end_date),
-                or_(
-                    AcademicEvent.faculty_id == student_record.faculty_id,
-                    AcademicEvent.faculty_id == None  # Global events
-                )
-            )
+        start = date(year, month, 1)
+        end = date(year + (month == 12), month % 12 + 1, 1) - timedelta(days=1)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid year or month")
+    try:
+        days = await compute_student_day_statuses(db, student.id, start, end)
+    except DomainError as err:
+        raise await _fail(db, err)
+
+    calendar_data = []
+    for d in days:
+        live = [s for s in d["sessions"] if s["session_status"] != SessionStatus.cancelled]
+        counted = Counter(
+            s["record_status"] for s in live if s.get("record_status") and not s.get("excluded_from_metrics")
         )
-        events_result = await db.execute(events_query)
-        all_month_events = events_result.scalars().all()
-        
-        # Group events by date
-        daily_events = defaultdict(list)
-        for event in all_month_events:
-            daily_events[event.start_date.strftime("%Y-%m-%d")].append(event)
-        
-        print(f"Found {len(all_month_events)} academic events for the month")
-        
-        # Get attendance records for the month - note: date is DateTime, need to convert
-        records_query = select(AttendanceRecord).where(
-            and_(
-                AttendanceRecord.student_id == student_id,
-                func.date(AttendanceRecord.date) >= start_date,
-                func.date(AttendanceRecord.date) <= end_date
-            )
-        ).order_by(AttendanceRecord.date)
-        
-        result = await db.execute(records_query)
-        all_records = result.scalars().all()
-        
-        print(f"Found {len(all_records)} attendance records for the month")
-        
-        # Group by date and calculate summaries
-        daily_summaries = defaultdict(lambda: {
-            'total': 0, 'present': 0, 'absent': 0, 'late': 0, 'excused': 0
+        calendar_data.append({
+            "date": d["date"],
+            "status": d["status"],
+            "reason": d["reason"],
+            "total_classes": len(live),
+            "present_count": counted["present"],
+            "absent_count": counted["absent"],
+            "late_count": counted["late"],
+            "excused_count": counted["excused"],
+            "sessions": d["sessions"],
         })
-        
-        for record in all_records:
-            # Convert datetime to date for grouping
-            date_str = record.date.date().strftime("%Y-%m-%d") if hasattr(record.date, 'date') else record.date.strftime("%Y-%m-%d")
-            daily_summaries[date_str]['total'] += 1
-            
-            status = record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower()
-            if status == 'present':
-                daily_summaries[date_str]['present'] += 1
-            elif status == 'absent':
-                daily_summaries[date_str]['absent'] += 1
-            elif status == 'late':
-                daily_summaries[date_str]['late'] += 1
-            elif status == 'excused':
-                daily_summaries[date_str]['excused'] += 1
-        
-        # Convert to the expected format
-        calendar_data = []
-        current_day = start_date
-        today = date.today()
-        while current_day <= end_date:
-            date_str = current_day.strftime("%Y-%m-%d")
-            summary = daily_summaries.get(date_str)
-            
-            # Get academic events for this specific day
-            events_for_day = daily_events.get(date_str, [])
-            class_events_for_day = [e for e in events_for_day if e.event_type == EventType.CLASS]
-            holiday_event = next((e for e in events_for_day if e.event_type == EventType.HOLIDAY), None)
-            
-            # Count scheduled classes based on actual academic events
-            scheduled_classes_count = len(class_events_for_day)
+    return {"calendar_data": calendar_data, "month": month, "year": year}
 
-            status = 'no_data'
-            present_count = absent_count = late_count = excused_count = 0
-            
-            # Check if the current date is in the future
-            is_future = current_day > today
 
-            # Check for holidays first
-            if holiday_event:
-                status = 'holiday'
-            elif scheduled_classes_count > 0:
-                # This day has CLASS events - check actual attendance records
-                if not summary:
-                    # No attendance records for a CLASS day
-                    if is_future:
-                        status = 'no_data'
-                    else:
-                        # Past CLASS day with no records = absent
-                        status = 'absent'
-                        absent_count = 1  # Mark as absent for the day
-                else:
-                    # We have attendance records - analyze them
-                    present_count = summary.get('present', 0)
-                    late_count = summary.get('late', 0)
-                    absent_count = summary.get('absent', 0)
-                    excused_count = summary.get('excused', 0)
-                    total_records = present_count + late_count + absent_count + excused_count
-                    
-                    # Get expected number of subjects for this student's semester/faculty
-                    expected_subjects_query = select(func.count(func.distinct(ClassSchedule.subject_id))).where(
-                        and_(
-                            ClassSchedule.faculty_id == student_record.faculty_id,
-                            ClassSchedule.semester == student_record.semester,
-                            ClassSchedule.is_active == True
-                        )
-                    )
-                    expected_result = await db.execute(expected_subjects_query)
-                    expected_subjects = expected_result.scalar() or 0
+# ============================================================================ rosters / registers
 
-                    if is_future:
-                        # Future CLASS day - don't mark as absent yet
-                        status = 'no_data'
-                    elif absent_count > 0 and (present_count > 0 or late_count > 0):
-                        # Mix of present/late AND absent = partial attendance
-                        status = 'partial'
-                    elif total_records < expected_subjects and absent_count == 0:
-                        # Missing some records but none explicitly marked absent
-                        # This means partial attendance (some classes not attended)
-                        status = 'partial'
-                    elif absent_count == 0 and total_records >= expected_subjects:
-                        # All expected subjects attended (present or late) = present for the day
-                        status = 'present'
-                    elif absent_count > 0 and (present_count == 0 and late_count == 0):
-                        # Only absences = absent for the day
-                        status = 'absent'
-                    elif present_count == 0 and late_count == 0 and absent_count == 0:
-                        # No meaningful records = treat as absent
-                        status = 'absent'
-                    else:
-                        # Fallback for edge cases
-                        status = 'partial'
-            elif summary:
-                # Records exist on a day with no scheduled events (e.g., extra class)
-                present_count = summary.get('present', 0)
-                late_count = summary.get('late', 0)
-                attended_count = present_count + late_count
-                if attended_count > 0:
-                    status = 'present' # Considered present as they attended something
-            # else: no events and no records = no_data (default)
-                
-            calendar_data.append({
-                'date': date_str,
-                'status': status,
-                'total_classes': scheduled_classes_count,
-                'present_count': present_count,
-                'absent_count': absent_count,
-                'late_count': late_count,
-                'excused_count': excused_count
-            })
-            current_day += timedelta(days=1)
 
-        # Sort by date
-        calendar_data.sort(key=lambda x: x['date'])
-        
-        print(f"Returning {len(calendar_data)} calendar entries")
-        
-        return {
-            'calendar_data': calendar_data,
-            'month': month,
-            'year': year
+@router.get("/students-by-subject")
+async def get_students_by_subject(
+    faculty_id: int,
+    semester: int,
+    subject_id: int,
+    date: Optional[str] = None,
+    session_id: Optional[int] = None,
+    start_time: Optional[str] = None,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cohort roster for a subject on a date with each student's attendance for that session.
+
+    Admins: any class. Teachers: only a class (subject + faculty + semester) they teach.
+
+    Unmarked students are never defaulted to absent: ``attendance_status`` is ``null`` and the
+    legacy ``status`` string is ``"no_data"`` (the old ``"system_inactive"`` and the "absent
+    because someone else has a record that day" defaults are gone). Adds ``record_id``,
+    ``source``, ``excluded_from_metrics`` per student and ``session``/``sessions``/``session_id``.
+    Sessions are materialized on demand for dates up to today (future dates show existing ones).
+    """
+    if not has_role(current_user, "admin"):
+        teacher = await get_teacher_for_user(db, current_user)
+        teaches = None
+        if teacher is not None:
+            teaches = (await db.execute(
+                select(ClassSchedule.id).where(
+                    ClassSchedule.teacher_id == teacher.id,
+                    ClassSchedule.subject_id == subject_id,
+                    ClassSchedule.faculty_id == faculty_id,
+                    ClassSchedule.semester == semester,
+                ).limit(1)
+            )).first()
+        if teaches is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not assigned to teach this class")
+
+    target_date = _parse_date(date) if date else app_today()
+    wanted_start = _parse_time(start_time) if start_time else None
+    try:
+        if target_date <= app_today():
+            sessions = await ensure_sessions_for(db, session_date=target_date, faculty_id=faculty_id,
+                                                 semester=semester, subject_id=subject_id)
+        else:
+            sessions = list((await db.execute(
+                select(ClassSession).where(
+                    ClassSession.session_date == target_date, ClassSession.faculty_id == faculty_id,
+                    ClassSession.semester == semester, ClassSession.subject_id == subject_id,
+                ).order_by(ClassSession.start_time, ClassSession.id)
+            )).scalars().all())
+    except DomainError as err:
+        raise await _fail(db, err)
+
+    chosen = None
+    if session_id is not None or wanted_start is not None:
+        chosen = next((s for s in sessions if (s.id == session_id if session_id is not None
+                                               else s.start_time.replace(tzinfo=None) == wanted_start)), None)
+        if chosen is None:
+            raise HTTPException(status_code=404, detail={"code": "session_not_found",
+                                                         "message": "That session is not part of this class on this date"})
+    elif sessions:
+        chosen = sessions[0]  # several slots: earliest by default; ``sessions`` lets the client pick
+
+    payloads = await _serialize_sessions(db, sessions)
+    by_id = {p["id"]: p for p in payloads}
+
+    students_out = []
+    if chosen is not None:
+        rows = await _register_students(db, chosen)
+    else:
+        # No session that day: cohort roster + any legacy (session-less) records of that day.
+        legacy = {
+            r.student_id: r for r in (await db.execute(
+                select(AttendanceRecord).where(
+                    AttendanceRecord.subject_id == subject_id,
+                    AttendanceRecord.date == target_date,
+                    AttendanceRecord.session_id.is_(None),
+                )
+            )).scalars().all()
         }
-    except Exception as e:
-        print(f"Error in calendar attendance processing: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error processing calendar data: {str(e)}"
+        roster_rows = (await db.execute(
+            select(Student.id, Student.student_id, User.full_name, User.email, Student.semester, Student.faculty_id)
+            .join(User, User.id == Student.user_id)
+            .where(*roster_conditions(faculty_id, semester, target_date))
+            .order_by(User.full_name, Student.id)
+        )).all()
+        rows = []
+        for sid, number, name, email, sem, fac in roster_rows:
+            rec = legacy.get(sid)
+            rows.append({
+                "student_id": sid, "student_number": number, "name": name, "email": email,
+                "semester": sem, "faculty_id": fac, "in_roster": True,
+                "status": _status_str(rec.status) if rec else None,
+                "source": rec.source if rec else None,
+                "record_id": rec.id if rec else None,
+                "excluded_from_metrics": bool(rec.excluded_from_metrics) if rec else False,
+                "exclusion_reason": rec.exclusion_reason if rec else None,
+            })
+    for r in rows:
+        students_out.append({
+            "id": r["student_id"],
+            "student_id": r["student_number"],
+            "name": r["name"] or "Unknown",
+            "email": r["email"] or "",
+            "semester": r["semester"],
+            "faculty_id": r["faculty_id"],
+            "status": r["status"] or UNMARKED_LEGACY_STATUS,
+            "attendance_status": r["status"],
+            "record_id": r["record_id"],
+            "source": r["source"],
+            "excluded_from_metrics": r["excluded_from_metrics"],
+        })
+
+    await db.commit()  # persist on-demand materialization
+    return {
+        "students": students_out,
+        "date": target_date.isoformat(),
+        "faculty_id": faculty_id,
+        "semester": semester,
+        "subject_id": subject_id,
+        "session_id": chosen.id if chosen is not None else None,
+        "session": by_id.get(chosen.id) if chosen is not None else None,
+        "sessions": payloads,
+    }
+
+
+# ============================================================================ sessions (contract v1)
+
+
+@router.get("/sessions/unrecorded")
+async def get_unrecorded_sessions(
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    faculty_id: Optional[int] = None,
+    semester: Optional[int] = None,
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Actionable unrecorded sessions + sessions flagged for review (Rule §13.4, amended: only
+    sessions on/after ``tracking_start_date`` whose cohort roster is non-empty). Admin: all;
+    teacher: own sessions. Paginated (``limit`` default 200, max 1000; ``offset``); ``total`` is
+    the true match count. ``schedules_without_teacher`` is reported to admins."""
+    start = _parse_date(from_date, "from") if from_date else None
+    end = _parse_date(to_date, "to") if to_date else None
+    is_admin = has_role(current_user, "admin")
+    teacher_id = None if is_admin else await _teacher_id_or_403(db, current_user)
+    items = await list_unrecorded_sessions(db, start=start, end=end, teacher_id=teacher_id,
+                                           faculty_id=faculty_id, semester=semester, limit=limit, offset=offset)
+    names = await _teacher_names(db, (i["teacher_id"] for i in items))
+    counts = await _record_counts(db, (i["id"] for i in items))
+    keys = {(i["faculty_id"], i["semester"], date.fromisoformat(i["session_date"])) for i in items}
+    rosters = await _roster_sizes(db, keys)
+    for i in items:
+        i["teacher_name"] = names.get(i["teacher_id"]) if i["teacher_id"] is not None else None
+        i["recorded_count"] = counts.get(i["id"], {}).get("total", 0)
+        i["roster_size"] = rosters.get((i["faculty_id"], i["semester"], date.fromisoformat(i["session_date"])), 0)
+    return {
+        "sessions": list(items),
+        "schedules_without_teacher": await count_schedules_without_teacher(db) if is_admin else 0,
+        "total": items.total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": items.has_more,
+    }
+
+
+@router.get("/sessions")
+async def list_sessions(
+    date: Optional[str] = None,
+    faculty_id: Optional[int] = None,
+    semester: Optional[int] = None,
+    subject_id: Optional[int] = None,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Sessions of a date (default today) with status and counts. Admin: all; teacher: own.
+    Dates up to today are materialized on demand (Rule §13.1); future dates list existing
+    sessions only (materializing ahead would freeze a snapshot before timetable edits)."""
+    target_date = _parse_date(date) if date else app_today()
+    teacher_id = None if has_role(current_user, "admin") else await _teacher_id_or_403(db, current_user)
+    try:
+        if target_date <= app_today():
+            sessions = await ensure_sessions_for(db, session_date=target_date, faculty_id=faculty_id,
+                                                 semester=semester, subject_id=subject_id)
+        else:
+            stmt = select(ClassSession).where(ClassSession.session_date == target_date)
+            if faculty_id is not None:
+                stmt = stmt.where(ClassSession.faculty_id == faculty_id)
+            if semester is not None:
+                stmt = stmt.where(ClassSession.semester == semester)
+            if subject_id is not None:
+                stmt = stmt.where(ClassSession.subject_id == subject_id)
+            sessions = list((await db.execute(stmt.order_by(ClassSession.start_time, ClassSession.id))).scalars().all())
+    except DomainError as err:
+        raise await _fail(db, err)
+    if teacher_id is not None:
+        sched_teacher = await _schedule_teachers(db, (s.schedule_id for s in sessions))
+        sessions = [s for s in sessions if teacher_id in (s.teacher_id, sched_teacher.get(s.schedule_id))]
+    payloads = await _serialize_sessions(db, sessions)
+    await db.commit()  # persist on-demand materialization
+    return {"date": target_date.isoformat(), "sessions": payloads, "total": len(payloads)}
+
+
+@router.post("/sessions/makeup")
+async def create_makeup(
+    body: dict,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Make-up session (Rule §13.2): admin, or a teacher of that subject + cohort; reason required."""
+    for field in ("subject_id", "faculty_id", "semester", "session_date", "start_time", "end_time"):
+        if body.get(field) in (None, ""):
+            raise _bad_request(f"{field} is required")
+    try:
+        session = await create_makeup_session(
+            db, actor=current_user,
+            subject_id=_opt_int(body["subject_id"], "subject_id"),
+            faculty_id=_opt_int(body["faculty_id"], "faculty_id"),
+            semester=_opt_int(body["semester"], "semester"),
+            session_date=_parse_date(body["session_date"], "session_date"),
+            start_time=_parse_time(body["start_time"], "start_time"),
+            end_time=_parse_time(body["end_time"], "end_time"),
+            teacher_id=_opt_int(body.get("teacher_id"), "teacher_id"),
+            reason=body.get("reason"),
         )
+        payload = (await _serialize_sessions(db, [session]))[0]
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {"success": True, "session": payload}
+
+
+@router.get("/sessions/{session_id}/register")
+async def get_session_register(
+    session_id: int,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Register of a session (admin / owning teacher). Unmarked students have ``status: null``."""
+    session = await _get_session_or_404(db, session_id)
+    await _ensure_can_manage(db, current_user, session)
+    payload = (await _serialize_sessions(db, [session]))[0]
+    return {"session": payload, "students": await _register_students(db, session)}
+
+
+@router.post("/sessions/{session_id}/register")
+async def submit_session_register(
+    session_id: int,
+    body: dict,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Register submission (Rule §13.3/§13.4) via ``record_attendance(submit=True)``.
+
+    Body ``{entries: [{student_id, status, reason?}], reason?, mark_remaining_absent?, confirm_held?}``.
+    Errors: 400 ``invalid_entries`` (per-entry ``errors``), 403, 409 ``session_cancelled`` ...
+    """
+    session = await _get_session_or_404(db, session_id)
+    entries = _parse_entries(body.get("entries"), key="entries")
+    try:
+        result, results = await _write(
+            db, actor=current_user, session=session, entries=entries, reason=body.get("reason"),
+            submit=True, confirm_held=_as_bool(body.get("confirm_held")),
+            mark_remaining_absent=_as_bool(body.get("mark_remaining_absent")),
+            context={"endpoint": "attendance.sessions.register"},
+        )
+        payload = (await _serialize_sessions(db, [session]))[0]
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {**result.to_dict(), "results": results, "session": payload}
+
+
+@router.post("/sessions/{session_id}/cancel")
+async def cancel_class_session(
+    session_id: int,
+    body: dict,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Cancel a session (admin / owning teacher; reason required). Records are kept and drop out
+    of metrics while the session is cancelled."""
+    session = await _get_session_or_404(db, session_id)
+    try:
+        session = await cancel_session(db, session=session, actor=current_user, reason=body.get("reason"))
+        payload = (await _serialize_sessions(db, [session]))[0]
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {"success": True, "session": payload}
+
+
+@router.post("/sessions/{session_id}/uncancel")
+async def uncancel_class_session(
+    session_id: int,
+    body: dict,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Restore a cancelled session (admin / owning teacher; reason required)."""
+    session = await _get_session_or_404(db, session_id)
+    try:
+        session = await uncancel_session(db, session=session, actor=current_user, reason=body.get("reason"))
+        payload = (await _serialize_sessions(db, [session]))[0]
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {"success": True, "session": payload}
+
+
+@router.post("/sessions/{session_id}/clear-review")
+async def clear_class_session_review(
+    session_id: int,
+    body: dict,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin keeps a session's status despite a covering calendar event (Rule §13.6; reason required, audited)."""
+    session = await _get_session_or_404(db, session_id)
+    try:
+        session = await clear_review(db, session=session, actor=current_user, reason=body.get("reason"))
+        payload = (await _serialize_sessions(db, [session]))[0]
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {"success": True, "session": payload}
+
+
+# ============================================================================ proof of presence + face attempts
+# (docs/system/face-verification.md §9)
+
+FACE_ATTEMPTS_LIMIT = 200
+
+
+@router.get("/sessions/{session_id}/presence-code")
+async def get_session_presence_code(
+    session_id: int,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Current rotating check-in code of a session (admin / owning teacher), for the classroom
+    screen and QR. 409 ``not_today`` for another day, 409 ``session_cancelled`` if cancelled."""
+    session = await _get_session_or_404(db, session_id)
+    await _ensure_can_manage(db, current_user, session)
+    now = app_now()
+    if session.session_date != now.date():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail={"code": "not_today", "message": "Check-in codes are only available on the day of the class"})
+    if session.status == SessionStatus.cancelled:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail={"code": "session_cancelled", "message": "This class has been cancelled"})
+    face_policy = await get_face_policy(db)
+    attendance_policy = await get_attendance_policy(db)
+    opens_at, closes_at, late_after = checkin_window(
+        session_start_at(session.session_date, session.start_time),
+        session_end_at(session.session_date, session.end_time),
+        attendance_policy,
+    )
+    state = "not_open" if now < opens_at else ("closed" if now >= closes_at else "open")
+    period = face_policy.presence_code_period_seconds
+    code = presence_codes.code_for(session.id, now, period)
+    subject_name = (await db.execute(select(Subject.name).where(Subject.id == session.subject_id))).scalar()
+    return {
+        "session_id": session.id,
+        "code": code,
+        "digits": presence_codes.DIGITS,
+        "period_seconds": period,
+        "expires_in_seconds": presence_codes.seconds_until_rotation(now, period),
+        "server_time": now.isoformat(),
+        "required": face_policy.require_presence_code,
+        "checkin_path": presence_codes.checkin_path(session.id, code),
+        "window": {"opens_at": opens_at.isoformat(), "closes_at": closes_at.isoformat(),
+                   "late_after": late_after.isoformat(), "state": state},
+        "subject_name": subject_name,
+        "start_time": _hhmm(session.start_time),
+        "end_time": _hhmm(session.end_time),
+    }
+
+
+@router.get("/sessions/{session_id}/face-attempts")
+async def get_session_face_attempts(
+    session_id: int,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Face check-in attempts logged against a session (admin / owning teacher), newest first
+    (at most 200), with a summary over all of the session's attempts."""
+    session = await _get_session_or_404(db, session_id)
+    await _ensure_can_manage(db, current_user, session)
+    rows = (await db.execute(
+        select(FaceVerificationAttempt, Student.student_id, User.full_name)
+        .join(Student, Student.id == FaceVerificationAttempt.student_id)
+        .join(User, User.id == Student.user_id)
+        .where(FaceVerificationAttempt.session_id == session.id)
+        .order_by(FaceVerificationAttempt.created_at.desc(), FaceVerificationAttempt.id.desc())
+        .limit(FACE_ATTEMPTS_LIMIT)
+    )).all()
+    attempts = [
+        {
+            "id": a.id,
+            "student_id": a.student_id,
+            "student_name": full_name,
+            "roll_number": roll_number,
+            "outcome": a.outcome,
+            "counts_as_failure": bool(a.counts_as_failure),
+            "similarity": float(a.similarity) if a.similarity is not None else None,
+            "liveness_score": float(a.liveness_score) if a.liveness_score is not None else None,
+            "created_at": _iso(a.created_at),
+        }
+        for a, roll_number, full_name in rows
+    ]
+    by_outcome: dict[str, int] = {}
+    failures = 0
+    for outcome, is_failure, n in (await db.execute(
+        select(FaceVerificationAttempt.outcome, FaceVerificationAttempt.counts_as_failure, func.count())
+        .where(FaceVerificationAttempt.session_id == session.id)
+        .group_by(FaceVerificationAttempt.outcome, FaceVerificationAttempt.counts_as_failure)
+    )).all():
+        by_outcome[outcome] = by_outcome.get(outcome, 0) + int(n)
+        if is_failure:
+            failures += int(n)
+    return {
+        "session_id": session.id,
+        "attempts": attempts,
+        "summary": {
+            "total": sum(by_outcome.values()),
+            "successes": by_outcome.get("success", 0),
+            "failures": failures,
+            "by_outcome": by_outcome,
+        },
+    }
+
+
+# ============================================================================ records: exclusion + audit
+
+
+@router.patch("/records/{record_id}/metrics-exclusion")
+async def set_record_metrics_exclusion(
+    record_id: int,
+    body: dict,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin toggles ``excluded_from_metrics`` with a reason (Rule §13.5; audited)."""
+    if "excluded" not in body:
+        raise _bad_request("'excluded' is required")
+    try:
+        rec = await set_metrics_exclusion(db, actor=current_user, record_id=record_id,
+                                          excluded=_as_bool(body.get("excluded")), reason=body.get("reason"))
+        response = {
+            "success": True,
+            "id": rec.id,
+            "record_id": rec.id,
+            "session_id": rec.session_id,
+            "status": _status_str(rec.status),
+            "excluded_from_metrics": bool(rec.excluded_from_metrics),
+            "exclusion_reason": rec.exclusion_reason,
+        }
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return response
+
+
+@router.get("/records/{record_id}/audit")
+async def get_record_audit(
+    record_id: int,
+    current_user = Depends(require_admin_or_teacher),
+    db: AsyncSession = Depends(get_db)
+):
+    """Audit history of one record (admin; teacher only for records of their own sessions)."""
+    rec = (await db.execute(select(AttendanceRecord).where(AttendanceRecord.id == record_id))).scalars().first()
+    if rec is None:
+        raise HTTPException(status_code=404, detail={"code": "record_not_found", "message": "Attendance record not found"})
+    if not has_role(current_user, "admin"):
+        session = await _get_session_or_404(db, rec.session_id) if rec.session_id is not None else None
+        if session is None or not await actor_owns_session(db, current_user, session):
+            raise HTTPException(status_code=403, detail={"code": "not_session_teacher",
+                                                         "message": "You are not the teacher of this class session"})
+    rows = (await db.execute(
+        select(AttendanceAuditLog, User.full_name)
+        .outerjoin(User, User.id == AttendanceAuditLog.changed_by)
+        .where(AttendanceAuditLog.attendance_record_id == record_id)
+        .order_by(AttendanceAuditLog.changed_at, AttendanceAuditLog.id)
+    )).all()
+    return [
+        {
+            "id": log.id,
+            "action": log.action,
+            "old_status": log.old_status,
+            "new_status": log.new_status,
+            "old_source": log.old_source,
+            "new_source": log.new_source,
+            "changed_by": log.changed_by,
+            "changed_by_name": name if log.changed_by is not None else "System",
+            "changed_at": _iso(log.changed_at),
+            "reason": log.reason,
+            "session_id": log.session_id,
+            "context": log.context,
+        }
+        for log, name in rows
+    ]
+
+
+# ============================================================================ writes (admin)
+
+
+@router.post("")
+async def create_attendance_record(
+    attendance_data: dict,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin single-record write via ``record_attendance`` (not a register submission).
+
+    Body ``{student_id, status, subject_id + date? [+ start_time] | session_id, reason?, confirm_held?}``.
+    A write that would make a past ``scheduled`` session held needs ``confirm_held: true``
+    (409 ``confirm_held`` with ``students_without_record`` otherwise).
+    """
+    if attendance_data.get("student_id") in (None, ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="student_id is required")
+    if attendance_data.get("subject_id") in (None, "") and attendance_data.get("session_id") in (None, ""):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="subject_id is required and cannot be null")
+    entry = Entry(student_id=attendance_data.get("student_id"), status=attendance_data.get("status"),
+                  reason=attendance_data.get("reason"))
+    try:
+        session = await _resolve_write_session(db, attendance_data, student_ids=[entry.student_id])
+        result, results = await _write(
+            db, actor=current_user, session=session, entries=[entry], reason=attendance_data.get("reason"),
+            submit=False, confirm_held=_as_bool(attendance_data.get("confirm_held")), mark_remaining_absent=False,
+            context={"endpoint": "attendance.create"},
+        )
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    row = results[0] if results else {}
+    return {
+        "success": True,
+        "id": str(row["record_id"]) if row.get("record_id") else None,
+        "studentId": str(entry.student_id),
+        "classId": str(session.subject_id),
+        "subjectId": str(session.subject_id),
+        "date": session.session_date.isoformat(),
+        "status": row.get("status"),
+        "confidence_score": None,
+        "marked_by": str(current_user.id),
+        "session_id": session.id,
+        "session_status": result.session_status,
+        "outcome": row.get("outcome"),
+    }
+
+
+@router.post("/mark-bulk")
+async def mark_bulk_attendance(
+    attendance_data: dict,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin register submission for one class session (Rule §13.3), via
+    ``record_attendance(submit=True)``.
+
+    Body ``{subject_id, date?, students: [{student_id, status, reason?}], session_id?, start_time?,
+    faculty_id?, semester?, reason?, confirm_held?, mark_remaining_absent?}``. Only the listed
+    students are written (plus roster students without a record when ``mark_remaining_absent``);
+    nothing is ever written for other subjects or students (the old cascade mode is gone).
+    Errors: 400 ``invalid_entries``, 404 ``session_not_found``, 409 ``ambiguous_session`` (pass
+    ``start_time``/``session_id``), 409 ``session_cancelled``, 403 ...
+    """
+    student_attendance = attendance_data.get("students") or []
+    entries = _parse_entries(student_attendance, key="students")
+    has_explicit_session = attendance_data.get("session_id") not in (None, "") or (
+        attendance_data.get("faculty_id") not in (None, "") and attendance_data.get("semester") not in (None, "")
+    )
+    if not entries and not (has_explicit_session and _as_bool(attendance_data.get("mark_remaining_absent"))):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No students provided in request")
+    try:
+        session = await _resolve_write_session(db, attendance_data, student_ids=[e.student_id for e in entries])
+        result, results = await _write(
+            db, actor=current_user, session=session, entries=entries, reason=attendance_data.get("reason"),
+            submit=True, confirm_held=_as_bool(attendance_data.get("confirm_held")),
+            mark_remaining_absent=_as_bool(attendance_data.get("mark_remaining_absent")),
+            context={"endpoint": "attendance.mark_bulk"},
+        )
+        await db.commit()
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {
+        "success": True,
+        "message": "Bulk attendance marked successfully",
+        "mode": "normal",
+        "created_records": result.created,
+        "updated_records": result.updated,
+        "unchanged_records": result.unchanged,
+        "date": session.session_date.isoformat(),
+        "subject_id": session.subject_id,
+        "session_id": session.id,
+        "session_status": result.session_status,
+        "submitted": result.submitted,
+        "results": results,
+    }
+
+
+# ============================================================================ auto-absent (legacy paths)
+
+
+@router.post("/auto-absent")
+async def trigger_auto_absent(
+    target_date: Optional[str] = None,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Legacy alias of ``POST /auto-absent/trigger`` (admin): one run of ``auto_absent_service``.
+    ``target_date`` (YYYY-MM-DD) is honoured: within an active term and at most 30 days back."""
+    process_date = _parse_date(target_date, "target_date") if target_date else None
+    try:
+        result = await auto_absent_service.run(db, triggered_by=current_user, target_date=process_date)
+    except DomainError as err:
+        raise await _fail(db, err)
+    return {
+        "success": True,
+        "message": "Auto-absent processing completed successfully",
+        "processing_date": (process_date or app_today()).isoformat(),
+        "triggered_by": current_user.email,
+        "triggered_at": app_now().isoformat(),
+        **result,
+    }
+
+
+@router.get("/auto-absent/stats")
+async def get_auto_absent_stats(
+    target_date: Optional[str] = None,
+    current_user = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Auto-absent record statistics for a date (default today) — admin only."""
+    process_date = _parse_date(target_date, "target_date") if target_date else None
+    stats = await auto_absent_service.get_auto_absent_stats(db, process_date)
+    return {
+        "success": True,
+        "stats": stats,
+        "requested_by": current_user.email,
+        "requested_at": app_now().isoformat(),
+    }
+
+
+# ============================================================================ single record (keep LAST:
+# the catch-all path parameter must not shadow the static GET routes above)
+
 
 @router.get("/{attendance_id}")
 async def get_attendance_record(
@@ -718,592 +1498,23 @@ async def get_attendance_record(
     db: AsyncSession = Depends(get_db)
 ):
     """Get a specific attendance record."""
-    result = await db.execute(select(AttendanceRecord).where(AttendanceRecord.id == attendance_id))
-    record = result.scalar_one_or_none()
-    
+    record = (await db.execute(select(AttendanceRecord).where(AttendanceRecord.id == attendance_id))).scalars().first()
     if not record:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Attendance record not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attendance record not found")
+
+    # Students may only read their own records; teachers only their cohorts' records.
+    await resolve_student_scope(current_user, record.student_id, db)
+
     return {
         "id": str(record.id),
         "studentId": str(record.student_id),
-        "classId": "1",
+        "classId": str(record.subject_id) if record.subject_id else "1",
         "date": record.date.strftime("%Y-%m-%d"),
-        "status": record.status.value.lower() if hasattr(record.status, 'value') else str(record.status).lower(),
+        "status": _status_str(record.status),
         "confidence_score": record.confidence_score,
-        "marked_by": str(record.marked_by)
+        "marked_by": str(record.marked_by),
+        "session_id": record.session_id,
+        "source": record.source,
+        "excluded_from_metrics": bool(record.excluded_from_metrics),
+        "exclusion_reason": record.exclusion_reason,
     }
-
-@router.post("/mark-bulk")
-async def mark_bulk_attendance(
-    attendance_data: dict,
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Mark attendance for multiple students at once.
-    
-    If marking on a system-inactive date (no real-time records), automatically:
-    1. Fill all subjects for marked students
-    2. Cascade to all students in same faculty+semester
-    """
-    subject_id = attendance_data.get("subject_id")
-    date_str = attendance_data.get("date", datetime.now().strftime("%Y-%m-%d"))
-    student_attendance = attendance_data.get("students", [])  # List of {student_id, status}
-    
-    # DEBUG LOGGING
-    print(f"\n{'='*80}")
-    print(f"MARK-BULK ATTENDANCE CALLED")
-    print(f"{'='*80}")
-    print(f"Subject ID: {subject_id}")
-    print(f"Date: {date_str}")
-    print(f"Number of students in request: {len(student_attendance)}")
-    print(f"Students data: {student_attendance}")
-    print(f"Marked by user: {current_user.email} (ID: {current_user.id})")
-    
-    target_date = datetime.strptime(date_str, "%Y-%m-%d")
-    target_date_only = target_date.date()
-    
-    # Get cohort info from first student to check cascade for THIS cohort only
-    if not student_attendance:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No students provided in request"
-        )
-    
-    first_student_id = student_attendance[0].get("student_id")
-    first_student_query = select(Student).where(Student.id == first_student_id)
-    first_student_result = await db.execute(first_student_query)
-    first_student = first_student_result.scalar_one_or_none()
-    
-    if not first_student:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Student {first_student_id} not found"
-        )
-    
-    cohort_faculty_id = first_student.faculty_id
-    cohort_semester = first_student.semester
-    
-    print(f"Cohort: Faculty ID {cohort_faculty_id}, Semester {cohort_semester}")
-    
-    # STEP 1: Detect if this is a system-inactive date (recovery mode)
-    # Check for ANY existing records FOR THIS COHORT ONLY (not just real-time) to avoid cascade conflicts
-    existing_records_check = (
-        select(AttendanceRecord)
-        .join(Student, AttendanceRecord.student_id == Student.id)
-        .where(
-            and_(
-                func.date(AttendanceRecord.date) == target_date_only,
-                Student.faculty_id == cohort_faculty_id,
-                Student.semester == cohort_semester
-            )
-        )
-        .limit(1)
-    )
-    existing_result = await db.execute(existing_records_check)
-    has_any_records = existing_result.scalar_one_or_none() is not None
-    
-    # Only trigger cascade if there are NO records at all for this date IN THIS COHORT
-    is_recovery_mode = not has_any_records
-    
-    print(f"Existing records on date: {has_any_records}")
-    print(f"Recovery Mode (CASCADE): {is_recovery_mode}")
-    print(f"{'='*80}\n")
-    
-    # NORMAL MODE: Save only explicit records (existing behavior)
-    if not is_recovery_mode:
-        print("  → NORMAL MODE: Saving only explicit records\n")
-        created_records = []
-        updated_records = []
-        
-        for student_data in student_attendance:
-            student_id = student_data.get("student_id")
-            status = student_data.get("status", "present")
-            
-            print(f"  Processing student_id={student_id}, status={status}")
-            
-            # Check if attendance record already exists
-            existing_record_query = select(AttendanceRecord).where(
-                and_(
-                    AttendanceRecord.student_id == student_id,
-                    AttendanceRecord.subject_id == subject_id,
-                    AttendanceRecord.date == target_date_only
-                )
-            )
-            
-            result = await db.execute(existing_record_query)
-            existing_record = result.scalar_one_or_none()
-            
-            if existing_record:
-                print(f"    → Updating existing record (ID: {existing_record.id})")
-                existing_record.status = AttendanceStatus(status.lower())
-                existing_record.marked_by = current_user.id
-                updated_records.append(existing_record.id)
-            else:
-                print(f"    → Creating new record")
-                new_record = AttendanceRecord(
-                    student_id=student_id,
-                    subject_id=subject_id,
-                    date=target_date_only,
-                    time_in=target_date,
-                    status=AttendanceStatus(status.lower()),
-                    marked_by=current_user.id,
-                    method=AttendanceMethod.manual
-                )
-                db.add(new_record)
-                created_records.append(student_id)
-        
-        print(f"\n  Committing changes...")
-        await db.commit()
-        print(f"  ✓ Committed successfully")
-        print(f"  Created: {len(created_records)} records")
-        print(f"  Updated: {len(updated_records)} records")
-        print(f"{'='*80}\n")
-        
-        return {
-            "message": "Bulk attendance marked successfully",
-            "mode": "normal",
-            "created_records": len(created_records),
-            "updated_records": len(updated_records),
-            "date": date_str,
-            "subject_id": subject_id
-        }
-    
-    # CASCADE MODE: Auto-fill entire cohort
-    print("  → CASCADE MODE: Auto-filling cohort\n")
-    
-    try:
-        # Cohort info already fetched above (cohort_faculty_id, cohort_semester)
-        print(f"  Cohort: Faculty ID {cohort_faculty_id}, Semester {cohort_semester}")
-        
-        # STEP 2: Get all students in cohort
-        cohort_students_query = select(Student).where(
-            and_(
-                Student.faculty_id == cohort_faculty_id,
-                Student.semester == cohort_semester
-            )
-        )
-        cohort_students_result = await db.execute(cohort_students_query)
-        all_students = cohort_students_result.scalars().all()
-        
-        print(f"  Total students in cohort: {len(all_students)}")
-        
-        # STEP 3: Get all subjects for cohort
-        cohort_subjects_query = (
-            select(ClassSchedule.subject_id)
-            .distinct()
-            .where(
-                and_(
-                    ClassSchedule.faculty_id == cohort_faculty_id,
-                    ClassSchedule.semester == cohort_semester,
-                    ClassSchedule.is_active == True
-                )
-            )
-        )
-        cohort_subjects_result = await db.execute(cohort_subjects_query)
-        all_subject_ids = [row[0] for row in cohort_subjects_result.all()]
-        
-        print(f"  Total subjects in cohort: {len(all_subject_ids)}")
-        
-        # STEP 4: Build explicit records map from request
-        explicit_records = {}  # (student_id, subject_id) -> status
-        for student_data in student_attendance:
-            sid = student_data.get("student_id")
-            status_val = student_data.get("status", "present")
-            explicit_records[(sid, subject_id)] = status_val
-        
-        print(f"  Explicit records from admin: {len(explicit_records)}")
-        
-        # STEP 5: Check for existing records to avoid conflicts
-        existing_records_query = (
-            select(AttendanceRecord)
-            .join(Student, AttendanceRecord.student_id == Student.id)
-            .where(
-                and_(
-                    AttendanceRecord.date == target_date_only,
-                    Student.faculty_id == cohort_faculty_id,
-                    Student.semester == cohort_semester
-                )
-            )
-        )
-        existing_records_result = await db.execute(existing_records_query)
-        existing_records = existing_records_result.scalars().all()
-        existing_combos = {(rec.student_id, rec.subject_id) for rec in existing_records}
-        
-        print(f"  Existing records on this date (cohort-specific): {len(existing_combos)}")
-        
-        # STEP 6: Build cascade records (all students × all subjects)
-        records_to_create = []
-        cascade_count = 0
-        
-        for student in all_students:
-            for subj_id in all_subject_ids:
-                combo = (student.id, subj_id)
-                
-                # Skip if record already exists
-                if combo in existing_combos:
-                    continue
-                
-                # Use explicit status if provided, otherwise absent
-                if combo in explicit_records:
-                    status_val = explicit_records[combo]
-                else:
-                    status_val = "absent"
-                    cascade_count += 1
-                
-                records_to_create.append({
-                    'student_id': student.id,
-                    'subject_id': subj_id,
-                    'date': target_date_only,
-                    'time_in': datetime.now(),
-                    'status': status_val.lower(),
-                    'marked_by': current_user.id,
-                    'method': 'manual',
-                    'created_at': datetime.now(),
-                    'updated_at': datetime.now()
-                })
-        
-        print(f"  Total records to create: {len(records_to_create)}")
-        print(f"    - Explicit (from admin): {len(explicit_records)}")
-        print(f"    - Auto-absent (cascade): {cascade_count}")
-        
-        # STEP 7: Bulk insert with transaction safety
-        if records_to_create:
-            from sqlalchemy import insert
-            insert_stmt = insert(AttendanceRecord).values(records_to_create)
-            await db.execute(insert_stmt)
-            await db.commit()
-            print(f"  ✓ Bulk insert committed successfully")
-        else:
-            print(f"  ⚠ No new records to create (all already exist)")
-        
-        print(f"{'='*80}\n")
-        
-        return {
-            "message": "Cascade attendance marked successfully",
-            "mode": "cascade",
-            "cohort": f"Faculty {cohort_faculty_id} Semester {cohort_semester}",
-            "affected_students": len(all_students),
-            "affected_subjects": len(all_subject_ids),
-            "explicit_records": len(explicit_records),
-            "auto_absent_records": cascade_count,
-            "total_records_created": len(records_to_create),
-            "date": date_str
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        await db.rollback()
-        print(f"  ✗ CASCADE FAILED: {str(e)}")
-        print(f"{'='*80}\n")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Cascade attendance marking failed: {str(e)}"
-        )
-
-@router.post("/auto-absent")
-async def trigger_auto_absent(
-    target_date: Optional[str] = None,
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Manually trigger auto-absent processing for expired classes.
-    
-    Admin-only endpoint to process all expired classes and mark students
-    as absent if they missed the attendance window.
-    
-    Args:
-        target_date: Optional date in YYYY-MM-DD format (defaults to today)
-    """
-    # Check if user has admin privileges
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can trigger auto-absent processing"
-        )
-    
-    try:
-        # Process auto-absent for the specified date (or today)
-        if target_date:
-            # Validate date format
-            try:
-                process_date = datetime.strptime(target_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid date format. Use YYYY-MM-DD"
-                )
-        else:
-            process_date = date.today()
-        
-        # Temporarily override today's date in service if needed
-        original_date = date.today()
-        
-        result = await auto_absent_service.process_auto_absent_for_today(db)
-        
-        return {
-            "success": True,
-            "message": "Auto-absent processing completed successfully",
-            "processing_date": process_date.isoformat(),
-            "triggered_by": current_user.email,
-            "triggered_at": datetime.now().isoformat(),
-            **result
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing auto-absent: {str(e)}"
-        )
-
-@router.get("/auto-absent/stats")
-async def get_auto_absent_stats(
-    target_date: Optional[str] = None,
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get statistics about auto-absent records for a specific date.
-    
-    Args:
-        target_date: Optional date in YYYY-MM-DD format (defaults to today)
-    """
-    try:
-        if target_date:
-            # Validate date format
-            try:
-                process_date = datetime.strptime(target_date, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid date format. Use YYYY-MM-DD"
-                )
-        else:
-            process_date = None  # Service will use today
-        
-        stats = await auto_absent_service.get_auto_absent_stats(db, process_date)
-        
-        return {
-            "success": True,
-            "stats": stats,
-            "requested_by": current_user.email,
-            "requested_at": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving auto-absent stats: {str(e)}"
-        )
-
-
-@router.get("/student-subject-breakdown/{student_id}")
-async def get_student_subject_breakdown(
-    student_id: int,
-    month: Optional[int] = None,  # Optional month filter (1-12), defaults to current month
-    year: Optional[int] = None,   # Optional year filter, defaults to current year
-    accurate: bool = True,  # NEW: Use accurate calculation (classes held vs just records)
-    current_user = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Get subject attendance breakdown for a specific student, filtered by month/year (defaults to current month).
-    
-    Args:
-        accurate: If True (default), calculates attendance based on total classes HELD (more accurate).
-                  If False, uses old method (only counts student's own records).
-    """
-    try:
-        # If accurate calculation requested, use the new service
-        if accurate:
-            # Use accurate calculation service
-            subject_breakdown = await calculate_subject_wise_attendance(
-                db=db,
-                student_id=student_id
-            )
-            
-            # Filter by month/year if specified
-            if month is not None or year is not None:
-                from datetime import date as date_class
-                today = date_class.today()
-                target_month = month if month is not None else today.month
-                target_year = year if year is not None else today.year
-                
-                # Return with metadata
-                return {
-                    "month": target_month,
-                    "year": target_year,
-                    "month_name": date_class(target_year, target_month, 1).strftime("%B"),
-                    "subjects": subject_breakdown,
-                    "calculation_method": "accurate_classes_held"
-                }
-            
-            return {
-                "subjects": subject_breakdown,
-                "calculation_method": "accurate_classes_held"
-            }
-        
-        # OLD METHOD (kept for compatibility) - Falls through to existing logic below
-        from datetime import date as date_class
-        today = date_class.today()
-        target_month = month if month is not None else today.month
-        target_year = year if year is not None else today.year
-        
-        # Validate month
-        if target_month < 1 or target_month > 12:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Month must be between 1 and 12"
-            )
-        
-        # Check if current user can access this student's data
-        if current_user.role == UserRole.student:
-            # Students can only view their own data
-            student_query = select(Student).where(Student.user_id == current_user.id)
-            student_result = await db.execute(student_query)
-            current_student = student_result.scalar_one_or_none()
-            if not current_student or current_student.id != student_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Not authorized to view this student's data"
-                )
-        
-        # Get all subjects for the student's faculty and semester
-        student_result = await db.execute(
-            select(Student).options(joinedload(Student.user)).where(Student.id == student_id)
-        )
-        student = student_result.scalar_one_or_none()
-        
-        if not student:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Student not found"
-            )
-        
-        print(f"[DEBUG] Student: {student.user.full_name if student.user else 'Unknown'}, Faculty ID: {student.faculty_id}, Semester: {student.semester}")
-        
-        # Get subjects for student's faculty AND semester using ClassSchedule
-        # Select specific columns to avoid JSON column issues
-        subjects_query = (
-            select(Subject.id, Subject.name, Subject.code, Subject.description, Subject.credits, Subject.faculty_id)
-            .join(ClassSchedule, Subject.id == ClassSchedule.subject_id)
-            .where(
-                and_(
-                    Subject.faculty_id == student.faculty_id,
-                    ClassSchedule.faculty_id == student.faculty_id,
-                    ClassSchedule.semester == student.semester
-                )
-            )
-            .distinct()  # Avoid duplicate subjects if they have multiple schedule entries
-        )
-        subjects_result = await db.execute(subjects_query)
-        subject_rows = subjects_result.all()
-        
-        print(f"[DEBUG] Found {len(subject_rows)} subjects for faculty {student.faculty_id}, semester {student.semester}")
-        for row in subject_rows[:5]:  # Log first 5 subjects
-            print(f"  - {row.name} (ID: {row.id}, Faculty: {row.faculty_id})")
-        
-        subject_breakdown = []
-
-        for subject_row in subject_rows:
-            subject_id = subject_row.id
-            subject_name = subject_row.name
-            subject_code = subject_row.code
-            subject_credits = subject_row.credits or 3
-
-            # Get student's attendance records for this subject (filtered by month/year)
-            attendance_query = select(AttendanceRecord).where(
-                and_(
-                    AttendanceRecord.student_id == student_id,
-                    AttendanceRecord.subject_id == subject_id,
-                    extract('month', AttendanceRecord.date) == target_month,
-                    extract('year', AttendanceRecord.date) == target_year
-                )
-            )
-
-            attendance_result = await db.execute(attendance_query)
-            attendance_records = attendance_result.scalars().all()
-
-            present_count = late_count = absent_count = excused_count = 0
-
-            for record in attendance_records:
-                status = normalize_attendance_status(record.status)
-                if status == "present":
-                    present_count += 1
-                elif status == "late":
-                    late_count += 1
-                elif status == "absent":
-                    absent_count += 1
-                elif status == "excused":
-                    excused_count += 1
-
-            # Calculate total_classes as the ACTUAL number of classes held for this subject in the target month
-            # Query distinct dates where students from the SAME faculty and semester have attendance
-            # This ensures we only count classes relevant to this student's faculty/semester
-            total_classes_query = (
-                select(func.count(func.distinct(AttendanceRecord.date)))
-                .join(Student, AttendanceRecord.student_id == Student.id)
-                .where(
-                    and_(
-                        AttendanceRecord.subject_id == subject_id,
-                        Student.faculty_id == student.faculty_id,
-                        Student.semester == student.semester,
-                        extract('month', AttendanceRecord.date) == target_month,
-                        extract('year', AttendanceRecord.date) == target_year
-                    )
-                )
-            )
-            total_classes_result = await db.execute(total_classes_query)
-            total_classes = total_classes_result.scalar() or 0
-            
-            # If no classes have been held for this subject at all, skip it
-            if total_classes == 0:
-                continue
-
-            # Calculate attendance metrics for this subject
-            # attended = classes where student was present (on time or late)
-            # effective_total = total classes minus excused absences
-            attended = present_count + late_count
-            effective_total = total_classes - excused_count
-            effective_total = effective_total if effective_total > 0 else total_classes
-
-            attendance_percentage = (attended / effective_total * 100) if effective_total else 0
-
-            subject_breakdown.append({
-                "subject_id": subject_id,
-                "subject_name": subject_name,
-                "subject_code": subject_code,
-                "total_classes": total_classes,
-                "attended": attended,
-                "present": present_count,
-                "absent": absent_count,
-                "late": late_count,
-                "excused": excused_count,
-                "attendance_percentage": round(attendance_percentage, 2),
-                "credits": subject_credits
-            })
-        
-        # Return data with metadata indicating the time period
-        return {
-            "month": target_month,
-            "year": target_year,
-            "month_name": date_class(target_year, target_month, 1).strftime("%B"),
-            "subjects": subject_breakdown
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback
-        print(f"[ERROR] Exception in get_student_subject_breakdown: {str(e)}")
-        print(traceback.format_exc())
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error retrieving student subject breakdown: {str(e)}"
-        )

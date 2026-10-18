@@ -15,10 +15,15 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: List[str]
     
-    # Face Recognition (using InsightFace)
-    face_recognition_tolerance: float = 0.6  # Cosine similarity threshold
-    insightface_det_size: int = 640  # Detection size for InsightFace
-    development_mode: bool = False  # Enable real face detection for production
+    # Face engine (docs/system/face-verification.md §2-§3). Verification thresholds live in
+    # the ``face_verification`` system setting, not here.
+    face_recognition_tolerance: float = 0.6  # Legacy cosine threshold (compare_embeddings)
+    insightface_det_size: int = 640  # SCRFD input size; 320-480 is faster for webcam selfies
+    face_max_concurrency: int = 2  # Face-engine calls running at once (worker threads)
+    antispoof_model_dir: str = ""  # MiniFASNet ONNX folder; empty = backend/models/anti_spoof
+    # Deprecated and ignored (the mock face mode was removed). Kept only so existing .env
+    # files that still set DEVELOPMENT_MODE keep loading (unknown .env keys are an error).
+    development_mode: bool = False
     
     # File Storage
     upload_dir: str = "uploads"
@@ -41,7 +46,13 @@ class Settings(BaseSettings):
     
     # Scheduler
     enable_auto_absent_scheduler: bool = True  # Enable automatic absent marking
-    
+    # Whether THIS process runs the background scheduler (env RUN_SCHEDULER). The auto-absent
+    # job is additionally guarded by a PostgreSQL advisory lock, so several workers are safe.
+    run_scheduler: bool = True
+
+    # Clock: all "today/now" business decisions use this timezone (env APP_TIMEZONE)
+    app_timezone: str = "Asia/Kathmandu"
+
     class Config:
         env_file = ".env"
         case_sensitive = False

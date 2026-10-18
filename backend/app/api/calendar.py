@@ -1,6 +1,16 @@
 """
 Academic Calendar API Endpoints
-Provides REST API for calendar management with student/admin permissions
+Provides REST API for calendar management with student/admin permissions.
+
+Domain rules (DOMAIN_RULES §4, §9, §13.6):
+* Event coverage is range-based everywhere: an event covers ``[start_date, coalesce(end_date,
+  start_date)]``; window queries select events overlapping the window.
+* Creating/editing/(de)activating a HOLIDAY, EXAM (when exams suspend classes) or CANCELLED_CLASS
+  event reconciles the class sessions it covers in the SAME transaction via
+  ``class_sessions.reconcile_sessions_for_event`` / ``restore_sessions_for_event``: uncovered
+  sessions are cancelled, sessions with real records are flagged ``review_required``.
+* ``DELETE /calendar/events/{id}`` is a soft delete (``is_active = false``) that restores the
+  sessions the event cancelled. Responses add ``session_impact``.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Path, status
@@ -8,16 +18,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, or_, extract, func, select
 from typing import List, Optional, Dict, Any
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pydantic import BaseModel, Field
 
+from app.core.clock import app_today
 from app.core.database import get_db
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin_role, has_role
 from app.models import User, UserRole, Student, Faculty, Subject
 from app.models.calendar import (
     AcademicEvent, EventAttendance, CalendarSetting, AcademicYear,
-    ClassScheduleTemplate, EventType, HolidayType, AttendanceStatus
+    ClassScheduleTemplate, EventType, HolidayType, EventAttendanceStatus
 )
+from app.services import class_sessions
+from app.services.domain_errors import DomainError
+
+#: Event types whose create/edit/(de)activation reconciles class sessions (Rule §13.6).
+SESSION_DRIVING_TYPES = (EventType.HOLIDAY, EventType.EXAM, EventType.CANCELLED_CLASS)
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -57,6 +73,10 @@ class EventUpdate(BaseModel):
     color_code: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$')
     class_room: Optional[str] = None
     is_active: Optional[bool] = None
+    holiday_type: Optional[HolidayType] = None
+    subject_id: Optional[int] = None
+    faculty_id: Optional[int] = None
+    attendance_required: Optional[bool] = None
 
 class EventResponse(EventBase):
     id: int
@@ -68,6 +88,7 @@ class EventResponse(EventBase):
     faculty_name: Optional[str] = None
     creator_name: str
     attendance_count: Optional[int] = None
+    session_impact: Optional[Dict[str, Any]] = None
 
     class Config:
         from_attributes = True
@@ -76,7 +97,7 @@ class EventAttendanceResponse(BaseModel):
     id: int
     event_id: int
     student_id: int
-    status: AttendanceStatus
+    status: EventAttendanceStatus
     marked_at: Optional[datetime]
     face_verification_used: bool
     verification_confidence: Optional[int]
@@ -114,7 +135,7 @@ class MonthViewResponse(BaseModel):
     total_events: int
 
 class AttendanceMarkRequest(BaseModel):
-    status: AttendanceStatus
+    status: EventAttendanceStatus
     face_verification_used: bool = False
     verification_confidence: Optional[int] = Field(None, ge=0, le=100)
 
@@ -122,20 +143,105 @@ class AttendanceMarkRequest(BaseModel):
 
 def check_admin_permission(current_user: User):
     """Check if user has admin permissions"""
-    if current_user.role != UserRole.admin:
+    if not has_role(current_user, "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin permissions required"
         )
 
+
+def overlaps_window(start_date: date, end_date: date):
+    """Events whose ``[start_date, coalesce(end_date, start_date)]`` overlaps the window (Rule §4)."""
+    return and_(
+        AcademicEvent.start_date <= end_date,
+        func.coalesce(AcademicEvent.end_date, AcademicEvent.start_date) >= start_date,
+    )
+
+
+def parse_event_time(value: Any, field: str) -> Optional[time]:
+    """``"HH:MM"`` (or ``HH:MM:SS``) -> ``time``; empty -> ``None``; malformed -> 400."""
+    if value is None or isinstance(value, time):
+        return value
+    text_value = str(value).strip()
+    if not text_value:
+        return None
+    try:
+        parts = [int(p) for p in text_value.split(":")]
+        if len(parts) not in (2, 3):
+            raise ValueError
+        return time(*parts)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{field} must be in HH:MM format")
+
+
+def validate_event_window(start_date: date, end_date: Optional[date], start_time: Optional[time], end_time: Optional[time]) -> None:
+    if end_date is not None and end_date < start_date:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_date cannot be before start_date")
+    if start_time is not None and end_time is not None and end_time <= start_time:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="end_time must be after start_time")
+
+
+async def get_event_or_404(db: AsyncSession, event_id: int) -> AcademicEvent:
+    event = await db.get(AcademicEvent, event_id)
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Event not found")
+    return event
+
+
+async def validate_event_scope(db: AsyncSession, subject_id: Optional[int], faculty_id: Optional[int]) -> None:
+    if subject_id and await db.get(Subject, subject_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subject not found")
+    if faculty_id and await db.get(Faculty, faculty_id) is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Faculty not found")
+
+
+def _impact_summary(result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not result:
+        return None
+    keys = ("cancelled", "review_required", "restored", "reassigned", "review_cleared",
+            "cancelled_session_ids", "review_session_ids")
+    return {k: result[k] for k in keys if k in result}
+
+
+def event_to_response(event: AcademicEvent, session_impact: Optional[Dict[str, Any]] = None) -> "EventResponse":
+    return EventResponse(
+        id=event.id,
+        title=event.title,
+        description=event.description,
+        event_type=event.event_type,
+        start_date=event.start_date,
+        end_date=event.end_date,
+        start_time=event.start_time.strftime("%H:%M") if event.start_time else None,
+        end_time=event.end_time.strftime("%H:%M") if event.end_time else None,
+        is_all_day=bool(event.is_all_day),
+        holiday_type=event.holiday_type,
+        subject_id=event.subject_id,
+        faculty_id=event.faculty_id,
+        class_room=event.class_room,
+        color_code=event.color_code,
+        is_recurring=bool(event.is_recurring),
+        recurrence_pattern=event.recurrence_pattern,
+        attendance_required=bool(event.attendance_required),
+        notification_settings=event.notification_settings,
+        created_by=event.created_by,
+        created_at=event.created_at,
+        updated_at=event.updated_at,
+        is_active=event.is_active is not False,
+        subject_name=None,
+        faculty_name=None,
+        creator_name="System",
+        attendance_count=None,
+        session_impact=session_impact,
+    )
+
+
 async def get_user_calendar_events(db: AsyncSession, user: User, start_date: date, end_date: date):
-    """Get calendar events for a user based on their role (async)."""
+    """Get calendar events (overlapping the window) for a user based on their role (async)."""
     stmt = (
         select(AcademicEvent)
         .where(
             and_(
-                AcademicEvent.start_date >= start_date,
-                AcademicEvent.start_date <= end_date,
+                overlaps_window(start_date, end_date),
                 AcademicEvent.is_active.is_(True),
             )
         )
@@ -146,7 +252,7 @@ async def get_user_calendar_events(db: AsyncSession, user: User, start_date: dat
     )
 
     # Students see events relevant to their subjects/faculty
-    if user.role == UserRole.student:
+    if has_role(user, "student"):
         student_res = await db.execute(select(Student).where(Student.user_id == user.id))
         student = student_res.scalar_one_or_none()
         if student:
@@ -192,15 +298,14 @@ async def get_calendar_events(
             select(AcademicEvent)
             .where(
                 and_(
-                    AcademicEvent.start_date >= start_date,
-                    AcademicEvent.start_date <= end_date,
+                    overlaps_window(start_date, end_date),
                     AcademicEvent.is_active.is_(True),
                 )
             )
         )
 
         # Students see events relevant to their subjects/faculty
-        if current_user.role == UserRole.student:
+        if has_role(current_user, "student"):
             student_res = await db.execute(select(Student).where(Student.user_id == current_user.id))
             student = student_res.scalar_one_or_none()
             if student:
@@ -227,14 +332,12 @@ async def get_calendar_events(
             faculty_name = None
             
             if event.subject_id:
-                subject_res = await db.execute(select(Subject).where(Subject.id == event.subject_id))
-                subject = subject_res.scalar_one_or_none()
+                subject = await db.get(Subject, event.subject_id)
                 if subject:
                     subject_name = subject.name
-            
+
             if event.faculty_id:
-                faculty_res = await db.execute(select(Faculty).where(Faculty.id == event.faculty_id))
-                faculty = faculty_res.scalar_one_or_none()
+                faculty = await db.get(Faculty, event.faculty_id)
                 if faculty:
                     faculty_name = faculty.name
 
@@ -268,7 +371,7 @@ async def get_calendar_events(
             }
 
             # Add attendance count for admins
-            if current_user.role == UserRole.admin:
+            if has_role(current_user, "admin"):
                 cnt_res = await db.execute(
                     select(func.count(EventAttendance.id)).where(
                         EventAttendance.event_id == event.id
@@ -289,7 +392,7 @@ async def get_calendar_events(
 
 @router.get("/month/{year}/{month}", response_model=MonthViewResponse)
 async def get_month_view(
-    year: int = Path(..., ge=2020, le=2030),
+    year: int = Path(..., ge=2000, le=2100),
     month: int = Path(..., ge=1, le=12),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -350,194 +453,119 @@ async def get_month_view(
 @router.post("/events", response_model=EventResponse)
 async def create_event(
     event_data: EventCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new calendar event (Admin only)"""
+    """Create a calendar event (Admin only). HOLIDAY/EXAM/CANCELLED_CLASS events reconcile the
+    class sessions they cover in the same transaction (Rule §13.6)."""
     check_admin_permission(current_user)
-    
-    # Validate subject and faculty if provided
-    if event_data.subject_id:
-        subject = await db.get(Subject, event_data.subject_id)
-        if not subject:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Subject not found",
-            )
-    
-    if event_data.faculty_id:
-        faculty = await db.get(Faculty, event_data.faculty_id)
-        if not faculty:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Faculty not found",
-            )
-    
-    # Prepare event data with proper time handling
-    from datetime import time
-    event_dict = event_data.dict()
-    
-    # Convert empty time strings to None and parse valid times
-    for time_field in ['start_time', 'end_time']:
-        if time_field in event_dict and event_dict[time_field]:
-            if isinstance(event_dict[time_field], str):
-                if event_dict[time_field].strip() == '':
-                    event_dict[time_field] = None
-                else:
-                    try:
-                        h, m = map(int, event_dict[time_field].split(':'))
-                        event_dict[time_field] = time(hour=h, minute=m)
-                    except (ValueError, AttributeError):
-                        event_dict[time_field] = None
-        else:
-            event_dict[time_field] = None
-    
-    # Create the event
-    db_event = AcademicEvent(
-        **event_dict,
-        created_by=current_user.id
-    )
-    
-    db.add(db_event)
-    await db.commit()
-    await db.refresh(db_event)
+    await validate_event_scope(db, event_data.subject_id, event_data.faculty_id)
 
-    # Manually construct the response to ensure correct time formatting
-    return EventResponse(
-        id=db_event.id,
-        title=db_event.title,
-        description=db_event.description,
-        event_type=db_event.event_type,
-        start_date=db_event.start_date,
-        end_date=db_event.end_date,
-        start_time=db_event.start_time.strftime("%H:%M") if db_event.start_time else None,
-        end_time=db_event.end_time.strftime("%H:%M") if db_event.end_time else None,
-        is_all_day=db_event.is_all_day,
-        holiday_type=db_event.holiday_type,
-        subject_id=db_event.subject_id,
-        faculty_id=db_event.faculty_id,
-        class_room=db_event.class_room,
-        color_code=db_event.color_code,
-        is_recurring=db_event.is_recurring,
-        recurrence_pattern=db_event.recurrence_pattern,
-        attendance_required=db_event.attendance_required,
-        notification_settings=db_event.notification_settings,
-        created_by=db_event.created_by,
-        created_at=db_event.created_at,
-        updated_at=db_event.updated_at,
-        is_active=db_event.is_active,
-        subject_name=None,  # Simplified for now
-        faculty_name=None,  # Simplified for now
-        creator_name="System", # Simplified
-        attendance_count=None,
-    )
+    event_dict = event_data.model_dump()
+    event_dict["start_time"] = parse_event_time(event_dict.get("start_time"), "start_time")
+    event_dict["end_time"] = parse_event_time(event_dict.get("end_time"), "end_time")
+    validate_event_window(event_dict["start_date"], event_dict.get("end_date"),
+                          event_dict["start_time"], event_dict["end_time"])
+
+    db_event = AcademicEvent(**event_dict, created_by=current_user.id, is_active=True)
+    db.add(db_event)
+    impact = None
+    try:
+        await db.flush()
+        if db_event.event_type in SESSION_DRIVING_TYPES:
+            impact = await class_sessions.reconcile_sessions_for_event(db, db_event, current_user)
+        await db.commit()
+    except DomainError as err:
+        await db.rollback()
+        raise err.to_http_exception()
+    await db.refresh(db_event)
+    return event_to_response(db_event, _impact_summary(impact))
 
 @router.put("/events/{event_id}", response_model=EventResponse)
 async def update_event(
     event_id: int,
     event_data: EventUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update an existing calendar event (Admin only)"""
+    """Update a calendar event (Admin only). Date/scope/type/active changes re-reconcile the
+    sessions the event covers (cancel newly covered, restore no-longer-covered; Rule §13.6)."""
     check_admin_permission(current_user)
-    
-    res = await db.execute(select(AcademicEvent).where(AcademicEvent.id == event_id))
-    event = res.scalar_one_or_none()
-    if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event not found"
-        )
-    
-    # Update only provided fields, with time string parsing
-    from datetime import time
-    update_data = event_data.dict(exclude_unset=True)
-    for field, value in update_data.items():
-        if field in ("start_time", "end_time") and isinstance(value, str):
-            # Parse "HH:MM" string to time object
-            try:
-                h, m = map(int, value.split(":"))
-                value = time(hour=h, minute=m)
-            except Exception:
-                value = None
-        setattr(event, field, value)
+    event = await get_event_or_404(db, event_id)
+    was_driving = event.event_type in SESSION_DRIVING_TYPES
 
-    event.updated_at = datetime.utcnow()
-    await db.commit()
-    await db.refresh(event)
-
-    # Manually construct the response to ensure correct time formatting
-    return EventResponse(
-        id=event.id,
-        title=event.title,
-        description=event.description,
-        event_type=event.event_type,
-        start_date=event.start_date,
-        end_date=event.end_date,
-        start_time=event.start_time.strftime("%H:%M") if event.start_time else None,
-        end_time=event.end_time.strftime("%H:%M") if event.end_time else None,
-        is_all_day=event.is_all_day,
-        holiday_type=event.holiday_type,
-        subject_id=event.subject_id,
-        faculty_id=event.faculty_id,
-        class_room=event.class_room,
-        color_code=event.color_code,
-        is_recurring=event.is_recurring,
-        recurrence_pattern=event.recurrence_pattern,
-        attendance_required=event.attendance_required,
-        notification_settings=event.notification_settings,
-        created_by=event.created_by,
-        created_at=event.created_at,
-        updated_at=event.updated_at,
-        is_active=event.is_active,
-        subject_name=None, # Simplified for now
-        faculty_name=None, # Simplified for now
-        creator_name="System", # Simplified
-        attendance_count=None,
+    update_data = event_data.model_dump(exclude_unset=True)
+    for field in ("start_time", "end_time"):
+        if field in update_data:
+            update_data[field] = parse_event_time(update_data[field], field)
+    for required in ("title", "event_type", "start_date", "color_code"):
+        if required in update_data and update_data[required] is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{required} cannot be empty")
+    await validate_event_scope(db, update_data.get("subject_id"), update_data.get("faculty_id"))
+    validate_event_window(
+        update_data.get("start_date", event.start_date),
+        update_data.get("end_date", event.end_date),
+        update_data.get("start_time", event.start_time),
+        update_data.get("end_time", event.end_time),
     )
+
+    for field, value in update_data.items():
+        setattr(event, field, value)
+    event.updated_at = datetime.utcnow()
+    impact = None
+    try:
+        await db.flush()
+        if was_driving or event.event_type in SESSION_DRIVING_TYPES:
+            # Handles inactive / no-longer-suppressing events by restoring what it cancelled.
+            impact = await class_sessions.reconcile_sessions_for_event(db, event, current_user)
+        await db.commit()
+    except DomainError as err:
+        await db.rollback()
+        raise err.to_http_exception()
+    await db.refresh(event)
+    return event_to_response(event, _impact_summary(impact))
 
 @router.delete("/events/{event_id}")
 async def delete_event(
     event_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a calendar event (Admin only)"""
+    """Soft-delete a calendar event (Admin only): ``is_active = false`` and the sessions it
+    cancelled are restored / its review flags cleared (Rule §9, §13.6). Never a hard delete."""
     check_admin_permission(current_user)
-    
-    res = await db.execute(select(AcademicEvent).where(AcademicEvent.id == event_id))
-    event = res.scalar_one_or_none()
-    if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event not found"
-        )
-    
-    # Hard delete - actually remove the record from database
-    await db.delete(event)
-    await db.commit()
-    
-    return {"message": "Event deleted successfully"}
+    event = await get_event_or_404(db, event_id)
+    impact = None
+    try:
+        if event.is_active is not False:
+            event.is_active = False
+            event.updated_at = datetime.utcnow()
+            await db.flush()
+        impact = await class_sessions.restore_sessions_for_event(db, event, current_user)
+        await db.commit()
+    except DomainError as err:
+        await db.rollback()
+        raise err.to_http_exception()
+
+    return {
+        "message": "Event deleted successfully",
+        "event_id": event_id,
+        "deactivated": True,
+        "session_impact": _impact_summary(impact),
+    }
 
 # Attendance endpoints
 
 @router.get("/events/{event_id}/attendance", response_model=List[EventAttendanceResponse])
 async def get_event_attendance(
     event_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db),
 ):
     """Get attendance records for an event (Admin only)"""
     check_admin_permission(current_user)
     
-    res = await db.execute(select(AcademicEvent).where(AcademicEvent.id == event_id))
-    event = res.scalar_one_or_none()
-    if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event not found"
-        )
+    event = await get_event_or_404(db, event_id)
     
     att_res = await db.execute(
         select(EventAttendance).where(EventAttendance.event_id == event_id)
@@ -566,16 +594,10 @@ async def mark_attendance(
     """Mark attendance for an event (Students can mark their own, Admins can mark anyone's)"""
     
     # Find the event
-    res = await db.execute(select(AcademicEvent).where(AcademicEvent.id == event_id))
-    event = res.scalar_one_or_none()
-    if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Event not found"
-        )
+    event = await get_event_or_404(db, event_id)
     
     # For students, they can only mark their own attendance
-    if current_user.role == UserRole.student:
+    if has_role(current_user, "student"):
         sres = await db.execute(
             select(Student).where(Student.user_id == current_user.id)
         )
@@ -586,6 +608,15 @@ async def mark_attendance(
                 detail="Student profile not found",
             )
         student_id = student.id
+        # Only events of the student's own faculty (or institution-wide events).
+        if event.faculty_id is not None and event.faculty_id != student.faculty_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This event is not for your faculty"
+            )
+        # Self-marking can never claim face verification (only the face pipeline may).
+        attendance_data.face_verification_used = False
+        attendance_data.verification_confidence = None
     else:
         # Admin implementation would require student_id parameter
         raise HTTPException(
@@ -602,7 +633,7 @@ async def mark_attendance(
             )
         )
     )
-    existing_attendance = ex_res.scalar_one_or_none()
+    existing_attendance = ex_res.scalars().first()
     
     if existing_attendance:
         # Update existing attendance
@@ -709,7 +740,7 @@ async def get_calendar_overview(
 ):
     """Get calendar overview statistics"""
     
-    today = date.today()
+    today = app_today()
     start_of_month = today.replace(day=1)
     end_of_month = (start_of_month + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     
@@ -725,7 +756,7 @@ async def get_calendar_overview(
     }
     
     # Add attendance stats for students
-    if current_user.role == UserRole.student:
+    if has_role(current_user, "student"):
         sres = await db.execute(select(Student).where(Student.user_id == current_user.id))
         student = sres.scalar_one_or_none()
         if student:
@@ -733,7 +764,7 @@ async def get_calendar_overview(
                 select(func.count(EventAttendance.id)).where(
                     and_(
                         EventAttendance.student_id == student.id,
-                        EventAttendance.status == AttendanceStatus.PRESENT,
+                        EventAttendance.status == EventAttendanceStatus.PRESENT,
                         extract('month', EventAttendance.created_at) == today.month,
                     )
                 )

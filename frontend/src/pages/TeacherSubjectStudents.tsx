@@ -1,10 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import TeacherSidebar from '@/components/TeacherSidebar';
-import { Users, ArrowLeft, Mail, Loader2 } from 'lucide-react';
+import { ArrowLeft20Regular, ArrowSync20Regular, Mail16Regular, People20Regular, People24Regular } from '@fluentui/react-icons';
 import { api } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 import SemesterFilter from '@/components/filters/SemesterFilter';
@@ -17,6 +24,15 @@ interface Student {
   semester: number;
   year: number;
 }
+
+const getInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || '?';
 
 const TeacherSubjectStudents: React.FC = () => {
   const { subjectId } = useParams<{ subjectId: string }>();
@@ -64,9 +80,9 @@ const TeacherSubjectStudents: React.FC = () => {
     return (
       <TeacherSidebar>
         <div className="min-h-[60vh] flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="h-12 w-12 animate-spin text-blue-400 mx-auto" />
-            <p className="text-slate-300">Loading students...</p>
+          <div className="text-center space-y-3">
+            <ArrowSync20Regular className="mx-auto h-8 w-8 animate-spin text-brand-foreground" aria-hidden />
+            <p className="text-body text-text-muted">Loading students...</p>
           </div>
         </div>
       </TeacherSidebar>
@@ -75,79 +91,94 @@ const TeacherSubjectStudents: React.FC = () => {
 
   return (
     <TeacherSidebar>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="mx-auto max-w-7xl space-y-4">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="mb-6 border-border-default text-text-secondary hover:text-text-primary hover:bg-surface-subtle"
+          className="-ml-2 text-text-secondary"
           onClick={() => navigate('/teacher')}
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft20Regular aria-hidden />
           Back to Dashboard
         </Button>
 
-        <Card className="bg-surface-default border-border-subtle shadow-card">
-          <CardHeader className="border-b border-border-subtle pb-4">
-            <div className="flex items-start justify-between gap-4">
+        <section className="overflow-hidden rounded-lg bg-surface-default shadow">
+          <div className="flex flex-col gap-4 border-b border-border-subtle px-5 py-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+                <People20Regular aria-hidden />
+              </div>
               <div>
-                <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-                  <Users className="w-4 h-4 text-action-primary" />
-                  Students Enrolled
-                </CardTitle>
-                <CardDescription className="text-text-muted text-xs">
-                  Semester {semester} • {students.length} students
-                </CardDescription>
+                <h1 className="text-subheading text-text-primary">Students Enrolled</h1>
+                <p className="text-caption text-text-muted tabular-nums">
+                  Semester {semester} · {students.length} students
+                </p>
               </div>
-              <SemesterFilter
-                value={semester}
-                onChange={setSemester}
-                className="mt-1"
-              />
             </div>
-          </CardHeader>
-          <CardContent className="pt-6">
-            {students.length === 0 ? (
-              <div className="text-center py-12 text-text-muted">
-                <Users className="w-10 h-10 mx-auto mb-2 opacity-40" />
-                <p className="text-xs">No students enrolled in this subject</p>
+            <SemesterFilter
+              value={semester}
+              onChange={setSemester}
+              className="mt-1"
+            />
+          </div>
+
+          {students.length === 0 ? (
+            <div className="flex flex-col items-center py-14 text-center">
+              <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                <People24Regular aria-hidden />
               </div>
-            ) : (
-              <div className="grid gap-3">
+              <p className="text-subheading text-text-primary">No students enrolled in this subject</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Name</TableHead>
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Student ID</TableHead>
+                  <TableHead className="hidden normal-case tracking-normal text-caption-strong text-text-secondary md:table-cell">Email</TableHead>
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Year</TableHead>
+                  <TableHead className="normal-case tracking-normal text-caption-strong text-text-secondary">Semester</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {students.map((student) => (
-                  <div
-                    key={student.id}
-                    className="flex items-center justify-between p-3.5 bg-surface-canvas/60 hover:bg-surface-subtle rounded-lg border border-border-subtle transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-full bg-action-primary text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                        {student.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-text-primary text-sm">{student.name}</h4>
-                        <div className="flex items-center gap-2 text-xs text-text-muted">
-                          <span className="font-mono">{student.student_id}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            <Mail className="w-3 h-3" />
+                  <TableRow key={student.id} className="hover:bg-surface-hover">
+                    <TableCell className="py-2.5">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-subtle text-caption-strong text-brand-foreground"
+                          aria-hidden
+                        >
+                          {getInitials(student.name)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-body-strong text-text-primary">{student.name}</p>
+                          <p className="flex items-center gap-1 truncate text-caption text-text-muted md:hidden">
+                            <Mail16Regular aria-hidden />
                             {student.email}
-                          </span>
+                          </p>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-slate-700/50 text-slate-200 border-slate-600/50">
-                        Year {student.year}
-                      </Badge>
-                      <Badge variant="outline" className="bg-slate-700/50 text-slate-200 border-slate-600/50">
-                        Sem {student.semester}
-                      </Badge>
-                    </div>
-                  </div>
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-body text-text-secondary">{student.student_id}</TableCell>
+                    <TableCell className="hidden py-2.5 text-body text-text-muted md:table-cell">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Mail16Regular aria-hidden />
+                        {student.email}
+                      </span>
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <Badge variant="secondary">Year {student.year}</Badge>
+                    </TableCell>
+                    <TableCell className="py-2.5">
+                      <Badge variant="secondary">Sem {student.semester}</Badge>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </TableBody>
+            </Table>
+          )}
+        </section>
       </div>
     </TeacherSidebar>
   );
