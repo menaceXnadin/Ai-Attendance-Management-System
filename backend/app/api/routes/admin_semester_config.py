@@ -1,294 +1,196 @@
 #!/usr/bin/env python3
-"""
-Admin Semester Configuration API
+"""Admin term (semester configuration) API — DOMAIN_RULES §3, §3.3, §13.13.
 
-Provides CRUD operations for managing semester configurations.
-Only accessible to admin users.
+``semester_configurations`` is the single source of truth for academic terms. All rules live in
+``app.services.term_service``; this module only maps HTTP <-> service:
+
+* ``is_current`` is computed from the dates (active term containing ``app_today()``); the stored
+  column is kept in sync on every write but is never authoritative.
+* Every response item carries ``state``: ``current | upcoming | past | inactive``.
+* Create/update validation (end > start, exam window inside the term, academic year 2000-2100,
+  no overlap with another active term under an advisory lock) -> 400 ``{detail: message}``;
+  overlap -> 409 ``{detail: message}``.
+* ``DELETE`` deactivates (``is_active = false``); terms are never hard-deleted.
 """
 
-from typing import List, Optional
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, update, delete, and_, func
+from typing import Any, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field, validator
 
+from app.api.dependencies import require_admin_role
+from app.core.clock import app_today
 from app.core.database import get_db
-from app.models import SemesterConfiguration, User, UserRole
-from app.api.dependencies import get_current_user
-from app.services.academic_calculator import SemesterService
+from app.models import SemesterConfiguration, User
+from app.services import term_service
+from app.services.domain_errors import DomainError
 
 
-# Pydantic models for request/response
+# --------------------------------------------------------------------------- schemas
 class SemesterConfigRequest(BaseModel):
-    semester_number: Optional[int] = Field(None, ge=1, le=8, description="Optional reference semester for sorting/display (not used for filtering)")
-    academic_year: int = Field(..., ge=2020, le=2030, description="Academic year (e.g., 2025-2026 enter 2025)")
-    semester_name: str = Field(..., max_length=100, description="Period name (e.g., 'Fall 2025 Academic Period')")
-    start_date: date = Field(..., description="Period start date (applies to entire university)")
-    end_date: date = Field(..., description="Period end date (applies to entire university)")
-    total_weeks: Optional[int] = Field(None, ge=1, le=20, description="Duration in weeks")
-    exam_week_start: Optional[date] = Field(None, description="Exam period start date")
-    exam_week_end: Optional[date] = Field(None, description="Exam period end date")
-    is_current: bool = Field(False, description="Whether this is the active academic period")
-    is_active: bool = Field(True, description="Whether this period is active")
-    
-    @validator('end_date')
-    def validate_end_date(cls, v, values):
-        if 'start_date' in values and v <= values['start_date']:
-            raise ValueError('end_date must be after start_date')
-        return v
-    
-    @validator('exam_week_end')
-    def validate_exam_week_end(cls, v, values):
-        if v is not None and 'exam_week_start' in values and values['exam_week_start'] is not None:
-            if v <= values['exam_week_start']:
-                raise ValueError('exam_week_end must be after exam_week_start')
-        return v
-
-
-class SemesterConfigResponse(SemesterConfigRequest):
-    id: int
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[int]
-    
-    class Config:
-        from_attributes = True
+    semester_number: Optional[int] = Field(
+        None, ge=1, le=8,
+        description="Reference semester for sorting/display (1-8). Defaults to the next number within the academic year.",
+    )
+    academic_year: Optional[int] = Field(None, description="Academic-year label (start year, e.g. 2025 for 2025-26). Defaults to the start date's year.")
+    semester_name: str = Field(..., min_length=1, max_length=100, description="Term name (e.g. 'Fall 2025')")
+    start_date: date
+    end_date: date
+    total_weeks: Optional[int] = Field(None, ge=1, le=60)
+    exam_week_start: Optional[date] = None
+    exam_week_end: Optional[date] = None
+    is_current: Optional[bool] = Field(None, description="Ignored: computed from the dates")
+    is_active: bool = True
 
 
 class SemesterConfigUpdate(BaseModel):
-    semester_name: Optional[str] = Field(None, max_length=100)
+    semester_number: Optional[int] = Field(None, ge=1, le=8)
+    academic_year: Optional[int] = None
+    semester_name: Optional[str] = Field(None, min_length=1, max_length=100)
     start_date: Optional[date] = None
     end_date: Optional[date] = None
-    total_weeks: Optional[int] = Field(None, ge=1, le=20)
+    total_weeks: Optional[int] = Field(None, ge=1, le=60)
     exam_week_start: Optional[date] = None
     exam_week_end: Optional[date] = None
-    is_current: Optional[bool] = None
+    is_current: Optional[bool] = Field(None, description="Ignored: computed from the dates")
     is_active: Optional[bool] = None
 
 
 router = APIRouter(prefix="/admin/semester-config", tags=["Admin - Semester Configuration"])
 
+# Admin-only dependency (shared, Enum-safe role check).
+require_admin_user = require_admin_role
 
-async def require_admin_user(current_user: User = Depends(get_current_user)):
-    """Dependency to ensure only admin users can access these endpoints"""
-    if current_user.role != UserRole.admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+
+# --------------------------------------------------------------------------- helpers
+def term_state(row: Any, today: date) -> str:
+    """``inactive`` | ``current`` | ``upcoming`` | ``past`` (computed, never stored)."""
+    if row.is_active is False:
+        return "inactive"
+    if row.start_date <= today <= row.end_date:
+        return "current"
+    return "upcoming" if row.start_date > today else "past"
+
+
+def serialize_term(row: SemesterConfiguration, today: Optional[date] = None) -> dict[str, Any]:
+    today = today or app_today()
+    state = term_state(row, today)
+    return {
+        "id": row.id,
+        "semester_number": row.semester_number,
+        "academic_year": row.academic_year,
+        "semester_name": row.semester_name,
+        "name": row.semester_name,
+        "start_date": row.start_date.isoformat(),
+        "end_date": row.end_date.isoformat(),
+        "total_weeks": row.total_weeks,
+        "exam_week_start": row.exam_week_start.isoformat() if row.exam_week_start else None,
+        "exam_week_end": row.exam_week_end.isoformat() if row.exam_week_end else None,
+        "is_current": state == "current",
+        "is_active": row.is_active is not False,
+        "state": state,
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _http_from_term_error(err: DomainError) -> HTTPException:
+    """``term_invalid`` -> 409 when any error is an overlap, else 400; detail = message string."""
+    errors = err.details.get("errors") or []
+    overlap = [e for e in errors if e.get("code") == "overlaps_active_term"]
+    if overlap:
+        return HTTPException(status_code=status.HTTP_409_CONFLICT, detail=overlap[0]["message"])
+    if errors:
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                             detail="; ".join(e["message"] for e in errors))
+    return HTTPException(status_code=err.http_status if err.http_status != 422 else 400, detail=err.message)
+
+
+async def _sync_is_current(db: AsyncSession) -> None:
+    """Keep the legacy ``is_current`` column equal to the computed value (Rule §3)."""
+    today = app_today()
+    computed = and_(
+        SemesterConfiguration.is_active.is_(True),
+        SemesterConfiguration.start_date <= today,
+        SemesterConfiguration.end_date >= today,
+    )
+    await db.execute(
+        update(SemesterConfiguration)
+        .where(SemesterConfiguration.is_current.is_distinct_from(computed))
+        .values(is_current=computed)
+        .execution_options(synchronize_session=False)
+    )
+
+
+def _refresh_semester_facade() -> None:
+    """Drop the per-worker term cache used by the legacy ``AutomaticSemesterService`` facade."""
+    try:
+        from app.services.automatic_semester import AutomaticSemesterService
+
+        AutomaticSemesterService.clear_override_cache()
+        AutomaticSemesterService.invalidate_terms()
+    except Exception:  # pragma: no cover - facade is optional
+        pass
+
+
+async def _get_row(db: AsyncSession, config_id: int) -> SemesterConfiguration:
+    row = await db.get(SemesterConfiguration, config_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Semester configuration not found")
+    return row
+
+
+async def _default_semester_number(db: AsyncSession, academic_year: int) -> int:
+    count = (await db.execute(
+        select(func.count(SemesterConfiguration.id)).where(
+            SemesterConfiguration.academic_year == academic_year,
+            SemesterConfiguration.is_active.is_(True),
         )
-    return current_user
+    )).scalar() or 0
+    return max(1, min(8, int(count) + 1))
 
 
-@router.get("/", response_model=List[SemesterConfigResponse])
+def _weeks(start: date, end: date) -> int:
+    return max(1, min(60, -(-((end - start).days + 1) // 7)))
+
+
+# --------------------------------------------------------------------------- reads
+@router.get("/")
 async def get_all_semester_configurations(
-    active_only: bool = Query(False, description="Return only active semesters"),
+    active_only: bool = Query(False, description="Return only active terms"),
     current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get all semester configurations"""
-    semester_service = SemesterService(db)
-    configurations = await semester_service.get_all_semesters(active_only=active_only)
-    return configurations
+    db: AsyncSession = Depends(get_db),
+) -> List[dict]:
+    """All terms (newest first) with computed ``is_current`` and ``state``."""
+    stmt = select(SemesterConfiguration).order_by(SemesterConfiguration.start_date.desc(), SemesterConfiguration.id.desc())
+    if active_only:
+        stmt = stmt.where(SemesterConfiguration.is_active.is_(True))
+    rows = (await db.execute(stmt)).scalars().all()
+    today = app_today()
+    return [serialize_term(r, today) for r in rows]
 
 
-@router.get("/current", response_model=Optional[SemesterConfigResponse])
+@router.get("/current")
 async def get_current_semester_configuration(
     current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get the current semester configuration"""
-    semester_service = SemesterService(db)
-    current_semester = await semester_service.get_current_semester()
-    
-    if not current_semester:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No current semester configuration found"
-        )
-    
-    return current_semester
-
-
-@router.get("/{config_id}", response_model=SemesterConfigResponse)
-async def get_semester_configuration(
-    config_id: int,
-    current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Get a specific semester configuration by ID"""
-    semester_service = SemesterService(db)
-    configuration = await semester_service.get_semester_by_id(config_id)
-    
-    if not configuration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Semester configuration not found"
-        )
-    
-    return configuration
-
-
-@router.post("/", response_model=SemesterConfigResponse, status_code=status.HTTP_201_CREATED)
-async def create_semester_configuration(
-    config_data: SemesterConfigRequest,
-    current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Create a new semester configuration"""
-    
-    # Check for conflicts with existing semesters
-    conflict_query = select(SemesterConfiguration).where(
-        and_(
-            SemesterConfiguration.academic_year == config_data.academic_year,
-            SemesterConfiguration.semester_number == config_data.semester_number,
-            SemesterConfiguration.is_active == True
-        )
-    )
-    conflict_result = await db.execute(conflict_query)
-    existing = conflict_result.scalar_one_or_none()
-    
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Semester {config_data.semester_number} for academic year {config_data.academic_year} already exists"
-        )
-    
-    # If this is set as current, unset any other current semester
-    if config_data.is_current:
-        await _unset_current_semesters(db)
-    
-    # Create new semester configuration
-    new_config = SemesterConfiguration(
-        **config_data.dict(),
-        created_by=current_user.id
-    )
-    
-    db.add(new_config)
-    await db.commit()
-    await db.refresh(new_config)
-    
-    return new_config
-
-
-@router.put("/{config_id}", response_model=SemesterConfigResponse)
-async def update_semester_configuration(
-    config_id: int,
-    config_data: SemesterConfigUpdate,
-    current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Update an existing semester configuration"""
-    
-    # Get existing configuration
-    query = select(SemesterConfiguration).where(SemesterConfiguration.id == config_id)
-    result = await db.execute(query)
-    existing_config = result.scalar_one_or_none()
-    
-    if not existing_config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Semester configuration not found"
-        )
-    
-    # If setting as current, unset other current semesters
-    if config_data.is_current:
-        await _unset_current_semesters(db, exclude_id=config_id)
-    
-    # Update fields
-    update_data = {k: v for k, v in config_data.dict(exclude_unset=True).items()}
-    if update_data:
-        update_data['updated_at'] = datetime.utcnow()
-        
-        update_query = update(SemesterConfiguration).where(
-            SemesterConfiguration.id == config_id
-        ).values(**update_data)
-        
-        await db.execute(update_query)
-        await db.commit()
-        await db.refresh(existing_config)
-    
-    return existing_config
-
-
-@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_semester_configuration(
-    config_id: int,
-    soft_delete: bool = Query(True, description="Soft delete (set is_active=False) or hard delete"),
-    current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Delete a semester configuration"""
-    
-    # Check if configuration exists
-    query = select(SemesterConfiguration).where(SemesterConfiguration.id == config_id)
-    result = await db.execute(query)
-    existing_config = result.scalar_one_or_none()
-    
-    if not existing_config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Semester configuration not found"
-        )
-    
-    if existing_config.is_current:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete the current semester configuration"
-        )
-    
-    if soft_delete:
-        # Soft delete - just mark as inactive
-        update_query = update(SemesterConfiguration).where(
-            SemesterConfiguration.id == config_id
-        ).values(is_active=False, updated_at=datetime.utcnow())
-        
-        await db.execute(update_query)
-    else:
-        # Hard delete
-        delete_query = delete(SemesterConfiguration).where(SemesterConfiguration.id == config_id)
-        await db.execute(delete_query)
-    
-    await db.commit()
-
-
-@router.post("/{config_id}/set-current", response_model=SemesterConfigResponse)
-async def set_current_semester(
-    config_id: int,
-    current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """Set a semester configuration as the current semester"""
-    
-    # Check if configuration exists
-    query = select(SemesterConfiguration).where(
-        and_(
-            SemesterConfiguration.id == config_id,
-            SemesterConfiguration.is_active == True
-        )
-    )
-    result = await db.execute(query)
-    config = result.scalar_one_or_none()
-    
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Semester configuration not found or inactive"
-        )
-    
-    # Unset all other current semesters
-    await _unset_current_semesters(db)
-    
-    # Set this one as current
-    update_query = update(SemesterConfiguration).where(
-        SemesterConfiguration.id == config_id
-    ).values(is_current=True, updated_at=datetime.utcnow())
-    
-    await db.execute(update_query)
-    await db.commit()
-    await db.refresh(config)
-    
-    return config
+    """The active term containing today, else 404 ``{detail, term_state}``."""
+    terms = await term_service.load_terms(db)
+    today = app_today()
+    current = term_service.term_for_date(terms, today)
+    if current is None:
+        state = term_service.compute_term_state(terms, today)
+        message = "No term is in progress today (between terms)" if state == term_service.TERM_STATE_BETWEEN \
+            else "No terms have been configured"
+        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"detail": message, "term_state": state})
+    row = await _get_row(db, current.id)
+    return {**serialize_term(row, today), "term_state": term_service.TERM_STATE_ACTIVE}
 
 
 @router.get("/validate/dates")
@@ -297,65 +199,154 @@ async def validate_semester_dates(
     end_date: date = Query(..., description="Proposed end date"),
     exclude_id: Optional[int] = Query(None, description="ID to exclude from validation"),
     current_user: User = Depends(require_admin_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Validate that semester dates don't conflict with existing semesters"""
-    
-    if end_date <= start_date:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="End date must be after start date"
-        )
-    
-    # Check for date overlaps
-    conditions = [
-        SemesterConfiguration.is_active == True,
-        # Check for any overlap
-        and_(
-            SemesterConfiguration.start_date < end_date,
-            SemesterConfiguration.end_date > start_date
-        )
-    ]
-    
-    if exclude_id:
-        conditions.append(SemesterConfiguration.id != exclude_id)
-    
-    query = select(SemesterConfiguration).where(and_(*conditions))
-    result = await db.execute(query)
-    conflicts = result.scalars().all()
-    
+    """Advisory check (same rules as create/update, without taking the write lock)."""
+    errors = term_service.validate_term_fields(start_date=start_date, end_date=end_date)
+    if errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=errors[0]["message"])
+    conflicts = term_service.find_overlapping_terms(await term_service.load_terms(db), start_date, end_date,
+                                                    exclude_id=exclude_id)
     if conflicts:
-        conflict_details = [
-            {
-                "id": config.id,
-                "name": config.semester_name,
-                "start_date": config.start_date.isoformat(),
-                "end_date": config.end_date.isoformat()
-            }
-            for config in conflicts
-        ]
-        
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
-                "message": "Date range conflicts with existing semesters",
-                "conflicts": conflict_details
-            }
+                "message": "Date range conflicts with existing terms",
+                "conflicts": [t.summary() for t in conflicts],
+            },
         )
-    
     return {"valid": True, "message": "No date conflicts found"}
 
 
-# Helper functions
-async def _unset_current_semesters(db: AsyncSession, exclude_id: Optional[int] = None):
-    """Unset all current semester flags, optionally excluding one ID"""
-    conditions = [SemesterConfiguration.is_current == True]
-    
-    if exclude_id:
-        conditions.append(SemesterConfiguration.id != exclude_id)
-    
-    update_query = update(SemesterConfiguration).where(
-        and_(*conditions)
-    ).values(is_current=False, updated_at=datetime.utcnow())
-    
-    await db.execute(update_query)
+@router.get("/{config_id}")
+async def get_semester_configuration(
+    config_id: int,
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return serialize_term(await _get_row(db, config_id))
+
+
+# --------------------------------------------------------------------------- writes
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def create_semester_configuration(
+    config_data: SemesterConfigRequest,
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a term (Rule §3.3 validation under the term write lock)."""
+    academic_year = config_data.academic_year if config_data.academic_year is not None else config_data.start_date.year
+    try:
+        await term_service.assert_term_valid(
+            db,
+            start_date=config_data.start_date,
+            end_date=config_data.end_date,
+            exam_week_start=config_data.exam_week_start,
+            exam_week_end=config_data.exam_week_end,
+            academic_year=academic_year,
+            is_active=config_data.is_active,
+        )
+    except DomainError as err:
+        await db.rollback()
+        raise _http_from_term_error(err)
+
+    semester_number = config_data.semester_number or await _default_semester_number(db, academic_year)
+    now = datetime.utcnow()
+    row = SemesterConfiguration(
+        semester_number=semester_number,
+        academic_year=academic_year,
+        semester_name=config_data.semester_name.strip(),
+        start_date=config_data.start_date,
+        end_date=config_data.end_date,
+        total_weeks=config_data.total_weeks or _weeks(config_data.start_date, config_data.end_date),
+        exam_week_start=config_data.exam_week_start,
+        exam_week_end=config_data.exam_week_end,
+        is_current=False,
+        is_active=config_data.is_active,
+        created_by=current_user.id,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(row)
+    await db.flush()
+    await _sync_is_current(db)
+    await db.commit()
+    await db.refresh(row)
+    _refresh_semester_facade()
+    return serialize_term(row)
+
+
+@router.put("/{config_id}")
+async def update_semester_configuration(
+    config_id: int,
+    config_data: SemesterConfigUpdate,
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Partial update; the merged term is re-validated (Rule §3.3). ``is_current`` is ignored."""
+    row = await _get_row(db, config_id)
+    changes = config_data.model_dump(exclude_unset=True)
+    changes.pop("is_current", None)
+    if "semester_name" in changes and changes["semester_name"] is not None:
+        changes["semester_name"] = changes["semester_name"].strip()
+    for required in ("semester_name", "start_date", "end_date", "semester_number", "academic_year", "is_active"):
+        if required in changes and changes[required] is None:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"{required} cannot be empty")
+
+    merged = {
+        "start_date": changes.get("start_date", row.start_date),
+        "end_date": changes.get("end_date", row.end_date),
+        "exam_week_start": changes.get("exam_week_start", row.exam_week_start),
+        "exam_week_end": changes.get("exam_week_end", row.exam_week_end),
+        "academic_year": changes.get("academic_year", row.academic_year),
+        "is_active": changes.get("is_active", row.is_active is not False),
+    }
+    try:
+        await term_service.assert_term_valid(db, exclude_id=row.id, **merged)
+    except DomainError as err:
+        await db.rollback()
+        raise _http_from_term_error(err)
+
+    if changes:
+        for field, value in changes.items():
+            setattr(row, field, value)
+        row.updated_at = datetime.utcnow()
+        await db.flush()
+        await _sync_is_current(db)
+    await db.commit()
+    await db.refresh(row)
+    _refresh_semester_facade()
+    return serialize_term(row)
+
+
+@router.delete("/{config_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_semester_configuration(
+    config_id: int,
+    soft_delete: bool = Query(True, description="Ignored: terms are always deactivated, never hard-deleted"),
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Deactivate a term (``is_active = false``). Hard delete is never performed (Rule §3.3)."""
+    row = await _get_row(db, config_id)
+    if row.is_active is not False:
+        row.is_active = False
+        row.updated_at = datetime.utcnow()
+        await db.flush()
+        await _sync_is_current(db)
+    await db.commit()
+    _refresh_semester_facade()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/{config_id}/set-current")
+async def set_current_semester(
+    config_id: int,
+    current_user: User = Depends(require_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retired: the current term is the active term whose dates contain today."""
+    await _get_row(db, config_id)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="The current term is determined by its dates; edit the term's start and end dates instead",
+    )

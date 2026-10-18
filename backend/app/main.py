@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from app.core.config import settings
@@ -9,7 +9,7 @@ from app.api.routes.admins import router as admins_router
 from app.api.routes.teachers import router as teachers_router
 from app.api.routes.teacher_dashboard import router as teacher_dashboard_router
 from app.api.routes.schedules import router as schedules_router
-from app.api.routes.face_testing import router as face_testing_router
+from app.api.routes.face_enrollment import router as face_enrollment_router
 from app.api.routes.event_sessions import router as event_sessions_router
 from app.api.routes.academic_metrics import router as academic_metrics_router
 from app.api.routes.student_attendance import router as student_attendance_router
@@ -23,14 +23,11 @@ from app.api.routes.auto_absent_trigger import router as auto_absent_trigger_rou
 from app.api.routes.system_settings import router as system_settings_router
 from app.api.routes.notifications import router as notifications_router
 from app.api.calendar import router as calendar_router
+from app.api.dependencies import require_debug_admin
 from app.middleware import ResponseTimeMiddleware
 from app.services.scheduler_service import scheduler_service
 import logging
-import warnings
 from contextlib import asynccontextmanager
-
-# Suppress pkg_resources deprecation warning
-warnings.filterwarnings("ignore", category=UserWarning, module="face_recognition_models")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,20 +45,8 @@ async def lifespan(app: FastAPI):
     for route in app.routes:
         logger.info(f"Route: {getattr(route, 'path', str(route))} - Methods: {getattr(route, 'methods', set())}")
 
-    # Load academic calendar override configuration
-    logger.info("Loading academic calendar configuration...")
-    try:
-        from app.core.database import AsyncSessionLocal
-        from app.services.automatic_semester import AutomaticSemesterService
-
-        async with AsyncSessionLocal() as session:
-            override_active = await AutomaticSemesterService.load_override_from_db(session)
-            if override_active:
-                logger.info("✅ Academic calendar override loaded from database")
-            else:
-                logger.info("✅ Using default academic calendar dates")
-    except Exception as e:
-        logger.warning(f"Failed to load calendar override (using defaults): {e}")
+    # Academic periods come from semester_configurations via term_service (DOMAIN_RULES §3);
+    # the old month-day override is no longer loaded at startup.
 
     # Start the background scheduler for auto-absent processing
     logger.info("Starting background scheduler...")
@@ -114,31 +99,31 @@ async def handle_options_requests(request, call_next):
 app.add_middleware(
     CORSMiddleware,
     # When allow_credentials=True, '*' is not allowed. List explicit origins used by frontend.
-    allow_origins=[
+    # Local dev origins plus anything configured in ALLOWED_ORIGINS (backend/.env).
+    allow_origins=sorted({
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-    ],
+        *(settings.allowed_origins or []),
+    }),
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 # Add response time tracking middleware
 app.add_middleware(ResponseTimeMiddleware)
 
-# Add debug middleware to see all requests
+# Request logging: method, path and status only. Never log headers (they carry
+# the Authorization bearer token) or query strings.
 @app.middleware("http")
 async def debug_requests(request, call_next):
-    print(f"[MIDDLEWARE DEBUG] {request.method} {request.url}")
-    print(f"[MIDDLEWARE DEBUG] Headers: {dict(request.headers)}")
-    
     response = await call_next(request)
-    
-    print(f"[MIDDLEWARE DEBUG] Response status: {response.status_code}")
+    if settings.debug:
+        logger.debug("%s %s -> %s", request.method, request.url.path, response.status_code)
     return response
 
 # Add trusted host middleware
@@ -150,7 +135,7 @@ app.add_middleware(
 # Include routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(face_recognition.router, prefix="/api")
-app.include_router(face_testing_router, prefix="/api")
+app.include_router(face_enrollment_router, prefix="/api")
 app.include_router(students.router, prefix="/api")
 app.include_router(classes.router, prefix="/api")
 app.include_router(attendance.router, prefix="/api")
@@ -196,8 +181,8 @@ async def health_check():
     }
 
 @app.get("/api/__routes")
-async def list_routes():
-    """Diagnostic endpoint: list all registered routes and methods."""
+async def list_routes(current_user=Depends(require_debug_admin)):
+    """Diagnostic endpoint: list all registered routes and methods (admin + DEBUG only)."""
     routes_info = []
     for route in app.routes:
         try:
@@ -211,7 +196,13 @@ async def list_routes():
 # Exception handlers
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
+    """Unknown routes get a generic body; explicit 404s raised by endpoints keep their
+    `detail` (e.g. DomainError ``{code, message}`` like ``session_not_found``)."""
     from fastapi.responses import JSONResponse
+    detail = getattr(exc, "detail", None)
+    if detail not in (None, "Not Found"):
+        return JSONResponse(status_code=404, content={"detail": detail},
+                            headers=getattr(exc, "headers", None))
     return JSONResponse(
         status_code=404,
         content={"detail": "The requested resource was not found"}

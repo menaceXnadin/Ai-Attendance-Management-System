@@ -5,9 +5,14 @@ from typing import List
 import time
 from datetime import datetime, timedelta
 
+from app.core.clock import app_today
+
 from app.core.database import get_db
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin_role, has_role, get_teacher_for_user, get_teacher_cohorts
 from app.models import User, Student, Subject, Mark, AttendanceRecord, Notification, AIInsight
+from app.services.accurate_attendance_calculator import countable_student_day_rows, counts_by_date, metric_fields
+from app.services.attendance_metrics import Counts, attended_statuses, summarize_counts
+from app.services.attendance_policy import get_attendance_policy
 from app.services.health_checker import ServiceHealthChecker
 
 router = APIRouter()
@@ -43,45 +48,23 @@ async def get_real_service_status(db: AsyncSession) -> dict:
         }
 
 # ============ DASHBOARD STATS ============
+async def _count(db: AsyncSession, column) -> int:
+    return int((await db.execute(select(func.count(column)))).scalar() or 0)
+
+
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin_role)
 ):
-    """Get dashboard statistics showing relationships between tables."""
-    
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only admins can access dashboard stats"
-        )
-    
-    # Get total counts with relationships
-    students_result = await db.execute(select(Student))
-    total_students = len(students_result.scalars().all())
-    
-    subjects_result = await db.execute(select(Subject))
-    total_subjects = len(subjects_result.scalars().all())
-    
-    attendance_result = await db.execute(select(AttendanceRecord))
-    total_attendance = len(attendance_result.scalars().all())
-    
-    marks_result = await db.execute(select(Mark))
-    total_marks = len(marks_result.scalars().all())
-    
-    notifications_result = await db.execute(select(Notification))
-    total_notifications = len(notifications_result.scalars().all())
-    
-    insights_result = await db.execute(select(AIInsight))
-    total_insights = len(insights_result.scalars().all())
-    
+    """Row counts of the main tables (admin only). COUNT queries, no full-table loads."""
     return {
-        "total_students": total_students,
-        "total_subjects": total_subjects,
-        "total_attendance_records": total_attendance,
-        "total_marks": total_marks,
-        "total_notifications": total_notifications,
-        "total_ai_insights": total_insights,
+        "total_students": await _count(db, Student.id),
+        "total_subjects": await _count(db, Subject.id),
+        "total_attendance_records": await _count(db, AttendanceRecord.id),
+        "total_marks": await _count(db, Mark.id),
+        "total_notifications": await _count(db, Notification.id),
+        "total_ai_insights": await _count(db, AIInsight.id),
         "message": "All table relationships are synced! Data automatically cascades between related tables."
     }
 
@@ -91,38 +74,21 @@ async def get_sidebar_stats(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get statistics for sidebar display."""
-    
-    # Get total students count
-    students_result = await db.execute(select(Student))
-    total_students = len(students_result.scalars().all())
-    
-    # Get total subjects/classes count
-    subjects_result = await db.execute(select(Subject))
-    total_classes = len(subjects_result.scalars().all())
-    
-    # Get today's attendance for present students count
-    from datetime import date
-    today = date.today()
-    
-    attendance_result = await db.execute(
-        select(AttendanceRecord).filter(
-            AttendanceRecord.date == today,
-            AttendanceRecord.status == "present"
-        )
-    )
-    present_today = len(attendance_result.scalars().all())
-    
-    # Get total attendance records count
-    all_attendance_result = await db.execute(select(AttendanceRecord))
-    total_attendance_records = len(all_attendance_result.scalars().all())
-    
+    """Sidebar counters. ``attendance_rate`` = today's attended / considered class slots over
+    countable records (DOMAIN_RULES section 8); 0 with ``has_data=false`` when nothing is recorded.
+    ``present_today`` = distinct students with at least one attended class today."""
+    policy = await get_attendance_policy(db)
+    today = app_today()
+    summary = summarize_counts((await counts_by_date(db, today, today)).get(today, Counts()), policy)
+    ok = attended_statuses(policy)
+    present_today = len({sid for sid, _, st in await countable_student_day_rows(db, today, today) if st in ok})
     return {
-        "total_students": total_students,
-        "total_classes": total_classes,
+        "total_students": await _count(db, Student.id),
+        "total_classes": await _count(db, Subject.id),
         "present_today": present_today,
-        "total_attendance_records": total_attendance_records,
-        "attendance_rate": round((present_today / total_students * 100) if total_students > 0 else 0, 1)
+        "total_attendance_records": await _count(db, AttendanceRecord.id),
+        "attendance_rate": summary["attendance_rate"],
+        **metric_fields(summary, include_term=False),
     }
 
 # ============ SYSTEM HEALTH ENDPOINT ============
@@ -181,9 +147,8 @@ async def get_system_health(
             avg_response_time = 35.0  # Fallback
         
         # Get system metrics from database activity
-        students_result = await db.execute(select(Student))
-        active_sessions = len(students_result.scalars().all())  # Use student count as active sessions approximation
-        
+        active_sessions = await _count(db, Student.id)  # student count as an active-sessions approximation
+
         return {
             "status": "healthy",
             "uptime_percentage": round(uptime_percentage, 1),
@@ -219,59 +184,75 @@ async def get_attendance_with_details(
     """Get attendance records with student and subject relationships."""
     
     # For students, only show their own attendance
-    if current_user.role == "student":
+    if has_role(current_user, "student"):
         student_result = await db.execute(
             select(Student).filter(Student.user_id == current_user.id)
         )
-        student = student_result.scalar_one_or_none()
+        student = student_result.scalars().first()
         if not student:
             return {"message": "Student profile not found", "attendance": []}
         
         attendance_result = await db.execute(
             select(AttendanceRecord).filter(AttendanceRecord.student_id == student.id)
         )
-    else:
+    elif has_role(current_user, "admin"):
         # Admins can see all attendance
         attendance_result = await db.execute(select(AttendanceRecord))
+    elif has_role(current_user, "faculty"):
+        # Teachers: only students of cohorts (faculty_id + semester) they teach
+        teacher = await get_teacher_for_user(db, current_user)
+        cohorts = await get_teacher_cohorts(db, teacher.id) if teacher else set()
+        if not cohorts:
+            return {"attendance": [], "total_records": 0, "message": "No classes assigned"}
+        from sqlalchemy import or_, and_
+        cohort_filter = or_(*[
+            and_(Student.faculty_id == fid, Student.semester == sem) for fid, sem in cohorts
+        ])
+        attendance_result = await db.execute(
+            select(AttendanceRecord)
+            .join(Student, AttendanceRecord.student_id == Student.id)
+            .where(cohort_filter)
+        )
+    else:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
     
     attendance_records = attendance_result.scalars().all()
-    
-    # Get related data for each record
+
+    # Related rows in two batch queries (was 3 queries per record).
+    student_ids = {r.student_id for r in attendance_records}
+    subject_ids = {r.subject_id for r in attendance_records if r.subject_id}
+    students = {}
+    if student_ids:
+        for st, full_name, email in (await db.execute(
+            select(Student, User.full_name, User.email)
+            .join(User, User.id == Student.user_id, isouter=True)
+            .where(Student.id.in_(student_ids))
+        )).all():
+            students[st.id] = (st, full_name, email)
+    subjects = {}
+    if subject_ids:
+        subjects = {sub.id: sub for sub in (await db.execute(select(Subject).where(Subject.id.in_(subject_ids)))).scalars().all()}
+
     detailed_attendance = []
     for record in attendance_records:
-        # Get student info
-        student_result = await db.execute(
-            select(Student).filter(Student.id == record.student_id)
-        )
-        student = student_result.scalar_one_or_none()
-        
-        # Get user info
-        user_result = await db.execute(
-            select(User).filter(User.id == student.user_id)
-        ) if student else None
-        user = user_result.scalar_one_or_none() if user_result else None
-        
-        # Get subject info (if available)
-        subject = None
-        if record.subject_id:
-            subject_result = await db.execute(
-                select(Subject).filter(Subject.id == record.subject_id)
-            )
-            subject = subject_result.scalar_one_or_none()
-        
+        student, full_name, email = students.get(record.student_id, (None, None, None))
+        subject = subjects.get(record.subject_id) if record.subject_id else None
         detailed_attendance.append({
             "id": record.id,
             "date": record.date,
             "status": record.status,
-            "student_name": user.full_name if user else "Unknown",
-            "student_email": user.email if user else "Unknown",
+            "student_name": full_name or "Unknown",
+            "student_email": email or "Unknown",
             "student_id": student.student_id if student else "Unknown",
             "subject_name": subject.name if subject else "General",
             "subject_code": subject.code if subject else "N/A",
             "confidence_score": record.confidence_score,
-            "notes": record.notes
+            "notes": record.notes,
+            "session_id": record.session_id,
+            "source": record.source,
+            "excluded_from_metrics": bool(record.excluded_from_metrics),
         })
-    
+
     return {
         "attendance": detailed_attendance,
         "total_records": len(detailed_attendance),
@@ -286,12 +267,12 @@ async def get_student_performance(
 ):
     """Get student performance data with subject relationships."""
     
-    if current_user.role == "student":
+    if has_role(current_user, "student"):
         # Students see their own performance
         student_result = await db.execute(
             select(Student).filter(Student.user_id == current_user.id)
         )
-        student = student_result.scalar_one_or_none()
+        student = student_result.scalars().first()
         if not student:
             return {"message": "Student profile not found", "performance": []}
         
@@ -300,13 +281,14 @@ async def get_student_performance(
         )
         marks = marks_result.scalars().all()
         
+        subject_ids = {m.subject_id for m in marks if m.subject_id}
+        subjects = {}
+        if subject_ids:
+            subjects = {sub.id: sub for sub in (await db.execute(select(Subject).where(Subject.id.in_(subject_ids)))).scalars().all()}
         performance_data = []
         for mark in marks:
-            subject_result = await db.execute(
-                select(Subject).filter(Subject.id == mark.subject_id)
-            )
-            subject = subject_result.scalar_one_or_none()
-            
+            subject = subjects.get(mark.subject_id)
+
             performance_data.append({
                 "subject_name": subject.name if subject else "Unknown",
                 "subject_code": subject.code if subject else "Unknown",
@@ -341,7 +323,7 @@ async def get_realtime_metrics(
         from datetime import date, timedelta
         import psutil
         
-        today = date.today()
+        today = app_today()
         
         # Get REAL system load using psutil
         try:
@@ -368,17 +350,13 @@ async def get_realtime_metrics(
             active_users = 1
         
         # Get total registered students (DYNAMIC from database)
-        students_result = await db.execute(select(Student))
-        total_users = len(students_result.scalars().all())
-        
+        total_users = await _count(db, Student.id)
+
         # Get today's actual attendance count (DYNAMIC)
-        recent_attendance_result = await db.execute(
-            select(AttendanceRecord).filter(
-                func.date(AttendanceRecord.date) == today
-            )
-        )
-        attendance_today = len(recent_attendance_result.scalars().all())
-        
+        attendance_today = int((await db.execute(
+            select(func.count(AttendanceRecord.id)).where(AttendanceRecord.date == today)
+        )).scalar() or 0)
+
         # Simulate processing queue based on recent activity
         processing_queue = max(0, attendance_today // 10)  # Every 10 attendance = 1 task
         

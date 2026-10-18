@@ -115,7 +115,7 @@ backend/
 │   │       ├── auth.py        # Authentication routes
 │   │       └── face_recognition.py
 │   ├── services/
-│   │   └── face_recognition.py # Face recognition service
+│   │   └── insightface_service.py # Face recognition service (InsightFace)
 │   └── utils/
 ├── alembic/                    # Database migrations
 ├── requirements.txt

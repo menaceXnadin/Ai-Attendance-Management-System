@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Time, Boolean, ForeignKey, Enum as SQLEnum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Time, Boolean, ForeignKey, Enum as SQLEnum, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import relationship, backref
 from app.core.database import Base
 import enum
@@ -58,6 +58,9 @@ class ClassSchedule(Base):
         # Prevent classroom conflicts: same classroom, day, time cannot be double-booked
         UniqueConstraint('classroom', 'day_of_week', 'start_time', 'academic_year',
                         name='unique_classroom_time_slot'),
+        # Added by revision o20261018_class_sessions
+        CheckConstraint('end_time > start_time', name='ck_class_schedule_time_order'),
+        Index('idx_class_schedules_teacher_id', 'teacher_id'),
     )
     
     def __repr__(self):

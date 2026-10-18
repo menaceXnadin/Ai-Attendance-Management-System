@@ -1,13 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, text
+from sqlalchemy import select, and_, text, func, delete as sa_delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
-from typing import List
-from datetime import datetime
+from typing import List, Optional
+from datetime import date, datetime
+from app.core.clock import app_today
 from app.core.database import get_db
-from app.models import Student, User, Faculty
+from app.models import Student, User, Faculty, AttendanceRecord
 from app.schemas import Student as StudentSchema, StudentCreate, StudentUpdate
-from app.api.dependencies import get_current_admin, get_current_user
+from app.api.dependencies import get_current_admin, get_current_user, require_admin_role, has_role
+from app.services import face_enrollment, face_store
+from app.services.domain_errors import DomainError
 from app.utils import generate_student_id
 
 router = APIRouter(prefix="/students", tags=["students"])
@@ -20,7 +25,7 @@ async def get_all_students(
     db: AsyncSession = Depends(get_db)
 ):
     """Get all students (admin and teachers can see all, students see only themselves)."""
-    if (hasattr(current_user.role, 'value') and current_user.role.value == "admin") or current_user.role == "admin":
+    if has_role(current_user, "admin"):
         # Admin can see all students
         result = await db.execute(
             select(Student).options(
@@ -28,7 +33,7 @@ async def get_all_students(
                 selectinload(Student.faculty_rel)
             ).offset(skip).limit(limit)
         )
-    elif (hasattr(current_user.role, 'value') and current_user.role.value == "student") or current_user.role == "student":
+    elif has_role(current_user, "student"):
         # Students can only see themselves
         result = await db.execute(
             select(Student).options(
@@ -82,11 +87,10 @@ async def get_all_students(
                 "phone_number": student.phone_number or "",
                 "emergency_contact": student.emergency_contact or "",
                 "profile_image_url": getattr(student, "profile_image_url", ""),
-                "face_encoding": getattr(student, "face_encoding", []),
+                **face_store.face_fields(student),  # face_encoding is always None (§8)
                 "user": user_data
             }
             student_list.append(student_data)
-            print(f"Added student to list: {student_data}")
         except Exception as e:
             print(f"Error processing student {getattr(student, 'id', 'unknown')}: {str(e)}")
     
@@ -115,7 +119,7 @@ async def get_student(
         )
     
     # Check permissions
-    if ((hasattr(current_user.role, 'value') and current_user.role.value == "student") or current_user.role == "student") and student.user_id != current_user.id:
+    if has_role(current_user, "student") and student.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
@@ -128,7 +132,9 @@ async def get_student(
         "year": student.year,
         "phone_number": student.phone_number,
         "emergency_contact": student.emergency_contact,
-        "face_encoding": getattr(student, "face_encoding", []),
+        "enrolled_on": student.enrolled_on.isoformat() if student.enrolled_on else None,
+        "cohort_since": student.cohort_since.isoformat() if student.cohort_since else None,
+        **face_store.face_fields(student),  # face_encoding is always None (§8)
         "user": {
             "id": student.user.id,
             "email": student.user.email,
@@ -141,20 +147,16 @@ async def get_student(
 @router.post("/")
 async def create_student(
     student_data: StudentCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new student (admin only)."""
-    print(f"[Backend] Received create student request: {student_data}")
     print(f"[Backend] Student data batch: {getattr(student_data, 'batch', 'NOT_FOUND')}")
     print(f"[Backend] Student data semester: {getattr(student_data, 'semester', 'NOT_FOUND')}")
     print(f"[Backend] Student data year: {getattr(student_data, 'year', 'NOT_FOUND')}")
     
-    # Check if user is admin - handle both enum and string roles
-    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
-    print(f"[Backend] User role check: {user_role} (type: {type(current_user.role)})")
-    if user_role != "admin":
-        print(f"[Backend] Unauthorized create attempt by user: {current_user.email} with role: {user_role}")
+    # Admin only
+    if not has_role(current_user, "admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -252,6 +254,7 @@ async def create_student(
             "year": student.year,
             "phone_number": student.phone_number or "",
             "emergency_contact": student.emergency_contact or "",
+            **face_store.face_fields(student),
             "user": {
                 "id": student.user.id,
                 "email": student.user.email,
@@ -277,88 +280,188 @@ async def update_student(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Update a student."""
-    print(f"[Backend] Received update request for student ID: {student_id}")
-    print(f"[Backend] Update data: {student_data}")
-    print(f"[Backend] Current user: {current_user.email} (role: {current_user.role})")
-    
-    result = await db.execute(
-        select(Student).options(selectinload(Student.user)).where(Student.id == student_id)
-    )
-    student = result.scalar_one_or_none()
-    
-    if not student:
-        print(f"[Backend] Student with ID {student_id} not found")
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found"
-        )
-    
-    print(f"[Backend] Found student: {student.student_id} - {student.user.full_name if student.user else 'No user'}")
-    
-    # Check permissions - handle both enum and string roles
-    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
-    if user_role == "student" and student.user_id != current_user.id:
-        print(f"[Backend] Permission denied: student can only update their own profile")
+    """Update a student.
+
+    - Admin: any field, with validation (semester 1-8, year 1-4, batch 2000-2100,
+      existing faculty, unique student_id / email).
+    - Student: own profile only, contact fields only (phone_number,
+      emergency_contact, profile_image_url). Sending a protected field with a
+      *different* value is rejected with 403; unchanged values are ignored.
+    - Teachers and anyone else: 403.
+    """
+    is_admin = has_role(current_user, "admin")
+    is_student = has_role(current_user, "student")
+    if not (is_admin or is_student):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions"
         )
-    
-    # Update student fields
-    student_fields = ['faculty', 'faculty_id', 'semester', 'year', 'batch', 'phone_number', 'emergency_contact', 'student_id']
-    updated_fields = []
-    for field in student_fields:
-        if field in student_data:
-            old_value = getattr(student, field)
-            new_value = student_data[field]
-            setattr(student, field, new_value)
-            updated_fields.append(f"{field}: {old_value} -> {new_value}")
-            print(f"[Backend] Updated {field}: {old_value} -> {new_value}")
-    
-    # If faculty_id is provided, also update the legacy faculty field with the faculty name
-    if 'faculty_id' in student_data and student_data['faculty_id']:
-        try:
-            faculty_result = await db.execute(
-                select(Faculty).where(Faculty.id == student_data['faculty_id'])
+    if not isinstance(student_data, dict):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid update payload")
+
+    result = await db.execute(
+        select(Student).options(selectinload(Student.user)).where(Student.id == student_id)
+    )
+    student = result.scalar_one_or_none()
+
+    if not student:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found"
+        )
+
+    if is_student and student.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+
+    contact_fields = ['phone_number', 'emergency_contact', 'profile_image_url']
+    admin_student_fields = ['faculty_id', 'semester', 'year', 'batch', 'student_id']
+    admin_user_fields = ['full_name', 'email']
+
+    if is_student:
+        # Reject attempts to change protected fields; ignore unchanged echoes.
+        user = student.user
+        current_values = {
+            'faculty_id': student.faculty_id,
+            'faculty': student.faculty,
+            'semester': student.semester,
+            'year': student.year,
+            'batch': student.batch,
+            'student_id': student.student_id,
+            'enrolled_on': getattr(student, 'enrolled_on', None),
+            'full_name': user.full_name if user else None,
+            'email': user.email if user else None,
+            'role': 'student',
+            'is_active': user.is_active if user else None,
+        }
+        changed = []
+        for field, value in student_data.items():
+            if field in contact_fields or field in ('id', 'user', 'name', 'user_id'):
+                continue
+            if field in current_values:
+                current = current_values[field]
+                if value not in (None, "") and str(value) != str(current):
+                    changed.append(field)
+        if changed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "message": "Students may only update their contact details",
+                    "forbidden_fields": sorted(changed),
+                }
             )
-            faculty = faculty_result.scalar_one_or_none()
-            if faculty:
-                old_faculty = student.faculty
-                student.faculty = faculty.name
-                updated_fields.append(f"faculty (legacy): {old_faculty} -> {faculty.name}")
-                print(f"[Backend] Updated legacy faculty field: {old_faculty} -> {faculty.name}")
-        except Exception as e:
-            print(f"[Backend] Warning: Could not update legacy faculty field: {str(e)}")
-    
-    # Update user fields if provided and user has permissions
-    user_role = current_user.role.value if hasattr(current_user.role, 'value') else current_user.role
-    if user_role == "admin":
+        for field in contact_fields:
+            if field in student_data:
+                setattr(student, field, student_data[field])
+    else:
+        # ---- Admin: validate first, then apply ----
+        def as_int(field, lo, hi):
+            value = student_data.get(field)
+            if value is None or value == "":
+                return None
+            try:
+                ivalue = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{field} must be an integer")
+            if not (lo <= ivalue <= hi):
+                raise HTTPException(status_code=400, detail=f"{field} must be between {lo} and {hi}")
+            return ivalue
+
+        semester = as_int('semester', 1, 8)
+        year = as_int('year', 1, 4)
+        batch = as_int('batch', 2000, 2100)
+
+        faculty = None
+        faculty_id = student_data.get('faculty_id')
+        if faculty_id not in (None, ""):
+            try:
+                faculty_id = int(faculty_id)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="faculty_id must be an integer")
+            faculty = (await db.execute(select(Faculty).where(Faculty.id == faculty_id))).scalar_one_or_none()
+            if not faculty:
+                raise HTTPException(status_code=400, detail=f"Faculty with ID {faculty_id} not found")
+        else:
+            faculty_id = None
+
+        new_student_number = student_data.get('student_id')
+        if new_student_number not in (None, "") and str(new_student_number) != student.student_id:
+            dup = (await db.execute(
+                select(Student.id).where(Student.student_id == str(new_student_number), Student.id != student.id).limit(1)
+            )).scalar_one_or_none()
+            if dup is not None:
+                raise HTTPException(status_code=400, detail="Student ID already exists")
+        else:
+            new_student_number = None
+
+        new_email = student_data.get('email')
+        if new_email not in (None, "") and student.user and new_email != student.user.email:
+            dup = (await db.execute(
+                select(User.id).where(User.email == new_email, User.id != student.user_id).limit(1)
+            )).scalar_one_or_none()
+            if dup is not None:
+                raise HTTPException(status_code=400, detail="Email already registered")
+        else:
+            new_email = None
+
+        # enrolled_on (admin only; null/"" clears it -> roster/metrics fall back to created_at)
+        if 'enrolled_on' in student_data:
+            raw_enrolled = student_data.get('enrolled_on')
+            if raw_enrolled in (None, ""):
+                student.enrolled_on = None
+            else:
+                try:
+                    enrolled_on = raw_enrolled if isinstance(raw_enrolled, date) else date.fromisoformat(str(raw_enrolled)[:10])
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="enrolled_on must be a date (YYYY-MM-DD)")
+                if not (2000 <= enrolled_on.year <= 2100):
+                    raise HTTPException(status_code=400, detail="enrolled_on must be between 2000 and 2100")
+                student.enrolled_on = enrolled_on
+
+        # Rule §13.7: a cohort change (faculty or semester) restarts the roster window today.
+        cohort_changed = (
+            (semester is not None and semester != student.semester)
+            or (faculty is not None and faculty.id != student.faculty_id)
+        )
+        if cohort_changed:
+            student.cohort_since = app_today()
+
+        if semester is not None:
+            student.semester = semester
+        if year is not None:
+            student.year = year
+        if batch is not None:
+            student.batch = batch
+        if faculty is not None:
+            student.faculty_id = faculty.id
+            student.faculty = faculty.name  # keep the legacy name column in sync
+        if new_student_number is not None:
+            student.student_id = str(new_student_number)
+        for field in contact_fields:
+            if field in student_data:
+                setattr(student, field, student_data[field])
+
         user = student.user
         if user:
-            user_fields = ['full_name', 'email']
-            for field in user_fields:
-                if field in student_data:
-                    old_value = getattr(user, field)
-                    new_value = student_data[field]
-                    setattr(user, field, new_value)
-                    updated_fields.append(f"user.{field}: {old_value} -> {new_value}")
-                    print(f"[Backend] Updated user.{field}: {old_value} -> {new_value}")
-    
-    print(f"[Backend] Fields updated: {updated_fields}")
-    
+            if new_email is not None:
+                user.email = new_email
+            full_name = student_data.get('full_name')
+            if full_name not in (None, ""):
+                user.full_name = full_name
+
     try:
         await db.commit()
         await db.refresh(student)
-        print(f"[Backend] Student update committed successfully")
     except Exception as e:
-        print(f"[Backend] Error committing update: {str(e)}")
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update student: {str(e)}"
         )
-    
+
+    await db.refresh(student, ["user"])
     return {
         "id": student.id,
         "name": student.user.full_name if student.user else "Unknown",
@@ -368,8 +471,12 @@ async def update_student(
         "semester": student.semester,
         "year": student.year,
         "batch": student.batch,
+        "faculty_id": student.faculty_id,
+        "enrolled_on": student.enrolled_on.isoformat() if student.enrolled_on else None,
+        "cohort_since": student.cohort_since.isoformat() if student.cohort_since else None,
         "phone_number": student.phone_number,
         "emergency_contact": student.emergency_contact,
+        **face_store.face_fields(student),
         "user": {
             "id": student.user.id,
             "email": student.user.email,
@@ -382,36 +489,112 @@ async def update_student(
 @router.delete("/{student_id}")
 async def delete_student(
     student_id: int,
-    current_user: User = Depends(get_current_user),
+    hard: bool = False,
+    current_user: User = Depends(require_admin_role),
     db: AsyncSession = Depends(get_db)
 ):
-    """Delete a student (admin only)."""
-    print(f"[Backend] Received delete request for student ID: {student_id}")
+    """Remove a student (admin only).
 
-    # Check if user is admin
-    if (hasattr(current_user.role, 'value') and current_user.role.value != "admin") and current_user.role != "admin":
+    Default: deactivate the student's login (users.is_active = false). Attendance
+    history and the profile are kept.
+    hard=true: permanently delete the student and their user account, allowed only
+    when the student has no attendance records (409 otherwise).
+    """
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalar_one_or_none()
+    if not student:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Student not found"
         )
-    
-    try:
-        # Simple approach: Delete student by ID without any relationships
-        # This avoids issues with missing tables
-        await db.execute(
-            text("DELETE FROM students WHERE id = :student_id"),
-            {"student_id": student_id}
-        )
-        
-        print(f"[Backend] Student {student_id} deleted, committing transaction")
+    user_id = student.user_id
+
+    if not hard:
+        user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if user is not None:
+            user.is_active = False
         await db.commit()
-        
-        return {"message": f"Student with ID {student_id} deleted successfully"}
-    
-    except Exception as e:
-        print(f"[Backend] Error during deletion: {str(e)}")
+        return {
+            "message": f"Student with ID {student_id} deactivated successfully",
+            "deactivated": True,
+            "deleted": False,
+        }
+
+    attendance_count = (await db.execute(
+        select(func.count(AttendanceRecord.id)).where(AttendanceRecord.student_id == student_id)
+    )).scalar() or 0
+    if attendance_count:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Student has attendance history and cannot be permanently deleted; deactivate instead",
+                "attendance_records": int(attendance_count),
+            }
+        )
+
+    try:
+        # Core DELETEs: no ORM cascades. Any other referencing row (marks, event
+        # attendance, ...) makes the DB refuse, which we report as 409.
+        await db.execute(sa_delete(Student).where(Student.id == student_id))
+        await db.execute(sa_delete(User).where(User.id == user_id))
+        await db.commit()
+    except IntegrityError:
         await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete student: {str(e)}"
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"message": "Student is referenced by other records and cannot be permanently deleted; deactivate instead"}
         )
+
+    return {
+        "message": f"Student with ID {student_id} deleted successfully",
+        "deactivated": False,
+        "deleted": True,
+    }
+
+
+# ------------------------------------------------------------------- face (§8)
+
+class FaceResetRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+async def _student_or_404(db: AsyncSession, student_id: int) -> Student:
+    student = (await db.execute(select(Student).where(Student.id == student_id))).scalars().first()
+    if student is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+    return student
+
+
+@router.post("/{student_id}/face/reset")
+async def reset_student_face(
+    student_id: int,
+    body: Optional[FaceResetRequest] = None,
+    current_user: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin: delete the student's face templates so they can enrol again (docs/system/face-verification.md §8).
+
+    Body ``{reason}`` (required, at least 3 characters) -> 400 ``reason_required`` otherwise.
+    """
+    student = await _student_or_404(db, student_id)
+    try:
+        result = await face_enrollment.admin_reset_face(
+            db, student=student, actor=current_user, reason=body.reason if body else None)
+        await db.commit()
+        return result
+    except DomainError as err:
+        await db.rollback()
+        raise err.to_http_exception()
+    except Exception:
+        await db.rollback()
+        raise
+
+
+@router.get("/{student_id}/face")
+async def get_student_face(
+    student_id: int,
+    current_user: User = Depends(require_admin_role),
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin: the student's face enrolment status, templates (count, poses) and last 50 events."""
+    student = await _student_or_404(db, student_id)
+    return await face_enrollment.admin_face_info(db, student)

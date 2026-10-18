@@ -1,44 +1,42 @@
-# FastAPI Core
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+# AttendAI backend dependencies. Targets Python 3.13 (backend/venv); versions are the ones
+# installed and tested there. Only packages the code imports are listed; pip resolves the rest.
+# Install: venv/Scripts/python.exe -m pip install -r requirements.txt
+
+# FastAPI core
+fastapi==0.116.0
+starlette==0.46.2  # imported directly; must stay compatible with fastapi
+uvicorn[standard]==0.35.0
+python-multipart==0.0.20  # UploadFile / form parsing
+anyio==4.9.0  # worker threads + concurrency limit for the face engine
 
 # Database
-sqlalchemy==2.0.23
-asyncpg==0.29.0
-alembic==1.12.1
+SQLAlchemy==2.0.41
+asyncpg==0.30.0  # app (DATABASE_URL)
+psycopg2-binary==2.9.10  # Alembic (DATABASE_URL_SYNC) and the test harness
+alembic==1.16.3
 
-# Authentication & Security
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+# Authentication & security
+python-jose[cryptography]==3.5.0
+bcrypt==3.2.2
+passlib==1.7.4  # fallback verification of older password hashes
 
-# Data Validation & Settings
-pydantic==2.5.0
-pydantic-settings==2.1.0
+# Validation & settings
+pydantic==2.11.7
+pydantic-settings==2.10.1
+email-validator==2.2.0  # pydantic EmailStr
 
-# AI/ML for Face Recognition - Using InsightFace (better than face_recognition)
-opencv-python==4.8.1.78
-insightface==0.7.3
-onnxruntime==1.16.3  # Required for InsightFace
-numpy==1.24.3
-pillow==10.1.0
-scikit-learn==1.3.2
-# face-recognition==1.3.0  # Replaced with InsightFace
+# Face engine (docs/system/face-verification.md §2)
+insightface==0.7.3  # buffalo_l detection + recognition (models download to ~/.insightface)
+onnxruntime==1.22.1  # InsightFace and the MiniFASNet anti-spoof models (backend/models/anti_spoof)
+opencv-python-headless==4.12.0.88  # also required by insightface (via albumentations)
+numpy==2.2.6
+pillow==11.3.0
 
 # Utilities
-python-dotenv==1.0.0
-email-validator==2.1.0
-aiofiles==23.2.1
+python-dateutil==2.9.0.post0  # timezone fallback in app.core.clock
+psutil==7.0.0  # health / system monitor endpoints
 
-# CORS for React integration
-fastapi-cors==0.0.6
-
-# PDF Generation
-reportlab==4.0.7
-weasyprint==60.2
-
-# Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-httpx==0.25.2
+# Tests
+pytest==8.4.2
+pytest-asyncio==1.2.0
+httpx==0.28.1

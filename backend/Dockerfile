@@ -1,5 +1,5 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Python 3.13 slim image (requirements.txt targets 3.13)
+FROM python:3.13-slim
 
 # Set working directory
 WORKDIR /app
@@ -7,9 +7,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
-    cmake \
     libopencv-dev \
-    libdlib-dev \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 

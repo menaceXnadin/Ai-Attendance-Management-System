@@ -1,36 +1,82 @@
-"""
-Session Metrics Service
+"""Session metrics: planned vs held class sessions (DOMAIN_RULES §4, §5, §8).
 
-Provides comprehensive class count metrics distinguishing between:
-1. Planned classes (from academic calendar)
-2. Actual classes (from attendance records)
-3. Hybrid metrics (combining both for accuracy)
+DEPRECATED calculation switching: the old "planned / actual / hybrid" denominators are gone.
+Attendance percentages come ONLY from :mod:`app.services.attendance_metrics` (held sessions,
+session-weighted). This service keeps its public methods and response keys for existing
+callers, but now reports:
 
-This service enhances the existing AcademicCalculatorService without breaking changes.
+* ``planned``: instructional days / expected, non-cancelled sessions from the instructional
+  calendar for the range (and ``*_to_date`` values clipped to today);
+* ``actual``: sessions that were actually held (``class_sessions.status = 'held'``) plus the
+  cancelled / unrecorded / upcoming session counts;
+* ``deviation``: held days vs planned days to date (informational only);
+* ``recommended.method`` is always ``"actual"`` (= held sessions) and ``deprecated: true``.
+
+Read-only: never flushes or commits.
 """
+from __future__ import annotations
 
 from datetime import date
-from typing import Dict, List, Optional, Tuple
-from sqlalchemy import select, func, and_, distinct, case
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Optional
 
-from app.models import (
-    AcademicEvent, EventType, AttendanceRecord, 
-    AttendanceStatus, Student, ClassSchedule
-)
+from sqlalchemy import select
+
+from app.core.clock import app_now
+from app.models import ClassSession, SessionStatus, Student
 from app.services.academic_calculator import AcademicCalculatorService
+from app.services.accurate_attendance_calculator import custom_range_term, metric_fields
+from app.services.attendance_metrics import compute_student_metrics
+from app.services.attendance_policy import get_attendance_policy
+from app.services.class_sessions import finalize_point
+
+RECOMMENDED = {
+    "method": "actual",
+    "reason": "Attendance percentages use held class sessions only (DOMAIN_RULES §8); "
+              "planned/hybrid denominators are deprecated.",
+    "use_case": "Use for all attendance percentages, eligibility and risk bands",
+    "deprecated": True,
+}
 
 
 class SessionMetricsService:
-    """
-    Enhanced service for tracking planned vs actual class sessions.
-    Works with existing schema - no database changes required.
-    """
-    
-    def __init__(self, db: AsyncSession):
+    """Planned vs held sessions for a range; percentages delegate to ``attendance_metrics``."""
+
+    def __init__(self, db):
         self.db = db
         self.academic_calculator = AcademicCalculatorService(db)
-    
+
+    async def _student_cohort(self, student_id: int) -> tuple[Optional[int], Optional[int]]:
+        row = (await self.db.execute(select(Student.faculty_id, Student.semester).where(Student.id == student_id))).first()
+        return (row.faculty_id, row.semester) if row else (None, None)
+
+    async def _held_metrics(self, start: date, end: date, *, faculty_id=None, semester=None, subject_id=None) -> dict[str, Any]:
+        policy = await get_attendance_policy(self.db)
+        now = app_now()
+        stmt = select(ClassSession.session_date, ClassSession.end_time, ClassSession.status).where(
+            ClassSession.session_date >= start, ClassSession.session_date <= end
+        )
+        if faculty_id is not None:
+            stmt = stmt.where(ClassSession.faculty_id == faculty_id)
+        if semester is not None:
+            stmt = stmt.where(ClassSession.semester == semester)
+        if subject_id is not None:
+            stmt = stmt.where(ClassSession.subject_id == subject_id)
+        held_dates: set[date] = set()
+        counts = {"held": 0, "cancelled": 0, "unrecorded": 0, "upcoming": 0}
+        for sdate, end_t, status in (await self.db.execute(stmt)).all():
+            s = str(status)
+            if s == SessionStatus.held:
+                counts["held"] += 1
+                held_dates.add(sdate)
+            elif s == SessionStatus.cancelled:
+                counts["cancelled"] += 1
+            elif finalize_point(sdate, end_t, policy.finalize_grace_minutes) < now:
+                counts["unrecorded"] += 1
+            else:
+                counts["upcoming"] += 1
+        dates = sorted(held_dates)
+        return {"conducted_days": len(dates), "conducted_periods": counts["held"], "unique_dates": dates, "sessions": counts}
+
     async def get_comprehensive_metrics(
         self,
         start_date: date,
@@ -38,385 +84,131 @@ class SessionMetricsService:
         student_id: Optional[int] = None,
         subject_id: Optional[int] = None,
         semester: Optional[int] = None,
-        academic_year: Optional[int] = None
-    ) -> Dict:
-        """
-        Get comprehensive class metrics showing both planned and actual sessions.
-        
-        Args:
-            start_date: Period start date
-            end_date: Period end date
-            student_id: Optional filter for specific student
-            subject_id: Optional filter for specific subject
-            semester: Optional semester filter
-            academic_year: Optional academic year filter
-            
-        Returns:
-            Dict containing:
-            - planned: Metrics from academic calendar
-            - actual: Metrics from attendance records
-            - recommended: Which metric to use for calculations
-            - deviation: Analysis of differences
-        """
-        
-        # Get planned metrics from calendar
-        planned_metrics = await self.academic_calculator.calculate_academic_metrics(
-            start_date, end_date, semester, academic_year
+        academic_year: Optional[int] = None,
+        faculty_id: Optional[int] = None,
+    ) -> dict[str, Any]:
+        """Planned vs held sessions (legacy keys kept). With ``student_id`` the scope is the
+        student's cohort and ``student_metrics`` carries the Rule §8 block for the range."""
+        today = app_now().date()
+        student_metrics = None
+        if student_id is not None:
+            faculty_id, semester = await self._student_cohort(student_id)
+            m = await compute_student_metrics(self.db, student_id, term=custom_range_term(start_date, end_date),
+                                              subject_id=subject_id)
+            student_metrics = metric_fields(m.overall, term=m.term_context.term, term_state=m.term_state)
+            student_metrics["window"] = m.to_dict()["window"]
+        planned = await self.academic_calculator.calculate_academic_metrics(
+            start_date, end_date, semester=semester, faculty_id=faculty_id
         )
-        
-        # Get actual session metrics
-        if student_id:
-            actual_metrics = await self._get_student_actual_metrics(
-                student_id, start_date, end_date, subject_id
+        to_date_end = min(end_date, today)
+        if to_date_end >= start_date:
+            planned_to_date = await self.academic_calculator.calculate_academic_metrics(
+                start_date, to_date_end, semester=semester, faculty_id=faculty_id
             )
         else:
-            actual_metrics = await self._get_global_actual_metrics(
-                start_date, end_date, subject_id, semester, academic_year
-            )
-        
-        # Analyze deviation
-        deviation = await self._analyze_deviation(
-            planned_metrics, actual_metrics, start_date, end_date
-        )
-        
-        # Determine recommended calculation method
-        recommended = self._determine_recommended_method(deviation)
-        
-        return {
+            planned_to_date = {"total_academic_days": 0, "total_periods": 0}
+        actual = await self._held_metrics(start_date, end_date, faculty_id=faculty_id, semester=semester, subject_id=subject_id)
+        deviation = self._analyze_deviation(planned_to_date, actual)
+        result = {
             "planned": {
-                "total_academic_days": planned_metrics["total_academic_days"],
-                "total_periods": planned_metrics["total_periods"],
-                "source": "academic_events calendar",
-                "description": "Scheduled classes from academic calendar"
+                "total_academic_days": planned["total_academic_days"],
+                "total_periods": planned["total_periods"],
+                "academic_days_to_date": planned_to_date["total_academic_days"],
+                "periods_to_date": planned_to_date["total_periods"],
+                "source": "instructional calendar (terms, timetable, holidays/exams)",
+                "description": "Expected class sessions from the timetable",
             },
             "actual": {
-                "total_conducted_days": actual_metrics["conducted_days"],
-                "total_conducted_periods": actual_metrics["conducted_periods"],
-                "unique_dates": actual_metrics["unique_dates"],
-                "source": "attendance_records",
-                "description": "Classes where attendance was actually recorded"
+                "total_conducted_days": actual["conducted_days"],
+                "total_conducted_periods": actual["conducted_periods"],
+                "unique_dates": [d.isoformat() for d in actual["unique_dates"]],
+                "sessions": actual["sessions"],
+                "source": "class_sessions",
+                "description": "Class sessions that were actually held (attendance taken)",
             },
-            "recommended": recommended,
+            "recommended": dict(RECOMMENDED),
             "deviation": deviation,
             "metadata": {
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
                 "student_id": student_id,
                 "subject_id": subject_id,
-                "calculation_timestamp": date.today().isoformat()
-            }
+                "faculty_id": faculty_id,
+                "semester": semester,
+                "academic_year": academic_year,
+                "calculation_timestamp": app_now().isoformat(),
+            },
         }
-    
-    async def _get_student_actual_metrics(
-        self,
-        student_id: int,
-        start_date: date,
-        end_date: date,
-        subject_id: Optional[int] = None
-    ) -> Dict:
-        """
-        Get actual session metrics for a specific student.
-        Counts unique dates where student has attendance records.
-        """
-        
-        conditions = [
-            AttendanceRecord.student_id == student_id,
-            AttendanceRecord.date >= start_date,
-            AttendanceRecord.date <= end_date
-        ]
-        
-        if subject_id:
-            conditions.append(AttendanceRecord.subject_id == subject_id)
-        
-        # Get unique dates with attendance records
-        unique_dates_query = select(
-            distinct(AttendanceRecord.date)
-        ).where(and_(*conditions)).order_by(AttendanceRecord.date)
-        
-        result = await self.db.execute(unique_dates_query)
-        unique_dates = [row[0] for row in result.fetchall()]
-        
-        # Count total attendance records (periods)
-        periods_query = select(
-            func.count(AttendanceRecord.id)
-        ).where(and_(*conditions))
-        
-        result = await self.db.execute(periods_query)
-        total_periods = result.scalar() or 0
-        
-        # Get breakdown by date
-        daily_breakdown_query = select(
-            AttendanceRecord.date,
-            func.count(distinct(AttendanceRecord.subject_id)).label('subjects_count'),
-            func.count(AttendanceRecord.id).label('records_count')
-        ).where(and_(*conditions)).group_by(AttendanceRecord.date)
-        
-        result = await self.db.execute(daily_breakdown_query)
-        daily_breakdown = result.fetchall()
-        
-        return {
-            "conducted_days": len(unique_dates),
-            "conducted_periods": total_periods,
-            "unique_dates": unique_dates,
-            "daily_breakdown": [
-                {
-                    "date": day.date.isoformat() if hasattr(day.date, 'isoformat') else str(day.date),
-                    "subjects_count": day.subjects_count,
-                    "records_count": day.records_count
-                }
-                for day in daily_breakdown
-            ]
-        }
-    
-    async def _get_global_actual_metrics(
-        self,
-        start_date: date,
-        end_date: date,
-        subject_id: Optional[int] = None,
-        semester: Optional[int] = None,
-        academic_year: Optional[int] = None
-    ) -> Dict:
-        """
-        Get global actual session metrics across all students.
-        Useful for administrative reporting.
-        """
-        
-        conditions = [
-            AttendanceRecord.date >= start_date,
-            AttendanceRecord.date <= end_date
-        ]
-        
-        if subject_id:
-            conditions.append(AttendanceRecord.subject_id == subject_id)
-        
-        # Get unique dates where ANY attendance was recorded
-        unique_dates_query = select(
-            distinct(AttendanceRecord.date)
-        ).where(and_(*conditions)).order_by(AttendanceRecord.date)
-        
-        result = await self.db.execute(unique_dates_query)
-        unique_dates = [row[0] for row in result.fetchall()]
-        
-        # Count total attendance records globally
-        periods_query = select(
-            func.count(AttendanceRecord.id)
-        ).where(and_(*conditions))
-        
-        result = await self.db.execute(periods_query)
-        total_periods = result.scalar() or 0
-        
-        # Get daily statistics
-        daily_stats_query = select(
-            AttendanceRecord.date,
-            func.count(distinct(AttendanceRecord.student_id)).label('students_count'),
-            func.count(distinct(AttendanceRecord.subject_id)).label('subjects_count'),
-            func.count(AttendanceRecord.id).label('records_count')
-        ).where(and_(*conditions)).group_by(AttendanceRecord.date)
-        
-        result = await self.db.execute(daily_stats_query)
-        daily_stats = result.fetchall()
-        
-        return {
-            "conducted_days": len(unique_dates),
-            "conducted_periods": total_periods,
-            "unique_dates": unique_dates,
-            "daily_breakdown": [
-                {
-                    "date": day.date.isoformat() if hasattr(day.date, 'isoformat') else str(day.date),
-                    "students_count": day.students_count,
-                    "subjects_count": day.subjects_count,
-                    "records_count": day.records_count
-                }
-                for day in daily_stats
-            ]
-        }
-    
-    async def _analyze_deviation(
-        self,
-        planned_metrics: Dict,
-        actual_metrics: Dict,
-        start_date: date,
-        end_date: date
-    ) -> Dict:
-        """
-        Analyze the deviation between planned and actual sessions.
-        """
-        
-        planned_days = planned_metrics.get("total_academic_days", 0)
-        actual_days = actual_metrics.get("conducted_days", 0)
-        
-        deviation_count = actual_days - planned_days
-        deviation_percentage = (
-            (deviation_count / planned_days * 100) 
-            if planned_days > 0 else 0
-        )
-        
-        # Classify deviation severity
-        if abs(deviation_count) <= 2:
-            severity = "minimal"
-            impact = "negligible"
-        elif abs(deviation_count) <= 5:
-            severity = "moderate"
-            impact = "noticeable"
+        if student_metrics is not None:
+            result["student_metrics"] = student_metrics
+        return result
+
+    @staticmethod
+    def _analyze_deviation(planned_to_date: dict[str, Any], actual: dict[str, Any]) -> dict[str, Any]:
+        planned_days = planned_to_date.get("total_academic_days", 0)
+        actual_days = actual.get("conducted_days", 0)
+        count = actual_days - planned_days
+        pct = (count / planned_days * 100) if planned_days > 0 else 0
+        if abs(count) <= 2:
+            severity, impact = "minimal", "negligible"
+        elif abs(count) <= 5:
+            severity, impact = "moderate", "noticeable"
         else:
-            severity = "significant"
-            impact = "substantial"
-        
-        # Determine likely causes
-        likely_causes = []
-        if deviation_count > 0:
-            likely_causes.append("Additional makeup sessions conducted")
-            likely_causes.append("Extra classes added after calendar creation")
-        elif deviation_count < 0:
-            likely_causes.append("Classes cancelled but not removed from calendar")
-            likely_causes.append("Attendance not recorded for some scheduled classes")
-            likely_causes.append("Calendar includes future dates not yet reached")
-        
+            severity, impact = "significant", "substantial"
+        causes = []
+        sessions = actual.get("sessions", {})
+        if count > 0:
+            causes.append("Make-up sessions held on days without a planned class")
+        elif count < 0:
+            if sessions.get("unrecorded"):
+                causes.append(f"{sessions['unrecorded']} past session(s) have no attendance recorded yet")
+            if sessions.get("cancelled"):
+                causes.append(f"{sessions['cancelled']} session(s) were cancelled")
         return {
-            "count": deviation_count,
-            "percentage": round(deviation_percentage, 2),
+            "count": count,
+            "percentage": round(pct, 2),
             "severity": severity,
             "impact": impact,
-            "direction": "more_than_planned" if deviation_count > 0 else "less_than_planned" if deviation_count < 0 else "matches_plan",
-            "likely_causes": likely_causes,
-            "recommendation": self._get_deviation_recommendation(deviation_count, severity)
+            "direction": "more_than_planned" if count > 0 else "less_than_planned" if count < 0 else "matches_plan",
+            "likely_causes": causes,
+            "recommendation": (
+                "Held sessions match the plan." if severity == "minimal"
+                else "Resolve unrecorded sessions (record attendance or cancel them) so reports are complete."
+            ),
         }
-    
-    def _get_deviation_recommendation(self, deviation_count: int, severity: str) -> str:
-        """Generate recommendation based on deviation."""
-        
-        if severity == "minimal":
-            return "Deviation is within acceptable range. Current calculation method is appropriate."
-        elif deviation_count > 0:
-            return "More sessions conducted than planned. Consider using actual session count for fairer attendance calculation."
-        else:
-            return "Fewer sessions than planned. Verify if calendar includes future dates or if classes were cancelled without recording."
-    
-    def _determine_recommended_method(self, deviation: Dict) -> Dict:
-        """
-        Determine which calculation method to recommend.
-        
-        Returns:
-            Dict with recommendation details
-        """
-        
-        severity = deviation.get("severity", "minimal")
-        deviation_count = deviation.get("count", 0)
-        
-        # Default to hybrid approach for most cases
-        if severity == "minimal":
-            method = "planned"
-            reason = "Minimal deviation - planned total is reliable"
-        elif deviation_count > 0:
-            method = "actual"
-            reason = "More sessions conducted than planned - actual count is fairer"
-        elif severity == "significant":
-            method = "hybrid"
-            reason = "Significant deviation - use hybrid approach with deviation tracking"
-        else:
-            method = "planned"
-            reason = "Some planned sessions not yet conducted - planned total maintains consistency"
-        
-        return {
-            "method": method,
-            "reason": reason,
-            "use_case": {
-                "planned": "Use for administrative planning and goal setting",
-                "actual": "Use for final grade calculation and performance evaluation",
-                "hybrid": "Use for real-time attendance tracking with deviation alerts"
-            }[method]
-        }
-    
+
     async def calculate_attendance_with_deviation_awareness(
         self,
         student_id: int,
         start_date: date,
         end_date: date,
-        calculation_method: str = "hybrid"
-    ) -> Dict:
-        """
-        Calculate attendance percentage with full awareness of planned vs actual.
-        
-        Args:
-            student_id: Student ID
-            start_date: Period start
-            end_date: Period end
-            calculation_method: 'planned', 'actual', or 'hybrid'
-            
-        Returns:
-            Comprehensive attendance metrics
-        """
-        
-        # Get comprehensive metrics
-        metrics = await self.get_comprehensive_metrics(
-            start_date, end_date, student_id=student_id
-        )
-        
-        # Get student's attendance records
-        conditions = [
-            AttendanceRecord.student_id == student_id,
-            AttendanceRecord.date >= start_date,
-            AttendanceRecord.date <= end_date
-        ]
-        
-        # Count present days
-        present_query = select(
-            func.count(distinct(
-                case((AttendanceRecord.status == AttendanceStatus.present, AttendanceRecord.date))
-            ))
-        ).where(and_(*conditions))
-        
-        result = await self.db.execute(present_query)
-        present_days = result.scalar() or 0
-        
-        # Choose denominator based on method
-        if calculation_method == "planned":
-            total_days = metrics["planned"]["total_academic_days"]
-        elif calculation_method == "actual":
-            total_days = metrics["actual"]["total_conducted_days"]
-        else:  # hybrid
-            # Use planned, but adjust if actual is significantly different
-            planned = metrics["planned"]["total_academic_days"]
-            actual = metrics["actual"]["total_conducted_days"]
-            
-            # If actual is more than 10% different, use actual
-            if abs(actual - planned) / planned > 0.1 if planned > 0 else False:
-                total_days = actual
-            else:
-                total_days = planned
-        
-        percentage = (present_days / total_days * 100) if total_days > 0 else 0
-        
+        calculation_method: str = "hybrid",
+    ) -> dict[str, Any]:
+        """Student attendance for a range. ``calculation_method`` is accepted for backward
+        compatibility but ignored: the percentage is always the Rule §8 held-session value."""
+        m = await compute_student_metrics(self.db, student_id, term=custom_range_term(start_date, end_date))
+        o = m.overall
+        breakdown = await self.get_comprehensive_metrics(start_date, end_date, student_id=student_id)
         return {
-            "present_days": present_days,
-            "total_days_used": total_days,
-            "percentage": round(percentage, 2),
-            "calculation_method": calculation_method,
-            "metrics_breakdown": metrics,
-            "deviation_alert": metrics["deviation"]["severity"] != "minimal",
-            "recommendation": metrics["recommended"]
+            "present_days": o["attended"],
+            "total_days_used": o["considered"],
+            "percentage": o["attendance_percentage"],
+            "calculation_method": "held_sessions",
+            "requested_method": calculation_method,
+            "metrics_breakdown": breakdown,
+            "deviation_alert": breakdown["deviation"]["severity"] != "minimal",
+            "recommendation": breakdown["recommended"],
+            # Rule §13.12 block (``percentage`` here may be null; the legacy top-level one stays numeric)
+            "metrics": metric_fields(o, term=m.term_context.term, term_state=m.term_state),
+            "has_data": o["has_data"],
+            "term": m.term_context.term.summary() if m.term_context.term else None,
+            "term_state": m.term_state,
         }
 
 
-async def get_session_metrics(
-    db: AsyncSession,
-    start_date: date,
-    end_date: date,
-    student_id: Optional[int] = None,
-    **kwargs
-) -> Dict:
-    """
-    Convenience function to get session metrics.
-    
-    Usage:
-        metrics = await get_session_metrics(
-            db, 
-            date(2025, 8, 1), 
-            date(2025, 12, 15),
-            student_id=123
-        )
-    """
-    service = SessionMetricsService(db)
-    return await service.get_comprehensive_metrics(
-        start_date, end_date, student_id=student_id, **kwargs
-    )
+async def get_session_metrics(db, start_date: date, end_date: date, student_id: Optional[int] = None, **kwargs) -> dict[str, Any]:
+    """Convenience wrapper around :meth:`SessionMetricsService.get_comprehensive_metrics`."""
+    return await SessionMetricsService(db).get_comprehensive_metrics(start_date, end_date, student_id=student_id, **kwargs)
+
+
+__all__ = ["SessionMetricsService", "get_session_metrics"]

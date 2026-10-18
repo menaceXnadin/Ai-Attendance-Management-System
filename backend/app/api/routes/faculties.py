@@ -1,114 +1,238 @@
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
-from sqlalchemy import func
-from app.core.database import get_sync_db
-from app.models import Faculty, Student, Subject, AttendanceRecord, AcademicEvent
+from fastapi import APIRouter, HTTPException, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, or_, delete as sa_delete
+from sqlalchemy.exc import IntegrityError
+from app.core.database import get_db
+from app.models import Faculty, Student, Subject, AttendanceRecord, AcademicEvent, ClassSchedule
+from app.models.notifications import EnhancedNotification
 from app.schemas import FacultyCreate, FacultyOut
+from app.api.dependencies import require_admin_role
 
 router = APIRouter(prefix="/faculties", tags=["faculties"])
 
+
 @router.get("/", response_model=list[FacultyOut])
-def get_faculties(db: Session = Depends(get_sync_db)):
-    return db.query(Faculty).all()
+async def get_faculties(db: AsyncSession = Depends(get_db)):
+    # Public catalogue (names/codes only); used by forms before role-specific data loads.
+    result = await db.execute(select(Faculty))
+    return result.scalars().all()
+
 
 @router.post("/", response_model=FacultyOut)
-def create_faculty(faculty: FacultyCreate, db: Session = Depends(get_sync_db)):
+async def create_faculty(
+    faculty: FacultyCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_admin_role),
+):
     # Validate faculty name uniqueness
-    if db.query(Faculty).filter_by(name=faculty.name).first():
+    existing = await db.execute(select(Faculty.id).where(Faculty.name == faculty.name).limit(1))
+    if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=400, detail="Faculty name already exists")
-    
+
     # Validate faculty code format (4 uppercase letters)
     code = faculty.code.upper().strip()
     if len(code) != 4 or not code.isalpha():
         raise HTTPException(status_code=400, detail="Faculty code must be exactly 4 letters")
-    
+
     # Validate faculty code uniqueness
-    if db.query(Faculty).filter_by(code=code).first():
+    existing = await db.execute(select(Faculty.id).where(Faculty.code == code).limit(1))
+    if existing.scalar_one_or_none() is not None:
         raise HTTPException(status_code=400, detail=f"Faculty code '{code}' already exists")
-    
+
     new_faculty = Faculty(
         name=faculty.name,
         code=code,
         description=faculty.description
     )
     db.add(new_faculty)
-    db.commit()
-    db.refresh(new_faculty)
+    await db.commit()
+    await db.refresh(new_faculty)
     return new_faculty
 
+
+async def _faculty_references(db: AsyncSession, faculty_id: int) -> dict:
+    """Count everything that references a faculty (directly or via its subjects/students)."""
+
+    async def scalar(stmt) -> int:
+        return int((await db.execute(stmt)).scalar() or 0)
+
+    student_ids = select(Student.id).where(Student.faculty_id == faculty_id)
+    subject_ids = select(Subject.id).where(Subject.faculty_id == faculty_id)
+
+    return {
+        "students": await scalar(
+            select(func.count(Student.id)).where(Student.faculty_id == faculty_id)
+        ),
+        "subjects": await scalar(
+            select(func.count(Subject.id)).where(Subject.faculty_id == faculty_id)
+        ),
+        "class_schedules": await scalar(
+            select(func.count(ClassSchedule.id)).where(
+                or_(
+                    ClassSchedule.faculty_id == faculty_id,
+                    ClassSchedule.subject_id.in_(subject_ids),
+                )
+            )
+        ),
+        "attendance_records": await scalar(
+            select(func.count(AttendanceRecord.id)).where(
+                or_(
+                    AttendanceRecord.student_id.in_(student_ids),
+                    AttendanceRecord.subject_id.in_(subject_ids),
+                )
+            )
+        ),
+        "academic_events": await scalar(
+            select(func.count(AcademicEvent.id)).where(
+                or_(
+                    AcademicEvent.faculty_id == faculty_id,
+                    AcademicEvent.subject_id.in_(subject_ids),
+                )
+            )
+        ),
+        "notifications": await scalar(
+            select(func.count(EnhancedNotification.id)).where(
+                EnhancedNotification.target_faculty_id == faculty_id
+            )
+        ),
+    }
+
+
+def _blocking(refs: dict, force: bool) -> dict:
+    """References that prevent deletion.
+
+    Never deletable: students, attendance history, calendar events and targeted
+    notifications (deleting would cascade students/attendance or silently re-scope
+    events to every faculty). With force=true, unused subjects and schedules are
+    removed together with the empty faculty.
+    """
+    hard = {k: refs[k] for k in ("students", "attendance_records", "academic_events", "notifications") if refs[k]}
+    if not force:
+        hard.update({k: refs[k] for k in ("subjects", "class_schedules") if refs[k]})
+    return hard
+
+
 @router.get("/{faculty_id}/cascade-preview")
-def get_cascade_preview(faculty_id: int, db: Session = Depends(get_sync_db)):
+async def get_cascade_preview(
+    faculty_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_admin_role),
+):
     """
-    Preview what will be deleted if this faculty is removed.
-    Returns counts of affected records to show in confirmation dialog.
-    
-    NOTE: As of November 2, 2025, subjects now have CASCADE DELETE configured.
+    Preview what deleting this faculty would do.
+
+    A faculty that has students, attendance history, calendar events or targeted
+    notifications cannot be deleted (409). An otherwise empty faculty can be deleted
+    with force=true, which also removes its unused subjects and class schedules.
     """
-    faculty = db.query(Faculty).get(faculty_id)
+    faculty = await db.get(Faculty, faculty_id)
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
-    
-    # Count students
-    student_count = db.query(func.count(Student.id)).filter(Student.faculty_id == faculty_id).scalar()
-    
-    # Count subjects (NOW CASCADE DELETES)
-    subject_count = db.query(func.count(Subject.id)).filter(Subject.faculty_id == faculty_id).scalar()
-    
-    # Count attendance records for students in this faculty
-    student_ids = db.query(Student.id).filter(Student.faculty_id == faculty_id).subquery()
-    attendance_count = db.query(func.count(AttendanceRecord.id)).filter(
-        AttendanceRecord.student_id.in_(student_ids)
-    ).scalar()
-    
-    # Count academic events
-    event_count = db.query(func.count(AcademicEvent.id)).filter(
-        AcademicEvent.faculty_id == faculty_id
-    ).scalar()
-    
+
+    refs = await _faculty_references(db, faculty_id)
+    blockers = _blocking(refs, force=True)
+    can_delete = not blockers
+
+    if can_delete:
+        warning = (
+            f"Deleting this faculty will also remove {refs['subjects']} unused subjects and "
+            f"{refs['class_schedules']} class schedules."
+            if refs["subjects"] or refs["class_schedules"] else None
+        )
+    else:
+        warning = "This faculty cannot be deleted while it has " + ", ".join(
+            f"{count} {name.replace('_', ' ')}" for name, count in blockers.items()
+        ) + "."
+
     return {
         "faculty_id": faculty_id,
         "faculty_name": faculty.name,
         "faculty_code": faculty.code,
         "will_delete": {
-            "students": student_count,
-            "subjects": subject_count,  # MOVED: Now cascade deletes with faculty
-            "attendance_records": attendance_count,
+            "students": 0,
+            "subjects": refs["subjects"] if can_delete else 0,
+            "attendance_records": 0,
+            "class_schedules": refs["class_schedules"] if can_delete else 0,
         },
         "will_orphan": {
-            "academic_events": event_count,  # Events will have faculty_id set to NULL
+            "academic_events": 0,
         },
-        "is_safe_to_delete": student_count == 0,
-        "warning": f"Deleting this faculty will permanently remove {student_count} students, {subject_count} subjects, and {attendance_count} attendance records!" if student_count > 0 or subject_count > 0 else None
+        "references": refs,
+        "blockers": blockers,
+        "can_delete": can_delete,
+        "is_safe_to_delete": can_delete,
+        "warning": warning,
     }
 
+
 @router.delete("/{faculty_id}")
-def delete_faculty(faculty_id: int, force: bool = False, db: Session = Depends(get_sync_db)):
+async def delete_faculty(
+    faculty_id: int,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_admin_role),
+):
     """
-    Delete a faculty. Requires force=true if faculty has students.
+    Delete a faculty (admin only).
+
+    - 409 if the faculty has students, attendance history, calendar events or
+      targeted notifications (never cascaded).
+    - 409 without force=true if it still has subjects or class schedules.
+    - force=true deletes only the empty faculty plus its unused subjects/schedules.
     """
-    faculty = db.query(Faculty).get(faculty_id)
+    faculty = await db.get(Faculty, faculty_id)
     if not faculty:
         raise HTTPException(status_code=404, detail="Faculty not found")
-    
-    # Check if faculty has students
-    student_count = db.query(func.count(Student.id)).filter(Student.faculty_id == faculty_id).scalar()
-    
-    if student_count > 0 and not force:
+
+    refs = await _faculty_references(db, faculty_id)
+    blockers = _blocking(refs, force=force)
+    if blockers:
+        only_catalogue = set(blockers) <= {"subjects", "class_schedules"}
         raise HTTPException(
-            status_code=400, 
+            status_code=status.HTTP_409_CONFLICT,
             detail={
-                "message": "Cannot delete faculty with students",
-                "student_count": student_count,
-                "suggestion": "Transfer students to another faculty first, or use force=true to confirm deletion"
-            }
+                "message": "Cannot delete faculty that is still in use",
+                "student_count": refs["students"],
+                "references": refs,
+                "blockers": blockers,
+                "suggestion": (
+                    "Use force=true to also delete its unused subjects and schedules"
+                    if only_catalogue else
+                    "Transfer its students and keep faculties with attendance history; deletion never removes students or attendance"
+                ),
+            },
         )
-    
-    # Proceed with deletion
-    db.delete(faculty)
-    db.commit()
-    
+
+    faculty_name = faculty.name
+    subject_ids = select(Subject.id).where(Subject.faculty_id == faculty_id)
+    try:
+        # Core DELETEs in dependency order; no ORM cascades are involved.
+        await db.execute(
+            sa_delete(ClassSchedule).where(
+                or_(ClassSchedule.faculty_id == faculty_id, ClassSchedule.subject_id.in_(subject_ids))
+            ).execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            sa_delete(Subject).where(Subject.faculty_id == faculty_id).execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            sa_delete(Faculty).where(Faculty.id == faculty_id).execution_options(synchronize_session=False)
+        )
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Cannot delete faculty: other records still reference it or its subjects",
+                "student_count": refs["students"],
+            },
+        )
+
     return {
         "success": True,
-        "message": f"Faculty '{faculty.name}' deleted successfully",
-        "deleted_students": student_count
+        "message": f"Faculty '{faculty_name}' deleted successfully",
+        "deleted_students": 0,
+        "deleted_subjects": refs["subjects"],
+        "deleted_class_schedules": refs["class_schedules"],
     }

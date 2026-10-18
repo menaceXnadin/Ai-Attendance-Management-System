@@ -21,18 +21,12 @@ from app.schemas.event_sessions import (
     SessionAttendanceCreate,
     SessionAttendanceResponse
 )
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, require_admin_or_teacher, resolve_student_scope
 
 router = APIRouter(prefix="/event-sessions", tags=["event-sessions"])
 
-def require_admin_or_faculty(current_user: User = Depends(get_current_user)):
-    """Require admin or faculty access"""
-    if current_user.role.value not in ["admin", "faculty"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient permissions"
-        )
-    return current_user
+# Admin or teacher (faculty) only; shared helper (Enum-safe role comparison).
+require_admin_or_faculty = require_admin_or_teacher
 
 # Event Session Management
 
@@ -259,7 +253,7 @@ async def mark_session_attendance(
 async def get_session_attendance(
     session_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_admin_or_faculty)
 ):
     """Get attendance records for a session"""
     # Verify session exists
@@ -291,6 +285,8 @@ async def get_student_session_attendance(
     current_user: User = Depends(get_current_user)
 ):
     """Get session attendance records for a student"""
+    # Students: only themselves; teachers: students of cohorts they teach; admins: anyone.
+    student_id = await resolve_student_scope(current_user, student_id, db)
     query = select(SessionAttendance).filter(SessionAttendance.student_id == student_id)
     
     if event_id:

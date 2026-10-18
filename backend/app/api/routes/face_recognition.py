@@ -1,119 +1,98 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+"""Face check-in, challenge, policy, verification and diagnostics endpoints
+(docs/system/face-verification.md §6, §7).
+
+Enrolment endpoints (``/register-face``, ``/register-face-multi``, ``/enrollment``,
+``/my-face``) live in ``face_enrollment.py`` under the same prefix.
+
+* Check-in orchestration lives in ``app.services.face_verification`` (it owns the request's
+  transaction and writes one attempt row per request).
+* Model access goes only through ``insightface_service.aprocess_frames`` (worker thread);
+  thresholds come only from ``FacePolicy``.
+* Students never see similarity scores on failure.
+"""
+import logging
+from typing import Any, List, Optional, Union
+
+import numpy as np
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, Date, and_, func, text
-from sqlalchemy.orm import selectinload
-from datetime import datetime, date, time as time_type
-from typing import List, Optional, Dict, Any
+
+from app.api.dependencies import get_current_student, get_current_user, require_admin_or_teacher, require_face_engine
 from app.core.database import get_db
-from app.models import Student, AttendanceRecord, Subject, ClassSchedule, DayOfWeek, AttendanceStatus, AttendanceMethod
-from app.schemas import (
-    FaceRecognitionRequest, FaceRecognitionResponse, FaceRegistrationRequest,
-    MultiImageFaceRegistrationRequest,
-    AttendanceRecord as AttendanceRecordSchema
+from app.models import AttendanceRecord, ChallengePurpose, ClassSession, Student, User
+from app.schemas import AttendanceRecord as AttendanceRecordSchema
+from app.schemas import FaceRecognitionResponse
+from app.services import face_math, face_store
+from app.services.domain_errors import DomainError, not_found
+from app.services.face_challenges import challenge_payload, create_challenge
+from app.services.face_policy import FacePolicy, get_face_policy
+from app.services.face_verification import (
+    MAX_SECONDARY_FACE_RATIO,
+    frame_list,
+    run_face_checkin,
+    run_verify_identity,
 )
 from app.services.insightface_service import insightface_service
-from app.api.dependencies import get_current_student
-from pydantic import BaseModel
-from app.core.face_constants import (
-    LIVE_SIMILARITY_THRESHOLD,
-    EXCELLENT_MATCH_THRESHOLD,
-    GOOD_MATCH_THRESHOLD,
-)
 
-# Helper function to auto-mark absent for expired classes
-async def mark_absent_for_expired_classes(db: AsyncSession, student_id: int, student: Student, today: date):
-    """
-    Automatically mark student absent for any expired classes today that have no attendance record.
-    This is called whenever a student marks attendance, ensuring missed classes are recorded as absent.
-    """
-    try:
-        current_time = datetime.now().time()
-        
-        # Map today's weekday to DayOfWeek enum
-        weekday = today.weekday()
-        day_map = {
-            0: DayOfWeek.MONDAY, 1: DayOfWeek.TUESDAY, 2: DayOfWeek.WEDNESDAY,
-            3: DayOfWeek.THURSDAY, 4: DayOfWeek.FRIDAY, 5: DayOfWeek.SATURDAY, 6: DayOfWeek.SUNDAY
-        }
-        today_enum = day_map[weekday]
-        
-        # Get all today's class schedules for this student's faculty/semester
-        schedules_query = select(ClassSchedule).where(
-            and_(
-                ClassSchedule.day_of_week == today_enum,
-                ClassSchedule.faculty_id == student.faculty_id,
-                ClassSchedule.semester == student.semester,
-                ClassSchedule.is_active == True
-            )
-        )
-        result = await db.execute(schedules_query)
-        schedules = result.scalars().all()
-        
-        # Check each schedule to see if class time has passed (with 15 min buffer after end time)
-        for schedule in schedules:
-            # Calculate if class has ended + 15 min buffer
-            end_hour = schedule.end_time.hour
-            end_minute = schedule.end_time.minute + 15
-            if end_minute >= 60:
-                end_hour += 1
-                end_minute -= 60
-            
-            class_expired = current_time.hour > end_hour or (
-                current_time.hour == end_hour and current_time.minute >= end_minute
-            )
-            
-            if class_expired:
-                # Check if attendance record already exists for this subject today
-                existing_query = select(AttendanceRecord).where(
-                    and_(
-                        AttendanceRecord.student_id == student_id,
-                        AttendanceRecord.subject_id == schedule.subject_id,
-                        AttendanceRecord.date == today
-                    )
-                )
-                existing_result = await db.execute(existing_query)
-                existing = existing_result.scalar_one_or_none()
-                
-                if not existing:
-                    # Create absent record using raw SQL to handle enums properly
-                    await db.execute(
-                        text("""
-                            INSERT INTO attendance_records 
-                            (student_id, subject_id, date, time_in, time_out, status, method, confidence_score, location, notes, marked_by)
-                            VALUES 
-                            (:student_id, :subject_id, :date, NULL, NULL, 'absent'::attendance_status, 'other'::attendance_method, NULL, :location, :notes, NULL)
-                        """),
-                        {
-                            "student_id": student_id,
-                            "subject_id": schedule.subject_id,
-                            "date": today,
-                            "location": "AUTO_ABSENT_SYSTEM",
-                            "notes": f"Automatically marked absent - class expired at {schedule.end_time}, no attendance recorded"
-                        }
-                    )
-        
-        await db.commit()
-        
-    except Exception as e:
-        # Don't fail the main attendance marking if auto-absent fails
-        print(f"Error in auto-absent: {str(e)}")
-        await db.rollback()
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/face-recognition", tags=["face-recognition"])
 
 
-# New schema for glasses detection
-class GlassesDetectionRequest(BaseModel):
-    image_data: str  # Base64 encoded image
+# ============================================================================ schemas
 
-class GlassesDetectionResponse(BaseModel):
-    success: bool
-    message: str
-    glasses_detected: Optional[bool] = None
-    confidence: Optional[float] = None
-    all_attributes: Optional[dict] = None
 
-# New schema for real-time recognition
+class FaceCheckinRequest(BaseModel):
+    """Self check-in (§7). Send ``frames`` (the captured burst, unmirrored base64 JPEGs); the
+    legacy ``image_data`` is treated as ``frames=[image_data]``. ``subject_id`` /
+    ``session_id`` / ``schedule_id`` optionally pin the class; with none of them the server
+    picks the student's session whose check-in window is open now."""
+    frames: Optional[List[str]] = None
+    image_data: Optional[str] = None  # legacy single image
+    challenge_id: Optional[str] = Field(default=None, max_length=64)
+    presence_code: Optional[str] = Field(default=None, max_length=32)
+    subject_id: Optional[int] = None
+    session_id: Optional[int] = None
+    schedule_id: Optional[int] = None
+
+
+class FaceCheckinResponse(FaceRecognitionResponse):
+    """Legacy ``FaceRecognitionResponse`` fields + the check-in contract (HTTP 200 always for
+    business-rule outcomes; ``code`` identifies a rejection)."""
+    code: Optional[str] = None
+    status: Optional[str] = None  # present | late (only when attendance_marked)
+    current_status: Optional[str] = None  # existing record status for already_recorded
+    session_id: Optional[int] = None
+    subject_id: Optional[int] = None
+    window_state: Optional[str] = None  # not_open | closed (window_closed rejections)
+    opens_at: Optional[str] = None
+    closes_at: Optional[str] = None
+    quality_issues: Optional[List[str]] = None  # low_quality rejections
+    retry_after_seconds: Optional[int] = None  # too_many_attempts rejections
+
+
+class FaceChallengeRequest(BaseModel):
+    purpose: str
+    session_id: Optional[int] = None
+    subject_id: Optional[int] = None
+    schedule_id: Optional[int] = None
+
+
+class FaceImageRequest(BaseModel):
+    """One image (a list is accepted for compatibility; its first item is used)."""
+    image_data: Union[str, List[str]]
+
+
+class VerifyIdentityRequest(BaseModel):
+    image_data: Optional[Union[str, List[str]]] = None
+    frames: Optional[List[str]] = None
+
+
 class LiveRecognitionRequest(BaseModel):
     image_data: str  # Base64 encoded image
+
 
 class LiveRecognitionResponse(BaseModel):
     success: bool
@@ -125,338 +104,186 @@ class LiveRecognitionResponse(BaseModel):
     faces_detected: int
     recognition_quality: Optional[str] = None
 
-router = APIRouter(prefix="/face-recognition", tags=["face-recognition"])
 
-@router.post("/mark-attendance", response_model=FaceRecognitionResponse)
+# ============================================================================ helpers
+
+QUALITY_FEEDBACK = {
+    "too_dark": "Improve the lighting on your face",
+    "too_bright": "Avoid strong light or glare on your face",
+    "too_blurry": "Hold still and keep the camera steady",
+    "too_small": "Move closer to the camera",
+    "low_confidence": "Face the camera with your whole face visible",
+    "not_frontal": "Look straight at the camera",
+}
+
+
+def _client_ip(request: Request) -> Optional[str]:
+    return request.client.host if request.client else None
+
+
+def _first_image(image_data: Union[str, List[str], None]) -> Optional[str]:
+    if isinstance(image_data, list):
+        return image_data[0] if image_data else None
+    return image_data or None
+
+
+def _quality_issues(face: dict, policy: FacePolicy) -> list[str]:
+    return face_math.quality_issues(
+        face,
+        min_detection_score=policy.min_detection_score,
+        min_face_size_px=policy.min_face_size_px,
+        min_sharpness=policy.min_sharpness,
+        min_brightness=policy.min_brightness,
+        max_brightness=policy.max_brightness,
+    )
+
+
+def _has_multiple_faces(frame: dict) -> bool:
+    return int(frame.get("faces_detected") or 0) > 1 and float(frame.get("secondary_face_ratio") or 0.0) > MAX_SECONDARY_FACE_RATIO
+
+
+async def _analyse_single(image: Optional[str], policy: FacePolicy) -> dict[str, Any]:
+    """Quality feedback for one image: ``{state, frame, face, issues, area_percentage, feedback}``.
+
+    ``state`` is ``invalid_image`` | ``no_face`` | ``multiple_faces`` | ``ok``.
+    """
+    if not image:
+        return {"state": "invalid_image", "frame": None, "face": None, "issues": [], "feedback": []}
+    results = await insightface_service.aprocess_frames([image], with_liveness=False)
+    frame = results[0] if results else {"ok": False, "error": "invalid_image", "faces_detected": 0}
+    if frame.get("error") == "invalid_image":
+        return {"state": "invalid_image", "frame": frame, "face": None, "issues": [], "feedback": []}
+    face = frame.get("face")
+    if not frame.get("ok") or not face:
+        return {"state": "no_face", "frame": frame, "face": None, "issues": [], "feedback": []}
+    if _has_multiple_faces(frame):
+        return {"state": "multiple_faces", "frame": frame, "face": face, "issues": [], "feedback": []}
+    issues = _quality_issues(face, policy)
+    area_pct = float(face.get("area_ratio") or 0.0) * 100.0
+    feedback = [QUALITY_FEEDBACK[i] for i in issues if i in QUALITY_FEEDBACK]
+    if area_pct > 60:
+        feedback.append("Move back from the camera")
+    return {"state": "ok", "frame": frame, "face": face, "issues": issues, "area_percentage": area_pct,
+            "feedback": feedback}
+
+
+def _face_box(face: dict, area_pct: float) -> dict[str, Any]:
+    return {
+        "bbox": face.get("bbox"),
+        "confidence": face.get("det_score", face.get("confidence")),
+        "width": face.get("width"),
+        "height": face.get("height"),
+        "area_percentage": round(area_pct, 2),
+    }
+
+
+# ============================================================================ check-in (§7)
+
+
+@router.post("/mark-attendance", response_model=FaceCheckinResponse, dependencies=[Depends(require_face_engine)])
 async def mark_attendance_with_face(
-    recognition_data: FaceRecognitionRequest,
+    recognition_data: FaceCheckinRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    current_student: Student = Depends(get_current_student)
+    current_student: Student = Depends(get_current_student),
 ):
-    """Mark attendance using face recognition."""
+    """Student self check-in with face verification (face-verification.md §7; DOMAIN_RULES
+    §13.9). Order: lock-out, registered face, session, presence code, challenge, frames,
+    quality, identity, head turn, passive liveness, record. Business-rule rejections are HTTP
+    200 with ``success: false`` and a ``code``."""
     try:
-        print(f"[DEBUG] Mark attendance request - Student ID: {current_student.id}, Subject ID: {recognition_data.subject_id}")
-        
-        # Verify the face matches the current logged-in student
-        if current_student.face_encoding is None:
-            return FaceRecognitionResponse(
-                success=False,
-                message="No registered face found. Please register your face first.",
-                attendance_marked=False
-            )
-        
-        # Decode and extract embedding for the provided image
-        image = insightface_service.decode_base64_image(recognition_data.image_data)
-        face_info = insightface_service.extract_face_features(image)
-
-        if not face_info:
-            return FaceRecognitionResponse(
-                success=False,
-                message="No clear face detected in the image.",
-                attendance_marked=False
-            )
-
-        if face_info['confidence'] < insightface_service.confidence_threshold:
-            return FaceRecognitionResponse(
-                success=False,
-                message=f"Face detection confidence too low ({face_info['confidence']:.2f}).",
-                attendance_marked=False
-            )
-
-        unknown_embedding = face_info['embedding']
-        is_match, similarity_score, _ = insightface_service.compare_embeddings(
-            [current_student.face_encoding], unknown_embedding
+        result = await run_face_checkin(
+            db,
+            student=current_student,
+            frames=recognition_data.frames,
+            image_data=recognition_data.image_data,
+            challenge_id=recognition_data.challenge_id,
+            presence_code_value=recognition_data.presence_code,
+            subject_id=recognition_data.subject_id,
+            schedule_id=recognition_data.schedule_id,
+            session_id=recognition_data.session_id,
+            ip_address=_client_ip(request),
         )
-
-        if not is_match:
-            return FaceRecognitionResponse(
-                success=False,
-                message=f"Face does not match the current logged-in user (similarity: {similarity_score:.1f}%).",
-                attendance_marked=False
-            )
-
-        # Verify subject exists
-        subject_result = await db.execute(
-            select(Subject).where(Subject.id == recognition_data.subject_id)
-        )
-        subject = subject_result.scalar_one_or_none()
-        if not subject:
-            print(f"[ERROR] Subject ID {recognition_data.subject_id} not found")
-            return FaceRecognitionResponse(
-                success=False,
-                message=f"Subject with ID {recognition_data.subject_id} not found.",
-                attendance_marked=False
-            )
-        
-        print(f"[DEBUG] Subject found: {subject.name}")
-
-        # Check if attendance already marked today for this subject
-        today = datetime.now().date()
-        today_datetime = datetime.combine(today, datetime.min.time())  # Convert to datetime for database
-        existing_record = await db.execute(
-            select(AttendanceRecord).where(
-                AttendanceRecord.student_id == current_student.id,
-                AttendanceRecord.subject_id == recognition_data.subject_id,
-                func.date(AttendanceRecord.date) == today
-            )
-        )
-        
-        if existing_record.scalar_one_or_none():
-            return FaceRecognitionResponse(
-                success=False,
-                message="Attendance already marked for today",
-                attendance_marked=False
-            )
-        
-        # Create attendance record with proper fields
-        current_time = datetime.now()
-        attendance = AttendanceRecord(
-            student_id=current_student.id,
-            subject_id=recognition_data.subject_id,  # Critical: Link to specific subject
-            date=today_datetime,  # Use datetime object for database
-            time_in=current_time,  # Time when attendance was marked
-            time_out=None,  # Will be filled when student leaves (optional)
-            status=AttendanceStatus.present,  # Use enum value
-            method=AttendanceMethod.face,  # Use enum value for facial recognition
-            confidence_score=similarity_score,
-            location="Face Recognition System",  # Indicate it was marked via face recognition
-            notes=f"Face recognition confidence: {similarity_score:.2f}%, Marked via self-service attendance system",
-            marked_by=current_student.user_id  # Reference to the student's user ID who marked their own attendance
-        )
-        
-        print(f"[DEBUG] Creating attendance record with data: student_id={current_student.id}, subject_id={recognition_data.subject_id}, date={today_datetime}")
-        
-        db.add(attendance)
-        try:
-            await db.commit()
-            print(f"[DEBUG] Attendance record created successfully")
-        except Exception as commit_error:
-            print(f"[ERROR] Database commit failed: {str(commit_error)}")
-            await db.rollback()
-            raise commit_error
-        
-        # Auto-mark absent for any expired classes TODAY that have no attendance record
-        await mark_absent_for_expired_classes(db, current_student.id, current_student, today)
-        
-        return FaceRecognitionResponse(
-            success=True,
-            message="Attendance marked successfully!",
-            student_id=current_student.id,
-            confidence_score=similarity_score,
-            attendance_marked=True
-        )
-    
-    except Exception as e:
-        print(f"[ERROR] Exception in mark_attendance_with_face: {str(e)}")
-        import traceback
-        traceback.print_exc()
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Face check-in failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing face recognition: {str(e)}"
+            detail={"code": "internal_error", "message": "Error processing face check-in; please try again"},
         )
+    return FaceCheckinResponse(**result.as_dict())
 
-@router.post("/verify-identity")
+
+@router.post("/challenge")
+async def create_face_challenge(
+    body: FaceChallengeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_student: Student = Depends(get_current_student),
+):
+    """Single-use liveness challenge (§6). ``purpose``: ``checkin`` (action ``turn_left`` /
+    ``turn_right``) or ``enrolment`` (``front_left_right``). A check-in challenge needs a
+    registered face (409 ``no_registered_face``)."""
+    purpose = (body.purpose or "").strip().lower()
+    try:
+        policy = await get_face_policy(db)
+        if purpose not in (ChallengePurpose.checkin, ChallengePurpose.enrolment):
+            raise DomainError("invalid_purpose", "purpose must be 'checkin' or 'enrolment'", http_status=400)
+        if purpose == ChallengePurpose.checkin and not current_student.face_encoding:
+            raise DomainError("no_registered_face", "No registered face found. Please register your face first.",
+                              http_status=409)
+        session_id = None
+        if body.session_id is not None:
+            found = (await db.execute(select(ClassSession.id).where(ClassSession.id == body.session_id))).scalar()
+            if found is None:
+                raise not_found("session", session_id=body.session_id)
+            session_id = int(found)
+        challenge = await create_challenge(db, student=current_student, purpose=purpose, policy=policy,
+                                           session_id=session_id)
+        payload = challenge_payload(challenge, policy)
+        await db.commit()
+    except DomainError as err:
+        await db.rollback()
+        raise err.to_http_exception()
+    return payload
+
+
+@router.get("/policy")
+async def get_public_face_policy(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Public subset of the face verification policy (what the UI must collect)."""
+    return (await get_face_policy(db)).public_dict()
+
+
+@router.post("/verify-identity", dependencies=[Depends(require_face_engine)])
 async def verify_identity(
-    request: FaceRegistrationRequest,
-    current_student: Student = Depends(get_current_student)
-):
-    """Verify that the provided face image matches the currently authenticated student."""
-    try:
-        if current_student.face_encoding is None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No registered face found for the current user. Please register your face first."
-            )
-
-        # Decode and extract embedding for the provided image
-        image = insightface_service.decode_base64_image(request.image_data)
-        face_info = insightface_service.extract_face_features(image)
-
-        if not face_info:
-            return {
-                "matched": False,
-                "confidence_score": 0.0,
-                "message": "No clear face detected."
-            }
-
-        if face_info['confidence'] < insightface_service.confidence_threshold:
-            return {
-                "matched": False,
-                "confidence_score": 0.0,
-                "message": f"Face detection confidence too low ({face_info['confidence']:.2f})."
-            }
-
-        unknown_embedding = face_info['embedding']
-        is_match, similarity_score, _ = insightface_service.compare_embeddings(
-            [current_student.face_encoding], unknown_embedding
-        )
-
-        return {
-            "matched": is_match,
-            "confidence_score": similarity_score,
-            "message": "Identity verified" if is_match else f"Face does not match (similarity: {similarity_score:.1f}%)."
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error verifying identity: {str(e)}"
-        )
-
-@router.post("/register-face")
-async def register_student_face(
-    request: FaceRegistrationRequest,
+    body: VerifyIdentityRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
     current_student: Student = Depends(get_current_student),
-    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Register student's face using backend-only processing.
-    Supports both single image and multiple image registration.
-    """
+    """Legacy: does the image match the logged-in student? (§7: lock-out, registered face,
+    frames, quality, identity; logged with purpose ``verify``). ``confidence_score`` is 0.0
+    unless matched. No registered face -> 400 ``no_registered_face``."""
+    image = body.image_data
+    frames = frame_list(body.frames, None) or ([image] if isinstance(image, str) and image else list(image or []))
     try:
-        print(f"[DEBUG] 🎯 Starting face registration for student ID: {current_student.id}")
-        
-        # Handle both single image and multiple images
-        if isinstance(request.image_data, list):
-            # Multiple images provided
-            print(f"[DEBUG] 📷 Processing {len(request.image_data)} images")
-            registration_result = insightface_service.process_multi_image_face_registration(request.image_data)
-        else:
-            # Single image provided (backward compatibility)
-            print(f"[DEBUG] 📷 Processing single image")
-            registration_result = insightface_service.process_face_registration(request.image_data)
-        
-        print(f"[DEBUG] 📊 Registration result: {registration_result['success']}")
-        print(f"[DEBUG] 📝 Message: {registration_result['message']}")
-        
-        # Check if processing was successful
-        if not registration_result['success']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=registration_result['message']
-            )
-        
-        # Extract face encoding from result
-        face_encoding = registration_result['encoding']
-        
-        if not face_encoding:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract face features from image(s)"
-            )
-        
-        # Update student's face embedding in database
-        print("[DEBUG] 💾 Updating student face embedding in database...")
-        current_student.face_encoding = face_encoding
-        await db.commit()
-        print("[DEBUG] ✅ Face embedding saved successfully")
-        
-        # Build response based on registration type
-        if isinstance(request.image_data, list):
-            # Multi-image response
-            return {
-                "success": True,
-                "message": "🎉 Face registered successfully with multi-angle processing!",
-                "details": {
-                    "images_processed": registration_result.get('images_processed', 0),
-                    "valid_images": registration_result.get('valid_images', 0),
-                    "image_results": registration_result.get('image_results', []),
-                    "composite_face_data": registration_result.get('composite_face_data', {}),
-                    "processing_method": "multi_image_insightface"
-                }
-            }
-        else:
-            # Single image response (backward compatibility)
-            face_data = registration_result.get('face_data', {})
-            return {
-                "success": True,
-                "message": "🎉 Face registered successfully!",
-                "details": {
-                    "faces_detected": registration_result.get('faces_detected', 1),
-                    "detection_confidence": face_data.get('confidence', 0),
-                    "face_area_percentage": face_data.get('area_percentage', 0),
-                    "embedding_dimensions": face_data.get('embedding_dimensions', 0),
-                    "processing_method": "single_image_insightface"
-                }
-            }
-    
+        result = await run_verify_identity(db, student=current_student, frames=frames, ip_address=_client_ip(request))
+    except DomainError as err:
+        raise err.to_http_exception()
     except HTTPException:
         raise
-    except Exception as e:
-        print(f"[ERROR] ❌ Exception in face registration: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing face registration: {str(e)}"
-        )
+    except Exception:
+        logger.exception("Identity verification failed")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail={"code": "internal_error", "message": "Error verifying identity"})
+    return result.as_dict()
 
-@router.post("/register-face-multi")
-async def register_student_face_multi(
-    request: MultiImageFaceRegistrationRequest,
-    current_student: Student = Depends(get_current_student),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Register student's face using multiple images for enhanced accuracy.
-    Dedicated endpoint for multi-image registration.
-    """
-    try:
-        print(f"[DEBUG] 🎯 Starting multi-image face registration for student ID: {current_student.id}")
-        print(f"[DEBUG] 📷 Processing {len(request.images)} images")
-        
-        # Process multiple images
-        registration_result = insightface_service.process_multi_image_face_registration(request.images)
-        
-        print(f"[DEBUG] 📊 Registration result: {registration_result['success']}")
-        print(f"[DEBUG] 📝 Valid images: {registration_result.get('valid_images', 0)}/{registration_result.get('images_processed', 0)}")
-        
-        # Check if processing was successful
-        if not registration_result['success']:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=registration_result['message']
-            )
-        
-        # Extract face encoding from result
-        face_encoding = registration_result['encoding']
-        
-        if not face_encoding:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract face features from any of the provided images"
-            )
-        
-        # Update student's face embedding in database
-        print("[DEBUG] 💾 Updating student face embedding in database...")
-        current_student.face_encoding = face_encoding
-        await db.commit()
-        print("[DEBUG] ✅ Multi-image face embedding saved successfully")
-        
-        return {
-            "success": True,
-            "message": "🎉 Face registered successfully with multi-angle processing!",
-            "details": {
-                "images_processed": registration_result.get('images_processed', 0),
-                "valid_images": registration_result.get('valid_images', 0),
-                "image_results": registration_result.get('image_results', []),
-                "composite_face_data": registration_result.get('composite_face_data', {}),
-                "processing_method": "multi_image_insightface",
-                "enhancement": "Multi-angle face profile provides better recognition accuracy"
-            }
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] ❌ Exception in multi-image face registration: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error processing multi-image face registration: {str(e)}"
-        )
+
+# ============================================================================ student records
+
 
 @router.get("/my-attendance", response_model=List[AttendanceRecordSchema])
 async def get_my_attendance(
@@ -470,391 +297,200 @@ async def get_my_attendance(
         .order_by(AttendanceRecord.date.desc())
         .limit(50)
     )
-    
+
     attendance_records = result.scalars().all()
     return [AttendanceRecordSchema.from_orm(record) for record in attendance_records]
 
-@router.post("/verify-face")
-async def verify_face_image(request: FaceRegistrationRequest):
-    """Verify if image contains a valid face for registration."""
+
+# ============================================================================ quality feedback
+
+
+@router.post("/verify-face", dependencies=[Depends(require_face_engine)])
+async def verify_face_image(
+    request: FaceImageRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Quality feedback for one image (no matching, nothing stored)."""
+    policy = await get_face_policy(db)
     try:
-        # Decode image
-        image = insightface_service.decode_base64_image(request.image_data)
-        # Detect faces
-        detected_faces = insightface_service.detect_faces(image)
-        if len(detected_faces) == 0:
-            return {
-                "valid": False,
-                "faces_detected": 0,
+        a = await _analyse_single(_first_image(request.image_data), policy)
+    except Exception:
+        logger.exception("verify-face failed")
+        return {"valid": False, "faces_detected": 0, "message": "Error processing image",
+                "feedback": "Try capturing a new image", "quality_issues": []}
+    frame = a["frame"] or {}
+    if a["state"] == "invalid_image":
+        return {"valid": False, "faces_detected": 0, "message": "The image could not be read.",
+                "feedback": "Try capturing a new image", "quality_issues": []}
+    if a["state"] == "no_face":
+        return {"valid": False, "faces_detected": 0,
                 "message": "No face detected in the image. Please ensure your face is clearly visible.",
-                "feedback": "Move closer to camera or improve lighting"
-            }
-        if len(detected_faces) > 1:
-            return {
-                "valid": False,
-                "faces_detected": len(detected_faces),
-                "message": f"Multiple faces detected ({len(detected_faces)}). Please ensure only one person is visible.",
-                "feedback": "Multiple people detected - ensure only you are visible"
-            }
-        # Single face detected - validate quality
-        face_data = detected_faces[0]
-        is_valid, validation_message = insightface_service.validate_face_quality(image, face_data)
-        area_percentage = (face_data['area'] / (image.shape[0] * image.shape[1])) * 100
-        feedback = []
-        if face_data['confidence'] < 0.7:
-            feedback.append("Improve lighting for better detection")
-        if area_percentage < 10:
-            feedback.append("Move closer to camera")
-        elif area_percentage > 60:
-            feedback.append("Move back from camera")
-        if not feedback and is_valid:
-            feedback.append("Perfect! Ready for verification")
-        return {
-            "valid": is_valid,
-            "faces_detected": 1,
-            "message": validation_message,
-            "face": {
-                "bbox": face_data['bbox'],
-                "confidence": face_data['confidence'],
-                "width": face_data['width'],
-                "height": face_data['height'],
-                "area_percentage": area_percentage
-            },
-            "feedback": " • ".join(feedback)
-        }
-    except Exception as e:
-        return {
-            "valid": False,
-            "faces_detected": 0,
-            "message": f"Error processing image: {str(e)}",
-            "feedback": "Try capturing a new image"
-        }
+                "feedback": "Move closer to camera or improve lighting", "quality_issues": []}
+    faces = int(frame.get("faces_detected") or 1)
+    if a["state"] == "multiple_faces":
+        return {"valid": False, "faces_detected": faces,
+                "message": f"Multiple faces detected ({faces}). Please ensure only one person is visible.",
+                "feedback": "Multiple people detected - ensure only you are visible", "quality_issues": []}
+    valid = not a["issues"]
+    feedback = a["feedback"] or (["Perfect! Ready for verification"] if valid else [])
+    return {
+        "valid": valid,
+        "faces_detected": faces,
+        "message": "Face quality is good" if valid else "Face quality is too low: " + ", ".join(a["issues"]),
+        "face": _face_box(a["face"], a["area_percentage"]),
+        "feedback": " • ".join(feedback),
+        "quality_issues": a["issues"],
+    }
 
-@router.get("/service-status")
-async def get_face_recognition_service_status():
-    """Get InsightFace service status and model information."""
+
+@router.post("/detect-faces", dependencies=[Depends(require_face_engine)])
+async def detect_faces_in_image(
+    request: FaceImageRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Real-time detection feedback for one image (no matching, nothing stored)."""
+    policy = await get_face_policy(db)
+    base = {"faces": [], "ready_for_capture": False, "quality_issues": []}
     try:
-        if insightface_service is None:
-            return {
-                "status": "error",
-                "message": "InsightFace service not initialized",
-                "service": "insightface",
-                "models": {}
-            }
-        
-        model_info = insightface_service.get_model_info()
-        
-        return {
-            "status": "active",
-            "message": "InsightFace service running successfully",
-            "service": "insightface",
-            "models": model_info,
-            "advantages": [
-                "99.86% accuracy (vs 99.38% for legacy library)",
-                "2-3x faster inference speed",
-                "Better handling of lighting variations",
-                "More robust to face angles",
-                "GPU acceleration support"
-            ]
-        }
-    
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"Service check failed: {str(e)}",
-            "service": "insightface",
-            "models": {}
-        }
+        a = await _analyse_single(_first_image(request.image_data), policy)
+    except Exception:
+        logger.exception("detect-faces failed")
+        return {**base, "success": False, "message": "Error analyzing face", "faces_detected": 0,
+                "feedback": "Error occurred during analysis"}
+    frame = a["frame"] or {}
+    if a["state"] == "invalid_image":
+        return {**base, "success": False, "message": "The image could not be read.", "faces_detected": 0,
+                "feedback": "Try capturing a new image"}
+    if a["state"] == "no_face":
+        return {**base, "success": False, "message": "No face detected. Please ensure your face is visible and well-lit.",
+                "faces_detected": 0, "feedback": "Move closer to camera or improve lighting"}
+    faces = int(frame.get("faces_detected") or 1)
+    face = a["face"]
+    if a["state"] == "multiple_faces":
+        area_pct = float(face.get("area_ratio") or 0.0) * 100.0
+        return {**base, "success": False,
+                "message": f"Multiple faces detected ({faces}). Please ensure only one person is visible.",
+                "faces_detected": faces, "faces": [_face_box(face, area_pct)],
+                "feedback": "Multiple people detected - ensure only you are visible"}
+    valid = not a["issues"]
+    feedback = a["feedback"] or (["Perfect! Ready for capture"] if valid else [])
+    return {
+        "success": valid,
+        "message": "Face detected" if valid else "Face quality is too low: " + ", ".join(a["issues"]),
+        "faces_detected": faces,
+        "faces": [_face_box(face, a["area_percentage"])],
+        "feedback": " • ".join(feedback),
+        "ready_for_capture": valid,
+        "quality_issues": a["issues"],
+    }
 
-@router.post("/detect-faces")
-async def detect_faces_in_image(request: FaceRegistrationRequest):
-    """
-    Detect faces in image for real-time feedback.
-    Returns face detection results without registration.
-    """
-    try:
-        print(f"[DEBUG] 🔍 Real-time face detection requested")
-        print(f"[DEBUG] 📷 Image data length: {len(request.image_data)}")
-        
-        # Decode image
-        image = insightface_service.decode_base64_image(request.image_data)
-        print(f"[DEBUG] 📷 Image decoded - Shape: {image.shape}")
-        
-        # Detect faces only
-        detected_faces = insightface_service.detect_faces(image)
-        
-        if len(detected_faces) == 0:
-            return {
-                "success": False,
-                "message": "No face detected. Please ensure your face is visible and well-lit.",
-                "faces_detected": 0,
-                "faces": [],
-                "feedback": "Move closer to camera or improve lighting"
-            }
-        
-        if len(detected_faces) > 1:
-            return {
-                "success": False,
-                "message": f"Multiple faces detected ({len(detected_faces)}). Please ensure only one person is visible.",
-                "faces_detected": len(detected_faces),
-                "faces": [
-                    {
-                        "bbox": face['bbox'],
-                        "confidence": face['confidence'],
-                        "area": face['area']
-                    }
-                    for face in detected_faces
-                ],
-                "feedback": "Multiple people detected - ensure only you are visible"
-            }
-        
-        # Single face detected - validate quality
-        face_data = detected_faces[0]
-        is_valid, validation_message = insightface_service.validate_face_quality(image, face_data)
-        
-        # Calculate feedback for user
-        confidence = face_data['confidence']
-        area_percentage = (face_data['area'] / (image.shape[0] * image.shape[1])) * 100
-        
-        feedback = []
-        if confidence < 0.7:
-            feedback.append("Improve lighting for better detection")
-        if area_percentage < 10:
-            feedback.append("Move closer to camera")
-        elif area_percentage > 60:
-            feedback.append("Move back from camera")
-        if not feedback and is_valid:
-            feedback.append("Perfect! Ready for capture")
-        
-        return {
-            "success": is_valid,
-            "message": validation_message,
-            "faces_detected": 1,
-            "faces": [{
-                "bbox": face_data['bbox'],
-                "confidence": face_data['confidence'],
-                "width": face_data['width'],
-                "height": face_data['height'],
-                "area_percentage": area_percentage
-            }],
-            "feedback": " • ".join(feedback),
-            "ready_for_capture": is_valid
-        }
-    
-    except Exception as e:
-        return {
-            "success": False,
-            "message": f"Error analyzing face: {str(e)}",
-            "faces_detected": 0,
-            "faces": [],
-            "feedback": "Error occurred during analysis",
-            "ready_for_capture": False
-        }
 
-@router.post("/detect-glasses", response_model=GlassesDetectionResponse)
-async def detect_glasses(request: GlassesDetectionRequest):
-    """
-    Detect if a person is wearing glasses using InsightFace.
-    This is a more accurate alternative to frontend computer vision.
-    """
-    try:
-        if not insightface_service:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Face recognition service not available"
-            )
-        
-        # Decode and analyze the image
-        image = insightface_service.decode_base64_image(request.image_data)
-        detected_faces = insightface_service.detect_faces(image)
-        
-        if len(detected_faces) == 0:
-            return GlassesDetectionResponse(
-                success=False,
-                message="No face detected in the image",
-                glasses_detected=None
-            )
-        
-        if len(detected_faces) > 1:
-            return GlassesDetectionResponse(
-                success=False,
-                message=f"Multiple faces detected ({len(detected_faces)}). Please ensure only one person is visible.",
-                glasses_detected=None
-            )
-        
-        # Get the face data
-        face_data = detected_faces[0]
-        
-        # Check if glasses attribute is available
-        glasses_value = face_data.get('glasses', None)
-        
-        if glasses_value is None:
-            return GlassesDetectionResponse(
-                success=False,
-                message="Glasses detection not supported by current InsightFace model",
-                glasses_detected=None,
-                all_attributes={
-                    'age': face_data.get('age'),
-                    'gender': face_data.get('gender'),
-                    'confidence': face_data.get('confidence')
-                }
-            )
-        
-        # InsightFace glasses values: 0 = no glasses, 1 = glasses
-        glasses_detected = glasses_value == 1
-        
-        return GlassesDetectionResponse(
-            success=True,
-            message=f"Glasses detection completed. {'Glasses detected' if glasses_detected else 'No glasses detected'}",
-            glasses_detected=glasses_detected,
-            confidence=face_data.get('confidence', 0.0),
-            all_attributes={
-                'age': face_data.get('age'),
-                'gender': face_data.get('gender'), 
-                'glasses': glasses_value,
-                'confidence': face_data.get('confidence'),
-                'bbox': face_data.get('bbox')
-            }
-        )
-        
-    except Exception as e:
-        return GlassesDetectionResponse(
-            success=False,
-            message=f"Error detecting glasses: {str(e)}",
-            glasses_detected=None
-        )
-    
-    except Exception as e:
-        print(f"[ERROR] ❌ Face detection error: {str(e)}")
-        return {
-            "success": False,
-            "message": "Error processing image",
-            "faces_detected": 0,
-            "faces": [],
-            "feedback": "Try capturing a new image"
-        }
+# ============================================================================ staff 1:N tool
 
-@router.post("/live-recognition", response_model=LiveRecognitionResponse)
+
+def _recognition_quality(similarity: float, threshold: float) -> str:
+    if similarity >= threshold + 0.25:
+        return "excellent"
+    if similarity >= threshold + 0.10:
+        return "good"
+    return "fair"
+
+
+@router.post("/live-recognition", response_model=LiveRecognitionResponse, dependencies=[Depends(require_face_engine)])
 async def live_face_recognition(
     request: LiveRecognitionRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(require_admin_or_teacher),
 ):
-    """
-    Real-time face recognition that returns the recognized student's name.
-    Used for live feedback during attendance marking process.
-    """
+    """Staff tool: who is this? 1:N search over every active enrolled student's templates;
+    a match needs ``policy.match_threshold``."""
+    policy = await get_face_policy(db)
     try:
-        print(f"[DEBUG] 🔍 Live recognition requested")
-        
-        # Decode and analyze the image
-        image = insightface_service.decode_base64_image(request.image_data)
-        detected_faces = insightface_service.detect_faces(image)
-        
-        if len(detected_faces) == 0:
-            return LiveRecognitionResponse(
-                success=False,
-                message="No face detected",
-                student_recognized=False,
-                faces_detected=0,
-                recognition_quality="poor"
-            )
-        
-        if len(detected_faces) > 1:
-            return LiveRecognitionResponse(
-                success=False,
-                message=f"Multiple faces detected ({len(detected_faces)})",
-                student_recognized=False,
-                faces_detected=len(detected_faces),
-                recognition_quality="multiple_faces"
-            )
-        
-        # Single face detected - now try to recognize
-        face_data = detected_faces[0]
-        
-        # Check face quality first
-        is_valid, validation_message = insightface_service.validate_face_quality(image, face_data)
-        
-        if not is_valid:
-            return LiveRecognitionResponse(
-                success=False,
-                message=validation_message,
-                student_recognized=False,
-                faces_detected=1,
-                recognition_quality="poor"
-            )
-        
-        # Extract embedding from current face
-        face_info = insightface_service.extract_face_features(image)
-        
-        if not face_info or face_info['confidence'] < insightface_service.confidence_threshold:
-            return LiveRecognitionResponse(
-                success=False,
-                message="Face not clear enough for recognition",
-                student_recognized=False,
-                faces_detected=1,
-                recognition_quality="poor"
-            )
-        
-        unknown_embedding = face_info['embedding']
-        
-        # JSON-based face matching with linear scan
-        result = await db.execute(
-            select(Student).options(selectinload(Student.user)).where(Student.face_encoding.isnot(None))
-        )
-        students = result.scalars().all()
-        
-        if not students:
-            return LiveRecognitionResponse(
-                success=False,
-                message="No registered students found",
-                student_recognized=False,
-                faces_detected=1,
-                recognition_quality="no_database"
-            )
-        
-        best_match = None
-        best_similarity = 0.0
-        
-        for s in students:
-            is_match, sim_pct, _ = insightface_service.compare_embeddings([s.face_encoding], unknown_embedding)
-            sim = sim_pct / 100.0
-            if sim > best_similarity:
-                best_similarity = sim
-                if sim >= LIVE_SIMILARITY_THRESHOLD:
-                    best_match = s
-        
-        if best_match:
-            quality = (
-                "excellent" if best_similarity >= EXCELLENT_MATCH_THRESHOLD else
-                "good" if best_similarity >= GOOD_MATCH_THRESHOLD else
-                "fair"
-            )
-            return LiveRecognitionResponse(
-                success=True,
-                message=f"Recognized: {best_match.user.full_name}",
-                student_recognized=True,
-                student_name=best_match.user.full_name,
-                student_id=best_match.id,
-                confidence_score=best_similarity * 100,
-                faces_detected=1,
-                recognition_quality=quality
-            )
-        
+        a = await _analyse_single(request.image_data, policy)
+    except Exception:
+        logger.exception("live-recognition failed")
+        return LiveRecognitionResponse(success=False, message="Error during recognition", student_recognized=False,
+                                       faces_detected=0, recognition_quality="error")
+    frame = a["frame"] or {}
+    if a["state"] in ("invalid_image", "no_face"):
+        return LiveRecognitionResponse(success=False, message="No face detected", student_recognized=False,
+                                       faces_detected=0, recognition_quality="poor")
+    faces = int(frame.get("faces_detected") or 1)
+    if a["state"] == "multiple_faces":
+        return LiveRecognitionResponse(success=False, message=f"Multiple faces detected ({faces})",
+                                       student_recognized=False, faces_detected=faces,
+                                       recognition_quality="multiple_faces")
+    if a["issues"]:
+        return LiveRecognitionResponse(success=False, message="Face not clear enough for recognition: " + ", ".join(a["issues"]),
+                                       student_recognized=False, faces_detected=faces, recognition_quality="poor")
+
+    probe = np.asarray(a["face"]["embedding"], dtype=np.float64).reshape(-1)
+    entries = [(sid, emb) for sid, emb in await face_store.gallery(db, model_id=insightface_service.model_id)
+               if emb is not None and len(emb) == probe.size]
+    active = {}
+    if entries:
+        active = {
+            sid: name for sid, name in (await db.execute(
+                select(Student.id, User.full_name).join(User, Student.user_id == User.id)
+                .where(Student.id.in_({sid for sid, _ in entries}), User.is_active.is_(True))
+            )).all()
+        }
+        entries = [(sid, emb) for sid, emb in entries if sid in active]
+    if not entries:
+        return LiveRecognitionResponse(success=False, message="No registered students found", student_recognized=False,
+                                       faces_detected=faces, recognition_quality="no_database")
+
+    matrix = np.asarray([emb for _, emb in entries], dtype=np.float64)
+    norms = np.linalg.norm(matrix, axis=1)
+    norms[norms == 0] = 1.0
+    probe_norm = float(np.linalg.norm(probe)) or 1.0
+    sims = (matrix @ probe) / (norms * probe_norm)
+    best = int(np.argmax(sims))
+    best_sim = float(sims[best])
+    best_student = entries[best][0]
+    if best_sim >= policy.match_threshold:
+        name = active.get(best_student)
         return LiveRecognitionResponse(
-            success=False,
-            message="Face not recognized",
-            student_recognized=False,
-            faces_detected=1,
-            confidence_score=best_similarity * 100 if best_similarity > 0 else 0,
-            recognition_quality="unrecognized"
+            success=True,
+            message=f"Recognized: {name}",
+            student_recognized=True,
+            student_name=name,
+            student_id=best_student,
+            confidence_score=round(best_sim * 100.0, 2),
+            faces_detected=faces,
+            recognition_quality=_recognition_quality(best_sim, policy.match_threshold),
         )
-    
-    except Exception as e:
-        print(f"[ERROR] ❌ Live recognition error: {str(e)}")
-        return LiveRecognitionResponse(
-            success=False,
-            message=f"Error during recognition: {str(e)}",
-            student_recognized=False,
-            faces_detected=0,
-            recognition_quality="error"
-        )
+    return LiveRecognitionResponse(success=False, message="Face not recognized", student_recognized=False,
+                                   faces_detected=faces, recognition_quality="unrecognized")
+
+
+# ============================================================================ diagnostics
+
+
+@router.get("/service-status")
+async def get_face_recognition_service_status(db: AsyncSession = Depends(get_db)):
+    """Engine status: model id, whether the anti-spoof models are loaded, and the public policy."""
+    try:
+        model_info = insightface_service.get_model_info()
+    except Exception as exc:  # the engine failed to initialise
+        logger.warning("Face engine status check failed: %s", exc)
+        return {"status": "error", "message": "Face recognition engine is not available", "service": "insightface",
+                "model_id": getattr(insightface_service, "model_id", None), "liveness_available": False,
+                "models": {}, "policy": None}
+    try:
+        policy = (await get_face_policy(db)).public_dict()
+    except Exception:
+        logger.warning("Could not load the face verification policy", exc_info=True)
+        policy = None
+    liveness = bool(getattr(insightface_service, "liveness_available", False))
+    return {
+        "status": "active",
+        "message": "Face recognition engine is running" + ("" if liveness else " (liveness models not installed)"),
+        "service": "insightface",
+        "model_id": getattr(insightface_service, "model_id", None),
+        "liveness_available": liveness,
+        "models": model_info,
+        "policy": policy,
+    }

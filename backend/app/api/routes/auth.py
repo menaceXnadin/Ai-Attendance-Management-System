@@ -41,17 +41,9 @@ async def login(
     # Create access token
     access_token = create_access_token(data={"sub": str(user.id), "role": user.role.value})
     
-    # Track user session
-    try:
-        from app.services.system_monitor import SessionManager
-        await SessionManager.create_session(
-            db=db,
-            user_id=user.id,
-            token=access_token
-        )
-    except Exception as e:
-        print(f"Warning: Failed to create session tracking: {e}")
-    
+    # (Session tracking via system_monitor.SessionManager removed: it imports
+    # models that do not exist and could leave the request transaction aborted.)
+
     return Token(
         access_token=access_token,
         user=UserSchema.from_orm(user)
@@ -117,13 +109,7 @@ async def logout(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Logout user and end session tracking."""
-    try:
-        from app.services.system_monitor import SessionManager
-        await SessionManager.end_session(db=db, user_id=current_user.id)
-    except Exception as e:
-        print(f"Warning: Failed to end session tracking: {e}")
-    
+    """Logout user (tokens are stateless; the client discards its token)."""
     return {"message": "Successfully logged out"}
 
 @router.post("/refresh-token", response_model=Token)
