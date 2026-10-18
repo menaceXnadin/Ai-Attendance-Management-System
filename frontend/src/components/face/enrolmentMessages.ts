@@ -82,9 +82,16 @@ export const describeEnrolmentError = (info: ApiErrorInfo, sentPoses: EnrolPose[
   }
   if (code === 'pose_coverage') {
     const missing = getErrorDetailField<string[]>(info, 'missing_poses');
+    const poseIssues = getErrorDetailField<Record<string, string[]>>(info, 'pose_issues') ?? {};
     if (Array.isArray(missing) && missing.length > 0) {
-      const labels = missing.map((p) => POSE_LABEL[p as EnrolPose] ?? p);
-      details.push(`Missing: a photo ${labels.join(', a photo ')}.`);
+      missing.forEach((p) => {
+        const label = POSE_LABEL[p as EnrolPose] ?? p;
+        const issues = Array.isArray(poseIssues[p]) ? poseIssues[p] : [];
+        const why = issues.includes('turned_too_far')
+          ? FACE_QUALITY_HINTS.turned_too_far
+          : issues.map((c) => FACE_QUALITY_HINTS[c]).filter(Boolean).join(' ');
+        details.push(`Missing: a photo ${label}.${why ? ` ${why}` : ''}`);
+      });
     }
   }
 

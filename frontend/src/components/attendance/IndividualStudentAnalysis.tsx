@@ -421,7 +421,7 @@ const IndividualStudentAnalysis: React.FC = () => {
     }
   };
 
-  const generateAutomaticActions = (insights: StudentInsights) => {
+  const generateAutomaticActions = useCallback((insights: StudentInsights) => {
     const automaticActions: Omit<ActionItem, 'id' | 'created_at'>[] = [];
     const pct = insights.attendance.pct;
     // Band comes from the server (or policy bands for the server percentage); no data → no band.
@@ -494,7 +494,7 @@ const IndividualStudentAnalysis: React.FC = () => {
       id: `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       created_at: new Date().toISOString(),
     }));
-  };
+  }, [policyView, minimum]);
 
   // Generate automatic actions when insights are loaded
   useEffect(() => {
@@ -502,7 +502,7 @@ const IndividualStudentAnalysis: React.FC = () => {
       const autoActions = generateAutomaticActions(studentInsights);
       setActionItems(autoActions);
     }
-  }, [studentInsights, actionItems.length]);
+  }, [studentInsights, actionItems.length, generateAutomaticActions]);
 
   // Export functionality
   const generatePDFReport = async () => {

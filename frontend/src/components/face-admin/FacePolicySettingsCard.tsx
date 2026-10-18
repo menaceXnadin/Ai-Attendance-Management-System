@@ -124,6 +124,15 @@ const GROUPS: GroupDef[] = [
       },
       {
         kind: 'number',
+        key: 'max_turn_yaw',
+        label: 'Maximum turn',
+        help: 'Frames turned further than this (close to a side profile) are ignored. Must be above the minimum turn.',
+        min: 0.3,
+        max: 2,
+        step: 0.05,
+      },
+      {
+        kind: 'number',
         key: 'frontal_max_yaw',
         label: 'Maximum turn for "looking straight"',
         help: 'Frames turned less than this count as frontal. Must be lower than the minimum turn.',
@@ -325,6 +334,9 @@ const FacePolicySettingsCard: React.FC<{ className?: string }> = ({ className })
     }
     if (!errors.min_brightness && !errors.max_brightness && num('max_brightness') <= num('min_brightness')) {
       errors.max_brightness = 'Must be above the minimum brightness.';
+    }
+    if (!errors.max_turn_yaw && !errors.head_turn_min_yaw && num('head_turn_min_yaw') >= num('max_turn_yaw')) {
+      errors.max_turn_yaw = 'Must be higher than the minimum turn.';
     }
     if (!errors.frontal_max_yaw && !errors.head_turn_min_yaw && num('frontal_max_yaw') >= num('head_turn_min_yaw')) {
       errors.frontal_max_yaw = 'Must be lower than the minimum turn.';

@@ -218,6 +218,7 @@ const REJECTION_MESSAGES: Record<CheckinRejectionCode, string> = {
   multiple_faces: 'More than one face was in view. Make sure only you are in the frame.',
   low_quality: "The photos weren't clear enough to check you in.",
   liveness_failed: "We didn't see your head turn. When the arrow appears, turn your head that way.",
+  turned_too_far: 'You turned your head too far. Turn it about halfway (not to the side profile) and try again.',
   spoof_suspected: "We couldn't verify a live face. Make sure you're in good light and not using a photo or screen.",
   liveness_unavailable: 'Face check-in is temporarily unavailable. Please tell your teacher or an administrator.',
 };
@@ -242,6 +243,7 @@ const RETRYABLE_CHECKIN_CODES: ReadonlySet<string> = new Set([
   'multiple_faces',
   'low_quality',
   'liveness_failed',
+  'turned_too_far',
   'spoof_suspected',
   'challenge_required',
   'challenge_invalid',
@@ -266,6 +268,7 @@ export const FACE_QUALITY_HINTS: Record<string, string> = {
   no_face: 'Keep your face inside the oval.',
   invalid_image: "A photo couldn't be read. Please try again.",
   multiple_faces: 'Make sure only your face is in view.',
+  turned_too_far: 'You turned too far. Turn your head about halfway, not all the way to the side.',
 };
 
 export const faceQualityHints = (issues?: readonly string[] | null): string[] => {

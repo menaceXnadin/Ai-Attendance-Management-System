@@ -214,6 +214,22 @@ async def get_teacher(
     return teacher
 
 
+def _apply_teacher_update(teacher: Teacher, teacher_update: TeacherUpdate) -> None:
+    """Copy the sent fields onto the teacher; a new ``name`` also renames the login
+    (``users.full_name``), which is the name the rest of the app shows."""
+    update_data = teacher_update.model_dump(exclude_unset=True)
+    name = update_data.pop("name", None)
+    if name is not None:
+        name = name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Name cannot be empty")
+        teacher.name = name
+        if teacher.user is not None:
+            teacher.user.full_name = name
+    for field, value in update_data.items():
+        setattr(teacher, field, value)
+
+
 @router.put("/me", response_model=TeacherSchema)
 async def update_current_teacher(
     teacher_update: TeacherUpdate,
@@ -249,10 +265,7 @@ async def update_current_teacher(
                 detail="Faculty not found"
             )
     
-    # Update fields
-    update_data = teacher_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(teacher, field, value)
+    _apply_teacher_update(teacher, teacher_update)
     
     await db.commit()
     
@@ -295,10 +308,7 @@ async def update_teacher(
                 detail="Faculty not found"
             )
     
-    # Update fields
-    update_data = teacher_update.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(teacher, field, value)
+    _apply_teacher_update(teacher, teacher_update)
     
     await db.commit()
     

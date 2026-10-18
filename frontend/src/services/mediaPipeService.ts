@@ -51,6 +51,13 @@ export const GUIDE = {
   frontalMaxYaw: 0.1,
   /** Signed yaw at or above this counts as a clear head turn (server minimum is lower). */
   turnMinYaw: 0.22,
+  /**
+   * Signed yaw above this is "too far" (close to a side profile). The server rejects
+   * near-profile frames (`max_turn_yaw`), so photos are only taken inside
+   * [turnMinYaw, turnMaxYaw]; ~0.35 is the sweet spot (a 25-40° turn).
+   */
+  turnMaxYaw: 0.6,
+  turnTargetYaw: 0.35,
   /** Signed yaw below this means the student clearly did not turn at all. */
   noTurnYaw: 0.08,
   /** Face height as a fraction of the frame height. */

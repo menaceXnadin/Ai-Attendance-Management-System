@@ -18,6 +18,7 @@ SPEC_DEFAULTS = {
     "antispoof_threshold": 0.70,
     "require_head_turn": True,
     "head_turn_min_yaw": 0.18,
+    "max_turn_yaw": 1.0,
     "frontal_max_yaw": 0.12,
     "challenge_ttl_seconds": 90,
     "frames_min": 3,
@@ -195,3 +196,12 @@ class TestValidationErrors:
 
     def test_value_equal_to_default_is_valid(self):
         assert validation_errors(DEFAULT_FACE_POLICY.to_dict()) == []
+
+
+def test_max_turn_yaw_default_and_pair_fallback():
+    from app.services.face_policy import build_face_policy as build
+
+    assert build({}).max_turn_yaw == 1.0
+    p = build({"head_turn_min_yaw": 0.5, "max_turn_yaw": 0.4})  # min >= max: both fall back
+    assert (p.head_turn_min_yaw, p.max_turn_yaw) == (0.18, 1.0)
+    assert build({"max_turn_yaw": 0.8}).max_turn_yaw == 0.8

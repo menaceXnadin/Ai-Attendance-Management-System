@@ -131,6 +131,8 @@ class TeacherCreate(TeacherBase):
     user: UserCreate
 
 class TeacherUpdate(BaseModel):
+    # Display name; also written to users.full_name (the name shown everywhere).
+    name: Optional[str] = Field(None, min_length=1, max_length=255)
     faculty_id: Optional[int] = None
     department: Optional[str] = None
     phone_number: Optional[str] = None

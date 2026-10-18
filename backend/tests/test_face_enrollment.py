@@ -428,7 +428,9 @@ async def test_enrolment_min_images_comes_from_policy(client, db, world, auth_he
     ({"sharpness": 5.0}, "too_blurry"),
     ({"brightness": 10.0}, "too_dark"),
     ({"brightness": 250.0}, "too_bright"),
-    ({"det_score": 0.65}, "low_confidence"),  # enough for check-in (0.60), not for enrolment (0.70)
+    # 0.65 is enough for check-in (0.60) but not for an enrolment FRONT photo (0.70); turned photos
+    # only need the check-in score (detectors are less confident on turned faces), so the left one passes.
+    ({"det_score": 0.65}, "low_confidence"),
     ({"width": 50.0, "height": 60.0}, "too_small"),
     ({"faces_detected": 2, "secondary_face_ratio": 0.6}, "multiple_faces"),
     (None, "no_face"),
@@ -443,7 +445,8 @@ async def test_low_quality(client, db, world, auth_headers, fake_face, bad, issu
     assert res.status_code == 422, res.text
     d = detail(res)
     assert d["code"] == "low_quality"
-    assert d["details"]["valid_images"] == 1 and d["details"]["required"] == 3
+    expected_valid = 2 if issue == "low_confidence" else 1
+    assert d["details"]["valid_images"] == expected_valid and d["details"]["required"] == 3
     assert issue in d["details"]["quality_issues"]
     results = d["details"]["image_results"]
     assert issue in results[0]["issues"] and results[0]["valid"] is False
@@ -645,3 +648,33 @@ async def test_student_payloads_never_include_embeddings(client, db, enrolled, a
                            headers=auth_headers(w.admin))
     assert upd.status_code == 200, upd.text
     assert upd.json()["face_encoding"] is None and upd.json()["face_registered"] is True
+
+
+# ====================================================================== turned too far
+async def test_replay_of_too_far_right_turn_reports_why(client, db, world, auth_headers, fake_face):
+    """Regression (real attempt 2026-10-18): right-turn photos at yaw ≈ -1.1 with a weak detection
+    were dropped and the student only saw "missing: right". The rejection now says why."""
+    emb = unit_embedding(10)
+    fake_face.set_frames([frontal(emb), frontal(emb), turned(emb, "left", amount=0.9), turned(emb, "left", amount=0.95),
+                          face_spec(emb, yaw=-1.09, det_score=0.55), face_spec(emb, yaw=-1.14, det_score=0.52)])
+    res = await enrol(client, auth_headers, world.student, challenge=await new_challenge(db, world.student), n=6)
+    assert res.status_code == 422, res.text
+    d = detail(res)["details"]
+    assert d["missing_poses"] == ["right"]
+    assert "turned_too_far" in d["pose_issues"]["right"]
+    assert [r["direction"] for r in d["image_results"]] == ["front", "front", "left", "left", "right", "right"]
+
+
+async def test_turned_frames_use_the_check_in_detection_threshold(client, db, world, auth_headers, fake_face):
+    """Detectors are less confident on turned faces: a moderate turn at det 0.65 (< enrolment 0.70,
+    >= check-in 0.60) is accepted, while the front photo still needs the stricter score."""
+    emb = unit_embedding(10)
+    fake_face.set_frames([frontal(emb), turned(emb, "left", det_score=0.65), turned(emb, "right", det_score=0.65)])
+    res = await enrol(client, auth_headers, world.student, challenge=await new_challenge(db, world.student))
+    assert res.status_code == 200, res.text
+    assert res.json()["details"]["poses"] == {"front": 1, "left": 1, "right": 1}
+
+    other = world.other
+    fake_face.set_frames([frontal(emb, det_score=0.65), turned(emb, "left"), turned(emb, "right")])
+    res = await enrol(client, auth_headers, other, challenge=await new_challenge(db, other))
+    assert res.status_code == 422 and detail(res)["code"] == "low_quality"

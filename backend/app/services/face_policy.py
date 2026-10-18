@@ -29,6 +29,9 @@ class FacePolicy:
     antispoof_threshold: float = 0.70
     require_head_turn: bool = True
     head_turn_min_yaw: float = 0.18
+    # Beyond this |yaw| a frame is "turned too far": the detector loses confidence near profile
+    # and the embedding is poor, so the frame is not used (a clear turn is ~0.2-0.6).
+    max_turn_yaw: float = 1.0
     frontal_max_yaw: float = 0.12
     challenge_ttl_seconds: int = 90
     frames_min: int = 3
@@ -77,6 +80,7 @@ _BOUNDS: dict[str, tuple[float, float]] = {
     "duplicate_threshold": (0.10, 0.99),
     "antispoof_threshold": (0.0, 1.0),
     "head_turn_min_yaw": (0.05, 1.0),
+    "max_turn_yaw": (0.3, 2.0),
     "frontal_max_yaw": (0.01, 0.5),
     "challenge_ttl_seconds": (15, 600),
     "frames_min": (1, 8),
@@ -121,6 +125,8 @@ def build_face_policy(raw: Optional[Mapping[str, Any]]) -> FacePolicy:
         values["frames_min"], values["frames_max"] = DEFAULT_FACE_POLICY.frames_min, DEFAULT_FACE_POLICY.frames_max
     if values["max_brightness"] <= values["min_brightness"]:
         values["min_brightness"], values["max_brightness"] = DEFAULT_FACE_POLICY.min_brightness, DEFAULT_FACE_POLICY.max_brightness
+    if values["head_turn_min_yaw"] >= values["max_turn_yaw"]:
+        values["head_turn_min_yaw"], values["max_turn_yaw"] = DEFAULT_FACE_POLICY.head_turn_min_yaw, DEFAULT_FACE_POLICY.max_turn_yaw
     if values["frontal_max_yaw"] >= values["head_turn_min_yaw"]:
         values["frontal_max_yaw"], values["head_turn_min_yaw"] = DEFAULT_FACE_POLICY.frontal_max_yaw, DEFAULT_FACE_POLICY.head_turn_min_yaw
     return FacePolicy(**values)

@@ -776,3 +776,39 @@ async def test_service_status_and_removed_endpoints(client, world, auth_headers,
     res = await client.post("/api/face-recognition/detect-glasses", json={"image_data": FRAME},
                             headers=auth_headers(world.student))
     assert res.status_code == 404
+
+
+# ============================================================================ turned too far
+
+
+async def test_turn_only_beyond_max_is_turned_too_far_not_a_failure(client, db, world, auth_headers, fake_face):
+    """A near-profile turn (|yaw| > max_turn_yaw) in the right direction gets its own code and
+    never counts towards the lock-out."""
+    sid, ch = await _ready(client, auth_headers, fake_face, db, world,
+                           specs=lambda a: [frontal(EMB)] * 2 + [turned(EMB, _direction(a), amount=1.15)])
+    body = await _post(client, auth_headers, world.student, challenge_id=ch["challenge_id"],
+                       presence_code=_code(sid, world.clock.now))
+    _rejected(body, "turned_too_far")
+    [att] = await _attempts(db, world.student.id)
+    assert att["counts_as_failure"] is False
+    assert att["details"]["too_far_frames"] == [2]
+
+
+async def test_too_far_frames_are_ignored_when_a_clear_turn_exists(client, db, world, auth_headers, fake_face):
+    """A near-profile frame is evidence for nothing: even an unrelated embedding there doesn't
+    fail the consistency check, as long as an in-range turned frame of the student exists."""
+    sid, ch = await _ready(client, auth_headers, fake_face, db, world,
+                           specs=lambda a: [frontal(EMB), turned(EMB, _direction(a), amount=0.35),
+                                            turned(OTHER, _direction(a), amount=1.3)])
+    body = await _post(client, auth_headers, world.student, challenge_id=ch["challenge_id"],
+                       presence_code=_code(sid, world.clock.now))
+    assert body["success"] is True, body
+
+
+async def test_too_far_frames_never_count_as_the_turn(client, db, world, auth_headers, fake_face):
+    """Dropping near-profile frames can't weaken the check: the turn must come from an in-range frame."""
+    sid, ch = await _ready(client, auth_headers, fake_face, db, world,
+                           specs=lambda a: [frontal(EMB)] * 2 + [turned(EMB, _opposite(a), amount=1.2)])
+    body = await _post(client, auth_headers, world.student, challenge_id=ch["challenge_id"],
+                       presence_code=_code(sid, world.clock.now))
+    _rejected(body, "liveness_failed")  # wrong direction, so not "too far": a real failure

@@ -259,7 +259,10 @@ const TeacherDashboard: React.FC = () => {
 
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const firstName = teacher.name?.split(' ')[0];
+  // Skip honorifics so "Dr. Sarah Johnson" greets as "Sarah", not "Dr.".
+  const firstName = teacher.name
+    ?.split(/\s+/)
+    .find((part) => part && !/^(dr|prof|mr|mrs|ms|er)\.?$/i.test(part));
 
   const kpis = [
     { label: 'Assigned Courses', value: stats.total_subjects, hint: 'Active curriculum', icon: Book20Regular },

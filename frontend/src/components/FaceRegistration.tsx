@@ -56,6 +56,8 @@ const POSE_META: Record<EnrolPose, { short: string; title: string; arrow: 'left'
 };
 
 const HOLD_MS = 700;
+/** Turned poses are captured sooner, before the student keeps turning towards a profile. */
+const TURN_HOLD_MS = 350;
 const TIMED_POSE_MS = 3000;
 const BURST_GAP_MS = 280;
 const MAX_IMAGES = 8;
@@ -66,7 +68,8 @@ const poseOk = (o: FaceObservation, pose: EnrolPose): boolean => {
   if (o.faceCount !== 1 || o.size === 'small' || o.size === 'large') return false;
   if (pose === 'front') return o.centered && (o.yaw === null || Math.abs(o.yaw) <= GUIDE.frontalMaxYaw);
   if (o.yaw === null || Math.abs(o.offsetX) > 0.25) return false;
-  return pose === 'left' ? o.yaw >= GUIDE.turnMinYaw : o.yaw <= -GUIDE.turnMinYaw;
+  const s = pose === 'left' ? o.yaw : -o.yaw;
+  return s >= GUIDE.turnMinYaw && s <= GUIDE.turnMaxYaw;
 };
 
 const poseHint = (o: FaceObservation | null, pose: EnrolPose, status: FaceTrackingStatus): string => {
@@ -84,6 +87,7 @@ const poseHint = (o: FaceObservation | null, pose: EnrolPose, status: FaceTracki
   const s = o.yaw === null ? 0 : o.yaw * (pose === 'left' ? 1 : -1);
   if (s < GUIDE.noTurnYaw) return 'Turn slowly, keep your eyes on the screen.';
   if (s < GUIDE.turnMinYaw) return 'A little more…';
+  if (s > GUIDE.turnMaxYaw) return 'Not that far — turn back a little, about halfway.';
   return 'Great — hold it there…';
 };
 
@@ -182,7 +186,13 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ resetByAdmin, onSuc
     setManualHint(null);
     const p = poses[index];
     for (let i = 0; i < counts[index]; i++) {
-      const obs = tracking.observationRef.current;
+      let obs = tracking.observationRef.current;
+      // Guided: wait (briefly) until the pose is back in range, e.g. after turning too far.
+      for (let waited = 0; waited < 1500 && isFreshObservation(obs) && !poseOk(obs, p); waited += 100) {
+        await sleep(100);
+        if (run !== runRef.current) return;
+        obs = tracking.observationRef.current;
+      }
       const frame = captureFrame(camera.videoEl.current, isFreshObservation(obs) ? obs.yaw : null);
       if (frame) {
         framesRef.current = [...framesRef.current, { ...frame, pose: p }].slice(0, MAX_IMAGES);
@@ -233,7 +243,7 @@ const FaceRegistration: React.FC<FaceRegistrationProps> = ({ resetByAdmin, onSuc
         const obs = tracking.observationRef.current;
         if (isFreshObservation(obs) && poseOk(obs, poses[poseIndex])) {
           holdSince = holdSince ?? tNow;
-          if (tNow - holdSince >= HOLD_MS) {
+          if (tNow - holdSince >= (poses[poseIndex] === 'front' ? HOLD_MS : TURN_HOLD_MS)) {
             holdSince = null;
             void captureBurstRef.current(run, poseIndex);
           }

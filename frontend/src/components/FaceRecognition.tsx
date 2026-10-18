@@ -110,7 +110,10 @@ const alignmentHint = (o: FaceObservation | null, status: FaceTrackingStatus): s
   return 'Perfect — hold still…';
 };
 
-/** Most-turned frames (in the requested direction), in capture order. */
+/**
+ * Turned frames closest to a comfortable turn (GUIDE.turnTargetYaw) in the requested direction,
+ * in capture order. Near-profile frames (> turnMaxYaw) rank last: the server ignores them.
+ */
 const pickTurnFrames = (samples: CapturedFrame[], sign: number, count: number): CapturedFrame[] => {
   if (samples.length <= count) return samples;
   if (!samples.some((s) => s.yaw !== null)) {
@@ -119,8 +122,15 @@ const pickTurnFrames = (samples: CapturedFrame[], sign: number, count: number): 
     if (pool.length <= count) return pool;
     return Array.from({ length: count }, (_, i) => pool[Math.floor(((i + 1) * pool.length) / (count + 1))]);
   }
+  const rank = (f: CapturedFrame): number => {
+    if (f.yaw === null) return -Infinity;
+    const s = f.yaw * sign;
+    if (s < GUIDE.turnMinYaw) return -10 + s; // not turned enough
+    if (s > GUIDE.turnMaxYaw) return -5 - s; // turned too far
+    return -Math.abs(s - GUIDE.turnTargetYaw); // in range: closer to the target is better
+  };
   return samples
-    .map((f, i) => ({ f, i, s: f.yaw === null ? -Infinity : f.yaw * sign }))
+    .map((f, i) => ({ f, i, s: rank(f) }))
     .sort((a, b) => b.s - a.s)
     .slice(0, count)
     .sort((a, b) => a.i - b.i)
@@ -154,7 +164,7 @@ const FaceRecognition = ({
   const [toCapture, setToCapture] = useState(0);
   const [flash, setFlash] = useState(0);
   const [still, setStill] = useState<string | null>(null);
-  const [turnFeedback, setTurnFeedback] = useState<'waiting' | 'more' | 'done'>('waiting');
+  const [turnFeedback, setTurnFeedback] = useState<'waiting' | 'more' | 'done' | 'toofar'>('waiting');
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [retryLeft, setRetryLeft] = useState(0);
 
@@ -397,7 +407,11 @@ const FaceRecognition = ({
           samples.push(frame);
           if (samples.length > MAX_TURN_SAMPLES) {
             // Drop the least-turned sample to bound memory.
-            const score = (f: CapturedFrame) => (f.yaw === null ? -Infinity : f.yaw * sign);
+            const score = (f: CapturedFrame) => {
+              if (f.yaw === null) return -Infinity;
+              const s = f.yaw * sign;
+              return s > GUIDE.turnMaxYaw ? -5 - s : s;
+            };
             let worst = 0;
             samples.forEach((f, i) => {
               if (score(f) < score(samples[worst])) worst = i;
@@ -408,8 +422,12 @@ const FaceRecognition = ({
         if (yaw !== null) {
           const s = yaw * sign;
           best = Math.max(best, s);
-          if (s >= GUIDE.turnMinYaw && detectedAt === null) {
+          if (s > GUIDE.turnMaxYaw) {
+            setTurnFeedback('toofar');
+          } else if (s >= GUIDE.turnMinYaw && detectedAt === null) {
             detectedAt = performance.now();
+            setTurnFeedback('done');
+          } else if (s >= GUIDE.turnMinYaw) {
             setTurnFeedback('done');
           } else if (s >= GUIDE.noTurnYaw && detectedAt === null) {
             setTurnFeedback('more');
@@ -600,7 +618,9 @@ const FaceRecognition = ({
     prompt = {
       title: `Turn your head to your ${dirWord}`,
       detail:
-        turnFeedback === 'done'
+        turnFeedback === 'toofar'
+          ? 'Not that far — turn back a little, about halfway'
+          : turnFeedback === 'done'
           ? 'Great — hold it there'
           : turnFeedback === 'more'
             ? 'A little more…'

@@ -70,6 +70,7 @@ MESSAGES: dict[str, str] = {
     "low_quality": "The image quality was too low. Face the camera in good light and hold still.",
     "face_mismatch": "Your face could not be verified against your registered face.",
     "liveness_failed": "The head-turn check was not completed. Follow the on-screen prompt and try again.",
+    "turned_too_far": "You turned your head too far. Turn it about halfway, keep your eyes on the screen, and try again.",
     "spoof_suspected": "Live-face verification failed. Use your real face in front of the camera, not a photo or screen.",
     "liveness_unavailable": "Face check-in is temporarily unavailable (liveness check not installed). Ask your teacher to record your attendance.",
     "already_recorded": "Attendance already recorded for this class",
@@ -231,6 +232,13 @@ async def _analyse_frames(db, *, student: Student, frames: list[str], policy: Fa
         attempt.details["quality_issues"] = found
         raise _reject("low_quality", quality_issues=found)
 
+    # Near-profile frames (|yaw| > max_turn_yaw) are dropped: the detector and the embedding are
+    # unreliable there, so they are evidence for nothing (identity, consistency or the turn).
+    too_far = [r for r in usable if abs(_yaw(r["face"])) > policy.max_turn_yaw]
+    if too_far:
+        attempt.details["too_far_frames"] = [r["index"] for r in too_far]
+        usable = [r for r in usable if r not in too_far]
+
     # 8. identity (1:1 against the student's own templates)
     templates = await face_store.load_templates(db, student, model_id=insightface_service.model_id)
     if not templates:
@@ -261,6 +269,9 @@ async def _analyse_frames(db, *, student: Student, frames: list[str], policy: Fa
         else:
             turned = False
         if not turned:
+            sign = 1 if action == ChallengeAction.turn_left else -1
+            if any(_yaw(r["face"]) * sign >= policy.head_turn_min_yaw for r in too_far):
+                raise _reject("turned_too_far")  # turned the right way, just too far: not a failure
             raise _reject("liveness_failed")
 
     # 10. passive liveness (MiniFASNet)

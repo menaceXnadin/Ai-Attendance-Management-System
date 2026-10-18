@@ -45,7 +45,7 @@ export interface StudentCreateData {
   name: string;         // Maps to user.full_name 
   email: string;        // Maps to user.email
   password: string;     // Maps to user.password
-  studentId: string;    // Maps to student_id
+  studentId?: string;   // Maps to student_id; omit to let the server generate it
   faculty_id: number;   // Maps to faculty_id (required)
   semester: number;     // Maps to semester
   year: number;         // Maps to year

@@ -379,6 +379,7 @@ export type CheckinRejectionCode =
   | 'multiple_faces'
   | 'low_quality'
   | 'liveness_failed'
+  | 'turned_too_far'
   | 'spoof_suspected'
   | 'liveness_unavailable';
 
@@ -406,6 +407,7 @@ export interface FacePolicySettings {
   antispoof_threshold: number;
   require_head_turn: boolean;
   head_turn_min_yaw: number;
+  max_turn_yaw: number;
   frontal_max_yaw: number;
   challenge_ttl_seconds: number;
   frames_min: number;
@@ -2484,6 +2486,8 @@ export const api = {
     },
 
     update: async (id: number, data: {
+      /** Display name; also updates the login's full name. */
+      name?: string;
       faculty_id?: number;
       department?: string;
       phone_number?: string;

@@ -40,6 +40,7 @@ FACE_POLICY_DEFAULTS = {
     "antispoof_threshold": 0.70,
     "require_head_turn": True,
     "head_turn_min_yaw": 0.18,
+    "max_turn_yaw": 1.0,
     "frontal_max_yaw": 0.12,
     "challenge_ttl_seconds": 90,
     "frames_min": 3,

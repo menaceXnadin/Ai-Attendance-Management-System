@@ -200,21 +200,31 @@ def evaluate_frames(results: Sequence[dict[str, Any]], policy: FacePolicy) -> li
 
     Returns one dict per engine result: ``index``, ``valid``, ``issues`` (quality codes:
     ``invalid_image``, ``no_face``, ``multiple_faces``, ``low_confidence``, ``too_small``,
-    ``too_blurry``, ``too_dark``, ``too_bright``), ``pose`` (strict front/left/right or None),
-    plus the private keys ``_face``, ``_yaw``, ``_liveness`` used by ``enroll``.
+    ``too_blurry``, ``too_dark``, ``too_bright``, ``turned_too_far``), ``pose`` (strict
+    front/left/right of a valid frame, or None), ``direction`` (the pose the yaw points to,
+    valid or not, so the UI can say *which* photo failed), plus the private keys ``_face``,
+    ``_yaw``, ``_liveness`` used by ``enroll``.
+
+    Detection confidence drops naturally on turned faces, so only frontal frames need
+    ``enrolment_min_detection_score``; turned frames need ``min_detection_score``. Frames turned
+    beyond ``max_turn_yaw`` (near profile) are rejected as ``turned_too_far``.
     """
     evaluated: list[dict[str, Any]] = []
     for i, r in enumerate(results):
         face = r.get("face") if isinstance(r, dict) else None
         issues: list[str] = []
+        yaw = _frame_yaw(face) if face else None
         if r.get("error") or not face:
             issues.append(str(r.get("error") or "no_face"))
         else:
             if int(r.get("faces_detected") or 0) > 1 and float(r.get("secondary_face_ratio") or 0.0) > MAX_SECONDARY_FACE_RATIO:
                 issues.append("multiple_faces")
+            turned_frame = yaw is not None and abs(yaw) > policy.frontal_max_yaw
+            if turned_frame and abs(yaw) > policy.max_turn_yaw:
+                issues.append("turned_too_far")
             issues.extend(face_math.quality_issues(
                 face,
-                min_detection_score=policy.enrolment_min_detection_score,
+                min_detection_score=policy.min_detection_score if turned_frame else policy.enrolment_min_detection_score,
                 min_face_size_px=policy.min_face_size_px,
                 min_sharpness=policy.min_sharpness,
                 min_brightness=policy.min_brightness,
@@ -223,13 +233,14 @@ def evaluate_frames(results: Sequence[dict[str, Any]], policy: FacePolicy) -> li
             if not face.get("embedding"):
                 issues.append("no_face")
         valid = not issues
-        yaw = _frame_yaw(face) if face else None
-        pose = (face_math.classify_pose(yaw, frontal_max_yaw=policy.frontal_max_yaw, turn_min_yaw=policy.head_turn_min_yaw)
-                if valid else None)
+        direction = (face_math.classify_pose(yaw, frontal_max_yaw=policy.frontal_max_yaw, turn_min_yaw=policy.head_turn_min_yaw)
+                     if yaw is not None else None)
+        pose = direction if valid else None
         evaluated.append({
             "index": int(r.get("index", i)),
             "valid": valid,
             "pose": pose,
+            "direction": direction,
             "issues": issues,
             "_face": face if valid else None,
             "_yaw": yaw,
@@ -344,7 +355,13 @@ async def _enroll(db, *, student: Student, images: list[str], consent: Any, chal
             "We need a photo looking straight at the camera" + (", one turned to your left and one turned to your right."
                                                                  if policy.require_head_turn else "."),
             http_status=422,
-            details={"missing_poses": missing, "image_results": image_results},
+            details={
+                "missing_poses": missing,
+                # Why the photos meant for each missing pose were rejected (e.g. turned_too_far).
+                "pose_issues": {p: sorted({i for e in evaluated if e["direction"] == p for i in e["issues"]})
+                                for p in missing},
+                "image_results": image_results,
+            },
         )
 
     # 7. passive liveness on the front frames

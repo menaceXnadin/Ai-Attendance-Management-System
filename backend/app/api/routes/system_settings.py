@@ -497,6 +497,8 @@ async def update_system_setting(
         try:
             if eff["frames_max"] < eff["frames_min"]:
                 raise _bad_request("frames_max must be at least frames_min")
+            if eff["head_turn_min_yaw"] >= eff["max_turn_yaw"]:
+                raise _bad_request("head_turn_min_yaw must be below max_turn_yaw")
             if eff["frontal_max_yaw"] >= eff["head_turn_min_yaw"]:
                 raise _bad_request("frontal_max_yaw must be below head_turn_min_yaw")
             if eff["max_brightness"] <= eff["min_brightness"]:
