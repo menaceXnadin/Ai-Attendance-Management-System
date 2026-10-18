@@ -4,29 +4,34 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  Monitor,
-  Cpu,
-  HardDrive,
-  Wifi,
-  Database,
-  Camera,
-  Users,
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Zap,
-  Clock,
-  Thermometer,
-  Eye,
-  RefreshCcw,
-  Settings,
-  Download,
-  TrendingUp,
-  TrendingDown,
-  Server,
-  Cloud
-} from 'lucide-react';
+import {
+  Desktop20Regular,
+  DeveloperBoard20Regular,
+  HardDrive20Regular,
+  Wifi120Regular,
+  Database20Regular,
+  Camera20Regular,
+  People20Regular,
+  Pulse20Regular,
+  Flash20Regular,
+  Clock12Regular,
+  Temperature20Regular,
+  Eye20Regular,
+  ArrowSync16Regular,
+  Settings16Regular,
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  Subtract16Regular,
+  Server20Regular,
+  Cloud20Regular,
+  DataUsage20Regular,
+  TextBulletListSquare20Regular,
+  Warning12Regular,
+  Warning12Filled,
+  ErrorCircle12Regular,
+  ErrorCircle12Filled,
+  CheckmarkCircle12Filled,
+} from '@fluentui/react-icons';
 import { api } from '@/integrations/api/client';
 import { useAuth } from '@/contexts';
 
@@ -481,50 +486,50 @@ const EnhancedSystemMonitor: React.FC<EnhancedSystemMonitorProps> = ({ className
   const getMetricIcon = (metricId: string) => {
     switch (metricId) {
       case 'cpu':
-        return <Cpu className="h-4 w-4" />;
+        return <DeveloperBoard20Regular aria-hidden />;
       case 'memory':
-        return <Monitor className="h-4 w-4" />;
+        return <Desktop20Regular aria-hidden />;
       case 'disk':
-        return <HardDrive className="h-4 w-4" />;
+        return <HardDrive20Regular aria-hidden />;
       case 'network':
-        return <Wifi className="h-4 w-4" />;
+        return <Wifi120Regular aria-hidden />;
       case 'database_response':
-        return <Database className="h-4 w-4" />;
+        return <Database20Regular aria-hidden />;
       case 'users':
-        return <Users className="h-4 w-4" />;
+        return <People20Regular aria-hidden />;
       case 'queue':
-        return <Activity className="h-4 w-4" />;
+        return <Pulse20Regular aria-hidden />;
       case 'attendance':
-        return <Users className="h-4 w-4" />;
+        return <People20Regular aria-hidden />;
       case 'temperature':
-        return <Thermometer className="h-4 w-4" />;
+        return <Temperature20Regular aria-hidden />;
       case 'face_processing':
-        return <Eye className="h-4 w-4" />;
+        return <Eye20Regular aria-hidden />;
       default:
-        return <Activity className="h-4 w-4" />;
+        return <Pulse20Regular aria-hidden />;
     }
   };
 
   const getServiceIcon = (serviceId: string) => {
     switch (serviceId) {
       case 'api':
-        return <Server className="h-4 w-4" />;
+        return <Server20Regular aria-hidden />;
       case 'database':
-        return <Database className="h-4 w-4" />;
+        return <Database20Regular aria-hidden />;
       case 'face_recognition':
-        return <Eye className="h-4 w-4" />;
+        return <Eye20Regular aria-hidden />;
       case 'attendance':
-        return <Users className="h-4 w-4" />;
+        return <People20Regular aria-hidden />;
       case 'memory_service':
-        return <Monitor className="h-4 w-4" />;
+        return <Desktop20Regular aria-hidden />;
       case 'cpu_service':
-        return <Cpu className="h-4 w-4" />;
+        return <DeveloperBoard20Regular aria-hidden />;
       case 'camera_feed':
-        return <Camera className="h-4 w-4" />;
+        return <Camera20Regular aria-hidden />;
       case 'notification':
-        return <Zap className="h-4 w-4" />;
+        return <Flash20Regular aria-hidden />;
       default:
-        return <Cloud className="h-4 w-4" />;
+        return <Cloud20Regular aria-hidden />;
     }
   };
 
@@ -532,42 +537,75 @@ const EnhancedSystemMonitor: React.FC<EnhancedSystemMonitorProps> = ({ className
     switch (status) {
       case 'healthy':
       case 'online':
-        return 'text-green-400';
+        return 'text-status-success';
       case 'warning':
       case 'degraded':
-        return 'text-yellow-400';
+        return 'text-status-warning';
       case 'critical':
       case 'offline':
-        return 'text-red-400';
+        return 'text-status-error';
       default:
-        return 'text-slate-400';
+        return 'text-text-muted';
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
+  // Icon chip / bar tint per status (Fluent status tokens)
+  const getStatusTint = (status: string) => {
     switch (status) {
       case 'healthy':
       case 'online':
-        return 'bg-green-500/20 text-green-400 border-green-500/30';
+        return 'bg-status-success-subtle text-status-success';
       case 'warning':
       case 'degraded':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        return 'bg-status-warning-subtle text-status-warning';
       case 'critical':
       case 'offline':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
+        return 'bg-status-error-subtle text-status-error';
       default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-surface-subtle text-text-muted';
+    }
+  };
+
+  const getStatusBar = (status: string) => {
+    switch (status) {
+      case 'healthy':
+      case 'online':
+        return 'bg-status-success';
+      case 'warning':
+      case 'degraded':
+        return 'bg-status-warning';
+      case 'critical':
+      case 'offline':
+        return 'bg-status-error';
+      default:
+        return 'bg-presence-offline';
+    }
+  };
+
+  const getStatusBadgeColor = (status: string): 'success' | 'warning' | 'destructive' | 'secondary' => {
+    switch (status) {
+      case 'healthy':
+      case 'online':
+        return 'success';
+      case 'warning':
+      case 'degraded':
+        return 'warning';
+      case 'critical':
+      case 'offline':
+        return 'destructive';
+      default:
+        return 'secondary';
     }
   };
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
       case 'up':
-        return <TrendingUp className="h-3 w-3 text-red-400" />;
+        return <ArrowTrending16Regular className="text-status-error" aria-label="Trending up" />;
       case 'down':
-        return <TrendingDown className="h-3 w-3 text-green-400" />;
+        return <ArrowTrendingDown16Regular className="text-status-success" aria-label="Trending down" />;
       default:
-        return <Activity className="h-3 w-3 text-slate-400" />;
+        return <Subtract16Regular className="text-text-muted" aria-label="Stable" />;
     }
   };
 
@@ -585,102 +623,115 @@ const EnhancedSystemMonitor: React.FC<EnhancedSystemMonitorProps> = ({ className
     }, 0) / metrics.length * 5
   );
 
+  const overallStatus = systemHealthScore > 80 ? 'healthy' : systemHealthScore > 60 ? 'warning' : 'critical';
+
   return (
-    <Card className={`bg-slate-900/60 backdrop-blur-md border-slate-700/50 ${className}`}>
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
+    <Card className={`border-0 shadow overflow-hidden ${className}`}>
+      <CardHeader className="space-y-0 border-b border-border-subtle px-5 pb-0 pt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <Monitor className="h-4 w-4 text-white" />
+            <div className="grid h-9 w-9 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <Desktop20Regular aria-hidden />
             </div>
             <div>
-              <CardTitle className="text-lg text-white">System Monitor</CardTitle>
-              <p className="text-sm text-slate-400">Real-time performance and health monitoring</p>
+              <CardTitle className="text-subheading text-text-primary">System Monitor</CardTitle>
+              <p className="text-caption text-text-muted">Real-time performance and health monitoring</p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-slate-800/50">
-              <div className={`h-2 w-2 rounded-full ${getStatusColor(systemHealthScore > 80 ? 'healthy' : systemHealthScore > 60 ? 'warning' : 'critical')}`} />
-              <span className="text-sm text-white">Health: {systemHealthScore}%</span>
-            </div>
+            <Badge variant={getStatusBadgeColor(overallStatus)} shape="pill" className="gap-1.5">
+              <span className={`h-2 w-2 rounded-full bg-current ${getStatusColor(overallStatus)}`} aria-hidden />
+              <span className="tabular-nums">Health: {systemHealthScore}%</span>
+            </Badge>
             <Button
               variant="outline"
               size="sm"
               onClick={refreshData}
               disabled={isRefreshing}
-              className="border-slate-600 text-slate-300 hover:bg-slate-800"
             >
-              <RefreshCcw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <ArrowSync16Regular className={isRefreshing ? 'animate-spin' : ''} aria-hidden />
               Refresh
             </Button>
-            <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-              <Settings className="h-4 w-4" />
+            <Button variant="ghost" size="icon-sm" aria-label="Monitor settings" className="text-text-muted hover:text-text-primary">
+              <Settings16Regular aria-hidden />
             </Button>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg mt-4">
+        {/* Tab Navigation (Fluent TabList) */}
+        <div className="mt-3 flex items-center gap-1 overflow-x-auto" role="tablist" aria-label="System monitor views">
           {[
-            { id: 'metrics', label: 'System Metrics', icon: Activity },
-            { id: 'services', label: 'Services', icon: Server },
-            { id: 'logs', label: 'System Logs', icon: Clock }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as 'metrics' | 'services' | 'logs')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === tab.id
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          ))}
+            { id: 'metrics', label: 'System Metrics', icon: DataUsage20Regular },
+            { id: 'services', label: 'Services', icon: Server20Regular },
+            { id: 'logs', label: 'System Logs', icon: TextBulletListSquare20Regular }
+          ].map((tab) => {
+            const active = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id as 'metrics' | 'services' | 'logs')}
+                className={`relative flex h-10 items-center gap-2 whitespace-nowrap rounded-t-md px-3 text-body transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  active ? 'font-semibold text-text-primary' : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <tab.icon className={active ? 'text-brand-foreground' : 'text-text-muted'} aria-hidden />
+                {tab.label}
+                {active && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-brand" aria-hidden />}
+              </button>
+            );
+          })}
         </div>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="p-5">
         {activeTab === 'metrics' && (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {metrics.map((metric) => (
-                <div key={metric.id} className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className={`p-1.5 rounded ${getStatusColor(metric.status)} bg-current/20`}>
+                <div key={metric.id} className="rounded-lg border border-border-subtle bg-surface-default p-4">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-md ${getStatusTint(metric.status)}`}>
                         {getMetricIcon(metric.id)}
                       </div>
-                      <span className="text-sm font-medium text-white">{metric.name}</span>
+                      <span className="truncate text-body-strong text-text-primary">{metric.name}</span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       {getTrendIcon(metric.trend)}
-                      <Badge variant="outline" className={getStatusBadgeColor(metric.status)}>
+                      <Badge variant={getStatusBadgeColor(metric.status)} shape="pill" className="capitalize">
                         {metric.status}
                       </Badge>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <div className="flex items-end gap-1">
-                      <span className={`text-2xl font-bold ${getStatusColor(metric.status)}`}>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
                         {metric.value}
                       </span>
-                      <span className="text-sm text-slate-400 mb-1">{metric.unit}</span>
+                      <span className="text-body text-text-muted">{metric.unit}</span>
                     </div>
-                    
-                    <Progress 
-                      value={metric.value} 
-                      className="h-2" 
-                    />
-                    
-                    <div className="flex justify-between text-xs text-slate-400">
+
+                    <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle" role="presentation">
+                      <div
+                        className={`absolute inset-y-0 left-0 rounded-full ${getStatusBar(metric.status)} transition-all duration-300 ease-fluent-standard`}
+                        style={{ width: `${Math.max(0, Math.min(100, metric.value))}%` }}
+                      />
+                    </div>
+
+                    <div className="flex justify-between text-caption text-text-muted tabular-nums">
                       <span>0</span>
-                      <span className="text-yellow-400">⚠ {metric.threshold.warning}</span>
-                      <span className="text-red-400">🚨 {metric.threshold.critical}</span>
+                      <span className="flex items-center gap-0.5 text-status-warning">
+                        <Warning12Regular aria-label="Warning threshold" />
+                        {metric.threshold.warning}
+                      </span>
+                      <span className="flex items-center gap-0.5 text-status-error">
+                        <ErrorCircle12Regular aria-label="Critical threshold" />
+                        {metric.threshold.critical}
+                      </span>
                       <span>100</span>
                     </div>
                   </div>
@@ -691,66 +742,97 @@ const EnhancedSystemMonitor: React.FC<EnhancedSystemMonitorProps> = ({ className
         )}
 
         {activeTab === 'services' && (
-          <ScrollArea className="h-96">
-            <div className="space-y-3">
-              {services.map((service) => (
-                <div key={service.id} className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3">
-                      <div className={`p-2 rounded-lg ${getStatusColor(service.status)} bg-current/20`}>
-                        {getServiceIcon(service.id)}
-                      </div>
-                      <div>
-                        <h4 className="font-medium text-white">{service.name}</h4>
-                        <p className="text-sm text-slate-400 mb-2">{service.description}</p>
-                        <div className="flex items-center gap-4 text-xs text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            Uptime: {service.uptime}
-                          </span>
-                          <span>Response: {Math.round(service.responseTime)}ms</span>
+          <ScrollArea className="h-96 rounded-md border border-border-subtle">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 z-[1] bg-surface-subtle">
+                <tr className="border-b border-border-subtle text-caption-strong text-text-secondary">
+                  <th scope="col" className="px-4 py-2 font-semibold">Service</th>
+                  <th scope="col" className="hidden px-4 py-2 font-semibold sm:table-cell">Uptime</th>
+                  <th scope="col" className="hidden px-4 py-2 font-semibold sm:table-cell">Response</th>
+                  <th scope="col" className="px-4 py-2 text-right font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {services.map((service) => (
+                  <tr key={service.id} className="border-b border-border-subtle transition-colors duration-150 last:border-0 hover:bg-surface-hover">
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md ${getStatusTint(service.status)}`}>
+                          {getServiceIcon(service.id)}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-body-strong text-text-primary">{service.name}</h4>
+                          <p className="text-caption text-text-muted">{service.description}</p>
+                          <p className="mt-0.5 flex items-center gap-3 text-caption text-text-muted sm:hidden">
+                            <span className="flex items-center gap-1">
+                              <Clock12Regular aria-hidden />
+                              Uptime: {service.uptime}
+                            </span>
+                            <span>Response: {Math.round(service.responseTime)}ms</span>
+                          </p>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={getStatusBadgeColor(service.status)}>
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-body tabular-nums text-text-secondary sm:table-cell">
+                      <span className="flex items-center gap-1">
+                        <Clock12Regular className="text-text-muted" aria-hidden />
+                        {service.uptime}
+                      </span>
+                    </td>
+                    <td className="hidden px-4 py-2.5 text-body tabular-nums text-text-secondary sm:table-cell">
+                      {Math.round(service.responseTime)}ms
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <Badge variant={getStatusBadgeColor(service.status)} shape="pill" className="gap-1 capitalize">
+                        {service.status === 'online' ? (
+                          <CheckmarkCircle12Filled aria-hidden />
+                        ) : service.status === 'degraded' ? (
+                          <Warning12Filled aria-hidden />
+                        ) : (
+                          <ErrorCircle12Filled aria-hidden />
+                        )}
                         {service.status}
                       </Badge>
-                      {service.status === 'online' ? (
-                        <CheckCircle className="h-4 w-4 text-green-400" />
-                      ) : service.status === 'degraded' ? (
-                        <AlertTriangle className="h-4 w-4 text-yellow-400" />
-                      ) : (
-                        <AlertTriangle className="h-4 w-4 text-red-400" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </ScrollArea>
         )}
 
         {activeTab === 'logs' && (
-          <ScrollArea className="h-96">
-            <div className="space-y-2 font-mono text-sm">
-              {systemLogs.map((log, index) => (
-                <div key={index} className="flex items-start gap-3 p-2 rounded bg-slate-800/30">
-                  <span className="text-slate-400">{log.time}</span>
-                  <Badge 
-                    variant="outline" 
-                    className={
-                      log.level === 'ERROR' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
-                      log.level === 'WARN' ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                      'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                    }
-                  >
-                    {log.level}
-                  </Badge>
-                  <span className="text-slate-300 flex-1">{log.message}</span>
-                </div>
-              ))}
-            </div>
+          <ScrollArea className="h-96 rounded-md border border-border-subtle">
+            <table className="w-full text-left">
+              <thead className="sticky top-0 z-[1] bg-surface-subtle">
+                <tr className="border-b border-border-subtle text-caption-strong text-text-secondary">
+                  <th scope="col" className="w-28 px-4 py-2 font-semibold">Time</th>
+                  <th scope="col" className="w-24 px-4 py-2 font-semibold">Level</th>
+                  <th scope="col" className="px-4 py-2 font-semibold">Message</th>
+                </tr>
+              </thead>
+              <tbody>
+                {systemLogs.map((log, index) => (
+                  <tr key={index} className="border-b border-border-subtle align-top transition-colors duration-150 last:border-0 hover:bg-surface-hover">
+                    <td className="whitespace-nowrap px-4 py-2 font-mono text-caption text-text-muted">{log.time}</td>
+                    <td className="px-4 py-2">
+                      <Badge
+                        variant={
+                          log.level === 'ERROR' ? 'destructive' :
+                          log.level === 'WARN' ? 'warning' :
+                          'info'
+                        }
+                        shape="pill"
+                        className="font-mono"
+                      >
+                        {log.level}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2 font-mono text-caption text-text-primary">{log.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </ScrollArea>
         )}
       </CardContent>

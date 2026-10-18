@@ -2,14 +2,18 @@ import * as React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/useAuth';
 import { AppShell, type NavGroup } from '@/components/layout/AppShell';
-import ProfileDropdown from '@/components/ProfileDropdown';
 import {
-  Dashboard,
-  Notebook,
-  Notification,
-  Calendar,
-  User,
-} from '@carbon/icons-react';
+  Home20Regular,
+  Home20Filled,
+  ClipboardTaskListLtr20Regular,
+  ClipboardTaskListLtr20Filled,
+  Alert20Regular,
+  Alert20Filled,
+  CalendarLtr20Regular,
+  CalendarLtr20Filled,
+  PersonCircle20Regular,
+  PersonCircle20Filled,
+} from '@fluentui/react-icons';
 
 interface TeacherSidebarProps {
   children: React.ReactNode;
@@ -37,15 +41,17 @@ const TeacherSidebar = ({ children }: TeacherSidebarProps) => {
     {
       groupLabel: 'Teacher Portal',
       items: [
-        { label: 'Dashboard', to: '/teacher', icon: Dashboard, end: true },
-        { label: 'Mark Attendance', to: '/teacher/attendance', icon: Notebook },
-        { label: 'Notifications', to: '/teacher/notifications', icon: Notification },
-        { label: 'My Schedule', to: '/teacher/schedule', icon: Calendar },
-        { label: 'My Profile', to: '/teacher/profile', icon: User },
+        { label: 'Dashboard', to: '/teacher', icon: Home20Regular, activeIcon: Home20Filled, end: true },
+        { label: 'Mark Attendance', to: '/teacher/attendance', icon: ClipboardTaskListLtr20Regular, activeIcon: ClipboardTaskListLtr20Filled },
+        { label: 'Notifications', to: '/teacher/notifications', icon: Alert20Regular, activeIcon: Alert20Filled },
+        { label: 'My Schedule', to: '/teacher/schedule', icon: CalendarLtr20Regular, activeIcon: CalendarLtr20Filled },
+        { label: 'My Profile', to: '/teacher/profile', icon: PersonCircle20Regular, activeIcon: PersonCircle20Filled },
       ]
     }
   ];
 
+  // The shell's title-bar avatar menu (Teams account manager) provides the
+  // profile + sign-out actions previously rendered by ProfileDropdown here.
   return (
     <AppShell
       roleLabel="Teacher"
@@ -54,18 +60,7 @@ const TeacherSidebar = ({ children }: TeacherSidebarProps) => {
       onSignOut={signOut}
       pageTitle={pageInfo.title}
       pageDescription={pageInfo.description}
-      headerActions={
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-text-muted hidden md:inline">
-            Welcome, <span className="font-medium text-text-primary">{user?.name?.split(' ')[0] || 'Teacher'}</span>
-          </span>
-          <ProfileDropdown
-            name={user?.name?.split(' ')[0] || 'Teacher'}
-            onViewProfile={() => navigate('/teacher/profile')}
-            onSignOut={signOut}
-          />
-        </div>
-      }
+      onViewProfile={() => navigate('/teacher/profile')}
     >
       {children}
     </AppShell>

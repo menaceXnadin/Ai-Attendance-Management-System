@@ -3,29 +3,165 @@ import { Calendar, momentLocalizer, Views, View, Event } from 'react-big-calenda
 import type { CSSProperties } from 'react';
 import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import '../styles/calendar-dark.css';
+import '../styles/calendar.css';
 import { useAuth } from '@/contexts/useAuth';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
-  CalendarDays,
-  Plus,
-  Filter,
-  Settings,
-  Clock,
-  BookOpen,
-  Users,
-  AlertCircle,
-  X,
-  ChevronLeft,
-  ChevronRight,
-  TrendingUp,
-  Info,
-  GraduationCap,
-  PartyPopper,
-  CalendarX,
-  LucideIcon
-} from 'lucide-react';
+  Add16Regular,
+  Add20Regular,
+  BookOpen20Regular,
+  CalendarCancel20Regular,
+  CalendarLtr16Regular,
+  CalendarLtr20Regular,
+  CalendarToday20Regular,
+  CheckmarkCircle20Regular,
+  ChevronDown16Regular,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
+  Clock16Regular,
+  Clock20Regular,
+  DataTrending20Regular,
+  Delete20Regular,
+  Dismiss16Regular,
+  Dismiss20Regular,
+  DocumentEdit20Regular,
+  Edit20Regular,
+  ErrorCircle20Regular,
+  Filter20Regular,
+  HatGraduation20Regular,
+  Beach20Regular,
+  Info16Regular,
+  Info20Regular,
+  Location20Regular,
+  People20Regular,
+  Person16Regular,
+  Settings20Regular,
+  Warning20Regular,
+  type FluentIcon
+} from '@fluentui/react-icons';
+import { getAuthToken } from '@/lib/authToken';
 
 const localizer = momentLocalizer(moment);
+
+/* -------------------------------------------------------------------------- */
+/* Presentation helpers (Outlook / Teams calendar look)                        */
+/* -------------------------------------------------------------------------- */
+
+// Theme-aware accent color per event type (CSS variables from src/index.css).
+const EVENT_TYPE_ACCENTS: Record<string, string> = {
+  class: 'var(--chart-3)',
+  exam: 'var(--chart-4)',
+  holiday: 'var(--status-error)',
+  special_event: 'var(--chart-1)',
+  cancelled_class: 'var(--text-muted)',
+  break: 'var(--status-info)',
+};
+
+const EVENT_TYPE_FILTERS = [
+  { value: 'class', label: 'Academic Days', desc: 'Lectures & regular classes' },
+  { value: 'exam', label: 'Examinations', desc: 'Midterms & finals' },
+  { value: 'holiday', label: 'Holidays (Saturdays)', desc: 'Weekly offs & public holidays' },
+  { value: 'special_event', label: 'Special Events', desc: 'Workshops & guest sessions' },
+  { value: 'cancelled_class', label: 'Cancelled Classes', desc: 'Rescheduled sessions' },
+];
+
+// Main events are colored by type; sessions keep their user-picked color.
+const getEventAccent = (resource?: { isSession?: boolean; event_type?: string; color_code?: string } | null): string => {
+  if (!resource) return 'var(--chart-1)';
+  if (resource.isSession) return resource.color_code || 'var(--chart-1)';
+  const type = resource.event_type?.toLowerCase();
+  return (type && EVENT_TYPE_ACCENTS[type]) || resource.color_code || 'var(--chart-1)';
+};
+
+// Exposes the accent to calendar.css (.cal-event / .cal-swatch / .cal-chip)
+const accentVar = (accent: string) => ({ '--evt': accent } as CSSProperties);
+
+// Soft slot tint for time cells covered by a parent event
+const tintColor = (accent: string) => `color-mix(in srgb, ${accent} 10%, var(--surface-default))`;
+
+const SNACKBAR_TONES: Record<'success' | 'error' | 'warning' | 'info', { box: string; iconClass: string; icon: FluentIcon }> = {
+  success: { box: 'border-status-success-border bg-status-success-subtle', iconClass: 'text-status-success', icon: CheckmarkCircle20Regular },
+  error: { box: 'border-status-error-border bg-status-error-subtle', iconClass: 'text-status-error', icon: ErrorCircle20Regular },
+  warning: { box: 'border-status-warning-border bg-status-warning-subtle', iconClass: 'text-status-warning', icon: Warning20Regular },
+  info: { box: 'border-status-info-border bg-status-info-subtle', iconClass: 'text-status-info', icon: Info20Regular },
+};
+
+const fieldLabelClass = 'mb-1.5 block text-body-strong text-text-primary';
+
+const checkboxClass = 'h-4 w-4 shrink-0 cursor-pointer rounded-sm border-border-strong accent-[var(--brand)]';
+
+const selectClass =
+  'h-9 w-full cursor-pointer appearance-none rounded-md border border-border-default border-b-border-strong bg-surface-default pl-3 pr-9 text-body text-text-primary transition-colors duration-150 ease-fluent-standard hover:border-border-strong focus:border-b-brand focus:shadow-[inset_0_-1px_0_0_var(--brand)] focus:outline-none';
+
+// Fluent-styled native <select> (keeps the native onChange contract)
+const NativeSelect: React.FC<React.SelectHTMLAttributes<HTMLSelectElement>> = ({ className = '', children, ...props }) => (
+  <div className="relative">
+    <select className={`${selectClass} ${className}`} {...props}>
+      {children}
+    </select>
+    <ChevronDown16Regular
+      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-muted"
+      aria-hidden
+    />
+  </div>
+);
+
+interface DialogShellProps {
+  title: React.ReactNode;
+  description?: React.ReactNode;
+  icon?: React.ReactNode;
+  onClose: () => void;
+  widthClass?: string;
+  footer?: React.ReactNode;
+  children: React.ReactNode;
+}
+
+// Fluent dialog surface: raised, 8px radius, shadow-28, title 20/28, right-aligned footer
+const DialogShell: React.FC<DialogShellProps> = ({
+  title,
+  description,
+  icon,
+  onClose,
+  widthClass = 'max-w-2xl',
+  footer,
+  children
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-in fade-in-0 duration-150">
+    <div
+      role="dialog"
+      aria-modal="true"
+      className={`flex max-h-[90vh] w-full ${widthClass} flex-col overflow-hidden rounded-lg bg-surface-raised text-text-primary shadow-xl`}
+    >
+      <div className="flex items-start justify-between gap-4 px-6 pb-4 pt-5">
+        <div className="flex min-w-0 items-start gap-3">
+          {icon}
+          <div className="min-w-0">
+            <h2 className="text-section-title text-text-primary">{title}</h2>
+            {description && <div className="mt-0.5 text-body text-text-muted">{description}</div>}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="-mr-2 h-8 w-8 shrink-0 text-text-muted"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          <Dismiss20Regular aria-hidden />
+        </Button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 pb-6">{children}</div>
+      {footer && (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border-subtle px-6 py-3">
+          {footer}
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 interface CalendarEvent {
   id: number;
@@ -273,7 +409,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     setLoading(true);
     
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) {
         console.error('Authentication token not found.');
         setSnackbar({ open: true, message: 'Authentication error. Please log in again.', severity: 'error' });
@@ -290,7 +426,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
         end_date: endOfMonth,
       });
 
-      const apiUrl = `http://localhost:8000/api/calendar/events?${params.toString()}`;
+      const apiUrl = `/api/calendar/events?${params.toString()}`;
       console.log('📡 Calling API:', apiUrl);
 
       const response = await fetch(apiUrl, {
@@ -314,7 +450,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
           if (user?.role === 'admin') {
             try {
               const sessionsResponse = await fetch(
-                `http://localhost:8000/api/event-sessions/events/${event.id}/sessions`,
+                `/api/event-sessions/events/${event.id}/sessions`,
                 {
                   headers: {
                     'Authorization': `Bearer ${token}`,
@@ -427,11 +563,11 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
   // Fetch sessions for a specific event
   const fetchEventSessions = async (eventId: number) => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch(
-        `http://localhost:8000/api/event-sessions/events/${eventId}/sessions`,
+        `/api/event-sessions/events/${eventId}/sessions`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -459,11 +595,11 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     }
 
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch(
-        `http://localhost:8000/api/event-sessions/events/${selectedEvent.id}/sessions`,
+        `/api/event-sessions/events/${selectedEvent.id}/sessions`,
         {
           method: 'POST',
           headers: {
@@ -516,7 +652,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     }
 
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) {
         setSnackbar({ open: true, message: 'Not authenticated', severity: 'error' });
         return;
@@ -555,7 +691,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
         console.log('No suitable existing event found - creating minimal container event:', eventData);
 
-        const eventResponse = await fetch('http://localhost:8000/api/calendar/events', {
+        const eventResponse = await fetch('/api/calendar/events', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -592,7 +728,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
 
       console.log('Creating session in event_sessions table:', sessionData);
 
-      const sessionResponse = await fetch(`http://localhost:8000/api/event-sessions/events/${targetEventId}/sessions`, {
+      const sessionResponse = await fetch(`/api/event-sessions/events/${targetEventId}/sessions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -644,11 +780,11 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
   // Delete a session
   const handleDeleteSession = async (sessionId: number) => {
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch(
-        `http://localhost:8000/api/event-sessions/sessions/${sessionId}`,
+        `/api/event-sessions/sessions/${sessionId}`,
         {
           method: 'DELETE',
           headers: {
@@ -679,8 +815,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
   // Fetch calendar stats
   const fetchStats = async () => {
     try {
-      const token = localStorage.getItem('authToken'); // Use authToken instead of token
-      const response = await fetch('http://localhost:8000/api/calendar/stats/overview', {
+      const token = getAuthToken(); // Use authToken instead of token
+      const response = await fetch('/api/calendar/stats/overview', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -836,8 +972,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
       console.log('🔄 Updating event with data:', eventForm);
       console.log('🔄 Event ID:', selectedEvent.id);
       
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:8000/api/calendar/events/${selectedEvent.id}`, {
+      const token = getAuthToken();
+      const response = await fetch(`/api/calendar/events/${selectedEvent.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -898,8 +1034,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     
     if (window.confirm('Are you sure you want to delete this event?')) {
       try {
-        const token = localStorage.getItem('authToken');
-        const response = await fetch(`http://localhost:8000/api/calendar/events/${selectedEvent.id}`, {
+        const token = getAuthToken();
+        const response = await fetch(`/api/calendar/events/${selectedEvent.id}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -926,8 +1062,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     if (!selectedSession) return;
 
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch(`http://localhost:8000/api/event-sessions/${selectedSession.id}`, {
+      const token = getAuthToken();
+      const response = await fetch(`/api/event-sessions/${selectedSession.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -978,8 +1114,8 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     e.preventDefault();
     
     try {
-      const token = localStorage.getItem('authToken');
-      const response = await fetch('http://localhost:8000/api/calendar/settings/', {
+      const token = getAuthToken();
+      const response = await fetch('/api/calendar/settings/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1111,7 +1247,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     e.preventDefault();
     
     try {
-      const token = localStorage.getItem('authToken');
+      const token = getAuthToken();
       
       // Prepare the event data with proper null handling for empty fields
       const eventData = {
@@ -1122,7 +1258,7 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
         description: eventForm.description.trim() === '' ? null : eventForm.description,
       };
       
-      const response = await fetch('http://localhost:8000/api/calendar/events', {
+      const response = await fetch('/api/calendar/events', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1164,12 +1300,12 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
   // Get event type info
   const getEventTypeInfo = (type: string) => {
     const normalizedType = type?.toLowerCase();
-    const types: { [key: string]: { icon: LucideIcon; color: string; label: string } } = {
-      class: { icon: GraduationCap, color: '#22C55E', label: 'Academic Day' },
-      exam: { icon: AlertCircle, color: '#F97316', label: 'Exam' },
-      holiday: { icon: PartyPopper, color: '#EF4444', label: 'Holiday' },
-      special_event: { icon: Users, color: '#8B5CF6', label: 'Special Event' },
-      cancelled_class: { icon: CalendarX, color: '#64748B', label: 'Cancelled' }
+    const types: { [key: string]: { icon: FluentIcon; color: string; label: string } } = {
+      class: { icon: HatGraduation20Regular, color: EVENT_TYPE_ACCENTS.class, label: 'Academic Day' },
+      exam: { icon: DocumentEdit20Regular, color: EVENT_TYPE_ACCENTS.exam, label: 'Exam' },
+      holiday: { icon: Beach20Regular, color: EVENT_TYPE_ACCENTS.holiday, label: 'Holiday' },
+      special_event: { icon: People20Regular, color: EVENT_TYPE_ACCENTS.special_event, label: 'Special Event' },
+      cancelled_class: { icon: CalendarCancel20Regular, color: EVENT_TYPE_ACCENTS.cancelled_class, label: 'Cancelled' }
     };
     return types[normalizedType] || types.special_event;
   };
@@ -1230,1596 +1366,1474 @@ const AcademicCalendar: React.FC<AcademicCalendarProps> = ({ embedded = false })
     }
   }, [filteredEvents]);
 
-    return (
-    <div className={embedded ? "w-full space-y-6" : "w-full max-w-[1600px] mx-auto space-y-6 pb-12"}>
-      {/* Page Context & Top Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+  // ---------- Presentation-only derived data (side panel) ----------
+  const upcomingEvents = useMemo(() => {
+    const today = moment().format('YYYY-MM-DD');
+    return [...events]
+      .filter(ev => (ev.end_date || ev.start_date) >= today)
+      .filter(ev => filterType === 'all' || ev.event_type?.toLowerCase() === filterType.toLowerCase())
+      .sort((a, b) =>
+        a.start_date.localeCompare(b.start_date) || (a.start_time || '').localeCompare(b.start_time || '')
+      )
+      .slice(0, 6);
+  }, [events, filterType]);
+
+  const eventTypeCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.forEach(ev => {
+      const type = ev.event_type?.toLowerCase();
+      if (type) counts[type] = (counts[type] || 0) + 1;
+    });
+    return counts;
+  }, [events]);
+
+  const snackbarTone = SNACKBAR_TONES[snackbar.severity] || SNACKBAR_TONES.info;
+  const SnackbarIcon = snackbarTone.icon;
+
+  // Shared fields for the Create / Edit event dialogs
+  const renderEventFields = (idPrefix: string) => (
+    <>
+      <div>
+        <label htmlFor={`${idPrefix}-title`} className={fieldLabelClass}>Event Title</label>
+        <Input
+          id={`${idPrefix}-title`}
+          type="text"
+          value={eventForm.title}
+          onChange={(e) => handleFormChange('title', e.target.value)}
+          placeholder="Enter event title..."
+          required
+        />
+      </div>
+
+      <div>
+        <label htmlFor={`${idPrefix}-description`} className={fieldLabelClass}>Description</label>
+        <Textarea
+          id={`${idPrefix}-description`}
+          rows={3}
+          value={eventForm.description}
+          onChange={(e) => handleFormChange('description', e.target.value)}
+          placeholder="Enter event description..."
+        />
+      </div>
+
+      <div>
+        <label htmlFor={`${idPrefix}-type`} className={fieldLabelClass}>Event Type</label>
+        <NativeSelect
+          id={`${idPrefix}-type`}
+          value={eventForm.event_type}
+          onChange={(e) => handleFormChange('event_type', e.target.value)}
+        >
+          <option value="class">Class</option>
+          <option value="exam">Exam</option>
+          <option value="holiday">Holiday</option>
+          <option value="special_event">Special Event</option>
+        </NativeSelect>
+        <p className="mt-1 text-caption text-text-muted">Color will be automatically assigned based on event type</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-bold text-text-primary tracking-tight">
-              Academic Calendar
-            </h1>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-action-primary-subtle text-action-primary border border-action-primary/20">
+          <label htmlFor={`${idPrefix}-start-date`} className={fieldLabelClass}>Start Date</label>
+          <Input
+            id={`${idPrefix}-start-date`}
+            type="date"
+            value={eventForm.start_date}
+            onChange={(e) => handleFormChange('start_date', e.target.value)}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor={`${idPrefix}-end-date`} className={fieldLabelClass}>End Date</label>
+          <Input
+            id={`${idPrefix}-end-date`}
+            type="date"
+            value={eventForm.end_date}
+            onChange={(e) => handleFormChange('end_date', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id={idPrefix === 'create' ? 'allDay' : 'editAllDay'}
+          checked={eventForm.is_all_day}
+          onChange={(e) => handleFormChange('is_all_day', e.target.checked)}
+          className={checkboxClass}
+        />
+        <label htmlFor={idPrefix === 'create' ? 'allDay' : 'editAllDay'} className="cursor-pointer text-body text-text-primary">
+          All Day Event
+        </label>
+      </div>
+
+      {!eventForm.is_all_day && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor={`${idPrefix}-start-time`} className={fieldLabelClass}>Start Time</label>
+            <Input
+              id={`${idPrefix}-start-time`}
+              type="time"
+              value={eventForm.start_time}
+              onChange={(e) => handleFormChange('start_time', e.target.value)}
+            />
+          </div>
+          <div>
+            <label htmlFor={`${idPrefix}-end-time`} className={fieldLabelClass}>End Time</label>
+            <Input
+              id={`${idPrefix}-end-time`}
+              type="time"
+              value={eventForm.end_time}
+              onChange={(e) => handleFormChange('end_time', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label htmlFor={`${idPrefix}-location`} className={fieldLabelClass}>Location</label>
+        <Input
+          id={`${idPrefix}-location`}
+          type="text"
+          value={eventForm.location}
+          onChange={(e) => handleFormChange('location', e.target.value)}
+          placeholder="Enter event location..."
+        />
+      </div>
+    </>
+  );
+
+  const viewOptions = ['month', 'week', 'day'] as const;
+
+  return (
+    <div className={embedded ? 'w-full space-y-4' : 'mx-auto w-full max-w-[1600px] space-y-4 pb-12'}>
+      {/* Page header */}
+      <div className="page-header">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-page-title text-text-primary">Academic Calendar</h1>
+            <span className="inline-flex items-center rounded-full bg-brand-subtle px-2 py-0.5 text-caption-strong text-brand-foreground">
               Nepal Standard
             </span>
             {isAdmin && (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-status-success-subtle text-status-success border border-status-success-border">
+              <span className="inline-flex items-center rounded-full border border-status-success-border bg-status-success-subtle px-2 py-0.5 text-caption-strong text-status-success">
                 Admin Mode
               </span>
             )}
           </div>
-          <p className="text-xs sm:text-sm text-text-muted mt-1">
+          <p className="mt-1 text-body text-text-muted">
             Institutional semester dates, examination schedules, sessions, and holiday tracking
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          {isAdmin && (
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-action-primary hover:bg-action-primary-hover text-white rounded-lg text-xs sm:text-sm font-semibold shadow-xs transition-colors active:scale-[0.98]"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Event</span>
-            </button>
-          )}
-          <button
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
             onClick={() => setShowSettingsModal(true)}
-            className="p-2 bg-surface-default hover:bg-surface-subtle border border-border-default rounded-lg text-text-secondary hover:text-text-primary transition-colors shadow-xs"
             title="Calendar Settings"
             aria-label="Calendar Settings"
           >
-            <Settings className="w-4 h-4" />
-          </button>
+            <Settings20Regular aria-hidden />
+          </Button>
+          {isAdmin && (
+            <Button onClick={() => setShowCreateModal(true)}>
+              <Add20Regular aria-hidden />
+              Add Event
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: This Month */}
-        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">This Month</p>
-            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
-              {stats.total_events_this_month || 0}
-            </p>
-            <p className="text-[11px] text-text-secondary">Events in {moment(currentDate).format('MMMM')}</p>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-action-primary-subtle flex items-center justify-center text-action-primary shrink-0">
-            <CalendarDays className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 2: Upcoming */}
-        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Upcoming Events</p>
-            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
-              {stats.upcoming_events || 0}
-            </p>
-            <p className="text-[11px] text-text-secondary">Next 30 days ahead</p>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-status-info-subtle flex items-center justify-center text-status-info shrink-0">
-            <Clock className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 3: Today */}
-        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Today's Schedule</p>
-            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
-              {stats.classes_today || 0}
-            </p>
-            <p className="text-[11px] text-text-secondary">{moment().format('dddd, MMM D')}</p>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-status-warning-subtle flex items-center justify-center text-status-warning shrink-0">
-            <BookOpen className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Card 4: Attendance */}
-        <div className="bg-surface-default border border-border-subtle hover:border-border-default rounded-xl p-4 sm:p-5 shadow-xs transition-all duration-200 flex items-center justify-between">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-text-muted uppercase tracking-wider">Attendance Marked</p>
-            <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums tracking-tight">
-              {stats.total_attendance_marked || 0}
-            </p>
-            <p className="text-[11px] text-text-secondary">Recorded sessions</p>
-          </div>
-          <div className="w-11 h-11 rounded-xl bg-status-success-subtle flex items-center justify-center text-status-success shrink-0">
-            <TrendingUp className="w-5 h-5" />
-          </div>
-        </div>
+      {/* KPI tiles */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          {
+            label: 'This Month',
+            value: stats.total_events_this_month || 0,
+            caption: `Events in ${moment(currentDate).format('MMMM')}`,
+            icon: CalendarLtr20Regular,
+            chip: 'bg-brand-subtle text-brand-foreground',
+          },
+          {
+            label: 'Upcoming Events',
+            value: stats.upcoming_events || 0,
+            caption: 'Next 30 days ahead',
+            icon: Clock20Regular,
+            chip: 'bg-brand-subtle text-brand-foreground',
+          },
+          {
+            label: "Today's Schedule",
+            value: stats.classes_today || 0,
+            caption: moment().format('dddd, MMM D'),
+            icon: BookOpen20Regular,
+            chip: 'bg-brand-subtle text-brand-foreground',
+          },
+          {
+            label: 'Attendance Marked',
+            value: stats.total_attendance_marked || 0,
+            caption: 'Recorded sessions',
+            icon: DataTrending20Regular,
+            chip: 'bg-status-success-subtle text-status-success',
+          },
+        ].map((tile) => {
+          const TileIcon = tile.icon;
+          return (
+            <div key={tile.label} className="flex items-center gap-3 rounded-lg bg-surface-default p-4 shadow">
+              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${tile.chip}`}>
+                <TileIcon aria-hidden />
+              </div>
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">{tile.label}</p>
+                <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{tile.value}</p>
+                <p className="truncate text-caption text-text-secondary">{tile.caption}</p>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Main Calendar Card */}
-      <div className="bg-surface-default border border-border-subtle rounded-xl shadow-xs overflow-hidden">
-        {/* Integrated Calendar Header / Toolbar */}
-        <div className="p-4 sm:p-5 border-b border-border-subtle flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-surface-default">
-          {/* Left: Date Display & Connected Navigation */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center shadow-2xs rounded-lg overflow-hidden border border-border-default">
-              <button
+      {/* Calendar + side panel */}
+      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+        {/* Calendar surface */}
+        <section className="min-w-0 overflow-hidden rounded-lg bg-surface-default shadow" aria-label="Calendar">
+          {/* Toolbar (Outlook style) */}
+          <div className="flex flex-col gap-3 border-b border-border-subtle px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-wrap items-center gap-1">
+              <Button variant="outline" size="sm" onClick={navigateToday} className="mr-1">
+                <CalendarToday20Regular aria-hidden />
+                Today
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={navigateBack}
-                className="p-2 bg-surface-default hover:bg-surface-subtle text-text-secondary hover:text-text-primary transition-colors border-r border-border-default"
                 aria-label="Previous date range"
                 title="Previous"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={navigateToday}
-                className="px-3.5 py-1.5 bg-surface-default hover:bg-surface-subtle text-text-primary text-xs font-semibold transition-colors border-r border-border-default"
-              >
-                Today
-              </button>
-              <button
+                <ChevronLeft20Regular aria-hidden />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
                 onClick={navigateNext}
-                className="p-2 bg-surface-default hover:bg-surface-subtle text-text-secondary hover:text-text-primary transition-colors"
                 aria-label="Next date range"
                 title="Next"
               >
-                <ChevronRight className="w-4 h-4" />
-              </button>
+                <ChevronRight20Regular aria-hidden />
+              </Button>
+              <h2 className="ml-2 text-section-title text-text-primary">{formatDisplayDate()}</h2>
+              <span className="ml-2 hidden items-center rounded-full bg-surface-subtle px-2 py-0.5 text-caption tabular-nums text-text-muted sm:inline-flex">
+                {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}
+              </span>
             </div>
 
-            <h2 className="text-lg sm:text-xl font-bold text-text-primary tracking-tight">
-              {formatDisplayDate()}
-            </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {isAdmin && (
+                <span className="hidden items-center gap-1.5 text-caption text-text-muted 2xl:inline-flex">
+                  <Info16Regular aria-hidden />
+                  Click cell to add event
+                </span>
+              )}
 
-            <span className="text-xs text-text-muted bg-surface-subtle px-2.5 py-1 rounded-full border border-border-subtle font-medium hidden sm:inline-flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-action-primary" />
-              {filteredEvents.length} {filteredEvents.length === 1 ? 'event' : 'events'}
-            </span>
-          </div>
-
-          {/* Right: View Selector, Filter, and Admin Indicator */}
-          <div className="flex items-center gap-2.5 flex-wrap">
-            {/* View Selector segmented control */}
-            <div className="inline-flex bg-surface-subtle border border-border-subtle rounded-lg p-1">
-              {(['month', 'week', 'day'] as const).map((view) => (
-                <button
-                  key={view}
-                  onClick={() => setCurrentView(view)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all ${
-                    currentView === view
-                      ? 'bg-surface-default text-text-primary shadow-xs'
-                      : 'text-text-secondary hover:text-text-primary'
-                  }`}
+              {/* Compact filter (side panel holds the full filter list on wide screens) */}
+              <div className="w-48 xl:hidden">
+                <NativeSelect
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  aria-label="Filter event types"
+                  className="h-8"
                 >
-                  {view}
-                </button>
-              ))}
-            </div>
-
-            {/* Filter Dropdown */}
-            <div className="relative">
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="appearance-none bg-surface-default border border-border-default rounded-lg pl-3 pr-8 py-1.5 text-xs font-medium text-text-primary hover:border-border-strong focus:outline-none focus:ring-2 focus:ring-action-primary/20 focus:border-action-primary transition-colors cursor-pointer"
-              >
-                <option value="all">All Event Types</option>
-                <option value="class">Academic Days</option>
-                <option value="exam">Examinations</option>
-                <option value="holiday">Holidays (Saturdays)</option>
-                <option value="special_event">Special Events</option>
-                <option value="cancelled_class">Cancelled Classes</option>
-              </select>
-              <Filter className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-muted pointer-events-none" />
-            </div>
-
-            {isAdmin && (
-              <div className="hidden xl:flex items-center gap-1.5 text-xs text-text-muted bg-surface-subtle border border-border-subtle px-2.5 py-1.5 rounded-lg">
-                <span className="w-1.5 h-1.5 rounded-full bg-status-success" />
-                <span>Click cell to add event</span>
+                  <option value="all">All Event Types</option>
+                  {EVENT_TYPE_FILTERS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </NativeSelect>
               </div>
-            )}
+
+              {/* View switcher (segmented) */}
+              <div
+                role="tablist"
+                aria-label="Calendar view"
+                className="inline-flex rounded-md border border-border-default bg-surface-default p-0.5"
+              >
+                {viewOptions.map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    role="tab"
+                    aria-selected={currentView === view}
+                    onClick={() => setCurrentView(view)}
+                    className={`h-7 rounded-sm px-3 text-body capitalize transition-colors duration-150 ease-fluent-standard ${
+                      currentView === view
+                        ? 'bg-brand-subtle font-semibold text-brand-foreground'
+                        : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                    }`}
+                  >
+                    {view}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
 
-        {/* Calendar Body */}
-        {loading ? (
-          <div className="flex flex-col items-center justify-center h-96">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-action-primary mb-3"></div>
-            <p className="text-xs font-medium text-text-muted">Loading calendar events...</p>
-          </div>
-        ) : (
-          <div>
-            {/* Month View */}
-            {currentView === 'month' && (
-              <div className="overflow-x-auto">
-                <div className="min-w-[720px]">
-                  {/* Day Headers Row */}
-                  <div className="grid grid-cols-7 border-b border-border-subtle bg-surface-subtle/70 text-center divide-x divide-border-subtle">
-                    {[
-                      { name: 'Sun', full: 'Sunday' },
-                      { name: 'Mon', full: 'Monday' },
-                      { name: 'Tue', full: 'Tuesday' },
-                      { name: 'Wed', full: 'Wednesday' },
-                      { name: 'Thu', full: 'Thursday' },
-                      { name: 'Fri', full: 'Friday' },
-                      { name: 'Sat', full: 'Saturday', isHoliday: true }
-                    ].map(day => (
-                      <div
-                        key={day.name}
-                        className={`py-2.5 px-2 text-xs font-semibold tracking-wider uppercase flex items-center justify-center gap-1.5 ${
-                          day.isHoliday ? 'text-status-error' : 'text-text-secondary'
-                        }`}
-                      >
-                        <span>{day.name}</span>
-                        {day.isHoliday && (
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-status-error-subtle text-status-error font-medium normal-case hidden sm:inline">
-                            Holiday
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+          {/* Calendar body */}
+          {loading ? (
+            <div className="flex h-96 flex-col items-center justify-center gap-3">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-subtle border-t-brand" aria-hidden />
+              <p className="text-caption text-text-muted">Loading calendar events...</p>
+            </div>
+          ) : (
+            <div>
+              {/* Month View */}
+              {currentView === 'month' && (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[720px]">
+                    {/* Weekday header row */}
+                    <div className="grid grid-cols-7 border-b border-border-subtle">
+                      {[
+                        { name: 'Sun', full: 'Sunday' },
+                        { name: 'Mon', full: 'Monday' },
+                        { name: 'Tue', full: 'Tuesday' },
+                        { name: 'Wed', full: 'Wednesday' },
+                        { name: 'Thu', full: 'Thursday' },
+                        { name: 'Fri', full: 'Friday' },
+                        { name: 'Sat', full: 'Saturday', isHoliday: true }
+                      ].map(day => (
+                        <div
+                          key={day.name}
+                          title={day.full}
+                          className={`flex items-center gap-1.5 px-2 py-2 text-caption ${
+                            day.isHoliday ? 'text-status-error' : 'text-text-muted'
+                          }`}
+                        >
+                          <span>{day.name}</span>
+                          {day.isHoliday && (
+                            <span className="hidden rounded-sm bg-status-error-subtle px-1 text-overline text-status-error sm:inline">
+                              Holiday
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
 
-                  {/* Calendar Days Matrix */}
-                  <div className="grid grid-cols-7 divide-x divide-y divide-border-subtle border-b border-border-subtle">
-                    {(() => {
-                      const startOfMonth = moment(currentDate).startOf('month');
-                      const endOfMonth = moment(currentDate).endOf('month');
-                      const startOfWeek = moment(startOfMonth).startOf('week');
-                      const endOfWeek = moment(endOfMonth).endOf('week');
-                      
-                      const days = [];
-                      const current = moment(startOfWeek);
-                      
-                      while (current.isSameOrBefore(endOfWeek)) {
-                        const dayDate = current.clone();
-                        const dayEvents = viewFilteredEvents.filter(event => 
-                          moment(event.start).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD')
-                        );
-                        const isCurrentMonth = dayDate.month() === moment(currentDate).month();
-                        const isSaturday = dayDate.day() === 6;
-                        const isToday = dayDate.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+                    {/* Day matrix */}
+                    <div className="grid grid-cols-7">
+                      {(() => {
+                        const startOfMonth = moment(currentDate).startOf('month');
+                        const endOfMonth = moment(currentDate).endOf('month');
+                        const startOfWeek = moment(startOfMonth).startOf('week');
+                        const endOfWeek = moment(endOfMonth).endOf('week');
 
-                        days.push(
-                          <div 
-                            key={dayDate.format('YYYY-MM-DD')}
-                            onClick={() => isAdmin && isCurrentMonth && handleCellClick(dayDate)}
-                            className={`min-h-[110px] sm:min-h-[125px] lg:min-h-[135px] p-2 sm:p-2.5 flex flex-col justify-between transition-colors relative group ${
-                              !isCurrentMonth
-                                ? 'bg-surface-canvas/50 text-text-muted/40'
-                                : isSaturday
-                                  ? 'bg-status-error-subtle/15 hover:bg-status-error-subtle/25'
-                                  : 'bg-surface-default hover:bg-surface-subtle/50'
-                            } ${
-                              isToday ? 'bg-action-primary-subtle/30 ring-1 ring-inset ring-action-primary/40' : ''
-                            } ${
-                              isAdmin && isCurrentMonth ? 'cursor-pointer' : ''
-                            }`}
-                          >
-                            {/* Day Header Row */}
-                            <div className="flex items-center justify-between mb-1.5">
-                              {isToday ? (
-                                <span className="w-6 h-6 rounded-full bg-action-primary text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                                  {dayDate.format('D')}
-                                </span>
-                              ) : (
-                                <span className={`text-xs sm:text-sm font-semibold ${
-                                  !isCurrentMonth ? 'text-text-muted/40' : isSaturday ? 'text-status-error' : 'text-text-primary'
-                                }`}>
-                                  {dayDate.format('D')}
-                                </span>
-                              )}
+                        const days = [];
+                        const current = moment(startOfWeek);
 
-                              {/* Weekend label or Admin Hover Plus */}
-                              <div className="flex items-center gap-1">
-                                {isSaturday && isCurrentMonth && dayEvents.length === 0 && (
-                                  <span className="text-[9px] font-medium text-status-error/80 px-1 py-0.5 rounded bg-status-error-subtle hidden sm:inline">
-                                    Weekend
+                        while (current.isSameOrBefore(endOfWeek)) {
+                          const dayDate = current.clone();
+                          const dayEvents = viewFilteredEvents.filter(event =>
+                            moment(event.start).format('YYYY-MM-DD') === dayDate.format('YYYY-MM-DD')
+                          );
+                          const isCurrentMonth = dayDate.month() === moment(currentDate).month();
+                          const isSaturday = dayDate.day() === 6;
+                          const isToday = dayDate.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+
+                          days.push(
+                            <div
+                              key={dayDate.format('YYYY-MM-DD')}
+                              onClick={() => isAdmin && isCurrentMonth && handleCellClick(dayDate)}
+                              className={`group relative flex min-h-[112px] flex-col gap-1 border-b border-r border-border-subtle p-1.5 transition-colors duration-150 ease-fluent-standard [&:nth-child(7n)]:border-r-0 sm:min-h-[124px] ${
+                                isToday
+                                  ? 'bg-brand-subtle hover:bg-brand-subtle-hover'
+                                  : !isCurrentMonth
+                                    ? 'bg-surface-subtle'
+                                    : isSaturday
+                                      ? 'bg-status-error-subtle/50 hover:bg-status-error-subtle'
+                                      : 'bg-surface-default hover:bg-surface-hover'
+                              } ${isAdmin && isCurrentMonth ? 'cursor-pointer' : ''}`}
+                            >
+                              {/* Date row */}
+                              <div className="flex items-center justify-between">
+                                {isToday ? (
+                                  <span className="grid h-6 min-w-[24px] place-items-center rounded-full bg-brand px-1 text-caption-strong tabular-nums text-brand-on">
+                                    {dayDate.format('D')}
                                   </span>
-                                )}
-                                {isAdmin && isCurrentMonth && (
+                                ) : (
                                   <span
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded hover:bg-action-primary-subtle text-action-primary flex items-center justify-center text-xs font-bold"
-                                    title="Click to add event"
+                                    className={`grid h-6 min-w-[24px] place-items-center px-1 text-caption-strong tabular-nums ${
+                                      !isCurrentMonth ? 'text-text-disabled' : isSaturday ? 'text-status-error' : 'text-text-primary'
+                                    }`}
                                   >
-                                    +
+                                    {dayDate.format('D')}
                                   </span>
                                 )}
-                              </div>
-                            </div>
 
-                            {/* Events List in Day Cell */}
-                            <div className="space-y-1 flex-1">
-                              {dayEvents.slice(0, 3).map(event => {
-                                const eventResource = event.resource as ExtendedCalendarEvent;
-                                const color = eventResource?.color_code || '#3B82F6';
-                                return (
-                                  <div
-                                    key={event.id}
+                                <div className="flex items-center gap-1">
+                                  {isSaturday && isCurrentMonth && dayEvents.length === 0 && (
+                                    <span className="hidden px-1 text-overline text-status-error sm:inline">
+                                      Weekend
+                                    </span>
+                                  )}
+                                  {isAdmin && isCurrentMonth && (
+                                    <span
+                                      className="grid h-5 w-5 place-items-center rounded-sm text-brand-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:bg-brand-subtle"
+                                      title="Click to add event"
+                                    >
+                                      <Add16Regular aria-hidden />
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Events */}
+                              <div className="flex-1 space-y-0.5">
+                                {dayEvents.slice(0, 3).map(event => {
+                                  const eventResource = event.resource as ExtendedCalendarEvent;
+                                  const isCancelled = eventResource?.event_type?.toLowerCase() === 'cancelled_class';
+                                  return (
+                                    <div
+                                      key={event.id}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEventClick(event);
+                                      }}
+                                      onDoubleClick={(e) => {
+                                        e.stopPropagation();
+                                        setCurrentView('day');
+                                        setCurrentDate(dayDate.toDate());
+                                      }}
+                                      className={`cal-event ${isCancelled ? 'is-cancelled' : ''}`}
+                                      style={accentVar(getEventAccent(eventResource))}
+                                      title={`${event.title} (Double-click to open day view)`}
+                                    >
+                                      <span className="truncate">{event.title}</span>
+                                    </div>
+                                  );
+                                })}
+
+                                {dayEvents.length > 3 && (
+                                  <button
+                                    type="button"
                                     onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleEventClick(event);
-                                    }}
-                                    onDoubleClick={(e) => {
                                       e.stopPropagation();
                                       setCurrentView('day');
                                       setCurrentDate(dayDate.toDate());
                                     }}
-                                    className="cursor-pointer px-2 py-1 rounded text-[11px] font-medium leading-tight text-white truncate shadow-2xs hover:shadow-xs transition-all hover:opacity-95 flex items-center gap-1.5"
-                                    style={{
-                                      backgroundColor: color
-                                    }}
-                                    title={`${event.title} (Double-click to open day view)`}
+                                    className="block rounded-sm px-1.5 text-left text-caption-strong text-brand-foreground hover:underline"
                                   >
-                                    <span className="truncate">{event.title}</span>
-                                  </div>
-                                );
-                              })}
-
-                              {dayEvents.length > 3 && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCurrentView('day');
-                                    setCurrentDate(dayDate.toDate());
-                                  }}
-                                  className="text-[10px] font-semibold text-action-primary hover:underline pl-1 block text-left"
-                                >
-                                  +{dayEvents.length - 3} more
-                                </button>
-                              )}
+                                    +{dayEvents.length - 3} more
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        );
+                          );
 
-                        current.add(1, 'day');
-                      }
+                          current.add(1, 'day');
+                        }
 
-                      return days;
-                    })()}
+                        return days;
+                      })()}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Week View */}
-            {currentView === 'week' && (
-              <div className="overflow-x-auto">
-                <div className="min-w-[800px]">
-                  {/* Week Header */}
-                  <div className="grid grid-cols-8 border-b border-border-subtle bg-surface-subtle/70 text-center divide-x divide-border-subtle">
-                    <div className="py-2.5 px-2 text-xs font-semibold text-text-muted uppercase tracking-wider flex items-center justify-center">
-                      Time
+              {/* Week View */}
+              {currentView === 'week' && (
+                <div className="overflow-x-auto">
+                  <div className="min-w-[800px]">
+                    {/* Week header */}
+                    <div className="grid grid-cols-8 border-b border-border-subtle">
+                      <div className="flex items-end justify-end px-2 py-2 text-caption text-text-muted">
+                        Time
+                      </div>
+                      {(() => {
+                        const startOfWeek = moment(currentDate).startOf('week');
+                        const weekDays = [];
+
+                        for (let i = 0; i < 7; i++) {
+                          const day = moment(startOfWeek).add(i, 'days');
+                          const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+                          const isSaturday = day.day() === 6;
+
+                          weekDays.push(
+                            <div
+                              key={day.format('YYYY-MM-DD')}
+                              className={`flex flex-col items-start gap-0.5 border-l border-border-subtle px-2 py-2 ${
+                                isToday ? 'bg-brand-subtle' : ''
+                              }`}
+                            >
+                              <span
+                                className={`text-caption ${
+                                  isToday ? 'text-brand-foreground' : isSaturday ? 'text-status-error' : 'text-text-muted'
+                                }`}
+                              >
+                                {day.format('ddd')}
+                              </span>
+                              {isToday ? (
+                                <span className="grid h-8 w-8 place-items-center rounded-full bg-brand text-subheading tabular-nums text-brand-on">
+                                  {day.format('D')}
+                                </span>
+                              ) : (
+                                <span
+                                  className={`grid h-8 place-items-center text-subheading tabular-nums ${
+                                    isSaturday ? 'text-status-error' : 'text-text-primary'
+                                  }`}
+                                >
+                                  {day.format('D')}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        return weekDays;
+                      })()}
                     </div>
-                    {(() => {
-                      const startOfWeek = moment(currentDate).startOf('week');
-                      const weekDays = [];
-                      
-                      for (let i = 0; i < 7; i++) {
-                        const day = moment(startOfWeek).add(i, 'days');
-                        const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
-                        const isSaturday = day.day() === 6;
 
-                        weekDays.push(
-                          <div 
-                            key={day.format('YYYY-MM-DD')} 
-                            className={`py-2.5 px-2 text-center transition-colors ${
-                              isToday
-                                ? 'bg-action-primary-subtle text-action-primary font-bold'
-                                : isSaturday
-                                  ? 'text-status-error font-semibold'
-                                  : 'text-text-secondary'
-                            }`}
-                          >
-                            <div className="text-xs uppercase tracking-wider">{day.format('ddd')}</div>
-                            <div className="text-base font-bold mt-0.5">{day.format('D')}</div>
-                          </div>
-                        );
-                      }
-                      
-                      return weekDays;
-                    })()}
+                    {/* Week grid */}
+                    <div className="divide-y divide-border-subtle">
+                      {(() => {
+                        const hours = [];
+                        const startOfWeek = moment(currentDate).startOf('week');
+
+                        for (let hour = 6; hour <= 22; hour++) {
+                          hours.push(
+                            <div key={hour} className="grid min-h-[56px] grid-cols-8 divide-x divide-border-subtle">
+                              <div className="px-2 pt-1 text-right text-caption tabular-nums text-text-muted">
+                                {moment().hour(hour).minute(0).format('h:mm A')}
+                              </div>
+                              {(() => {
+                                const weekCells = [];
+
+                                for (let i = 0; i < 7; i++) {
+                                  const day = moment(startOfWeek).add(i, 'days');
+                                  const dayEvents = viewFilteredEvents.filter(event =>
+                                    isEventInHour(event, hour, day.format('YYYY-MM-DD'))
+                                  );
+                                  const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
+                                  const isSaturday = day.day() === 6;
+
+                                  weekCells.push(
+                                    <div
+                                      key={`${day.format('YYYY-MM-DD')}-${hour}`}
+                                      onClick={() => {
+                                        if (!isAdmin) return;
+
+                                        const sessionEvent = dayEvents.find(event =>
+                                          event.title?.startsWith('[SESSION]') ||
+                                          (event.resource as ExtendedCalendarEvent)?.isSession
+                                        );
+
+                                        if (sessionEvent) {
+                                          handleEventClick(sessionEvent);
+                                        } else {
+                                          handleCellClick(day, hour);
+                                        }
+                                      }}
+                                      className={`group p-1 transition-colors duration-150 ease-fluent-standard ${
+                                        isAdmin ? 'cursor-pointer hover:bg-surface-hover' : ''
+                                      } ${
+                                        isToday
+                                          ? 'bg-brand-subtle/40'
+                                          : isSaturday
+                                            ? 'bg-status-error-subtle/40'
+                                            : 'bg-surface-default'
+                                      }`}
+                                      style={{
+                                        backgroundColor: (() => {
+                                          const parentEvent = dayEvents.find(event =>
+                                            !event.title?.startsWith('[SESSION]') &&
+                                            !(event.resource as ExtendedCalendarEvent)?.isSession
+                                          );
+                                          if (parentEvent) {
+                                            return tintColor(getEventAccent(parentEvent.resource as ExtendedCalendarEvent));
+                                          }
+                                          return undefined;
+                                        })()
+                                      }}
+                                    >
+                                      {(() => {
+                                        const sessions = dayEvents.filter(event =>
+                                          event.title?.startsWith('[SESSION]') ||
+                                          (event.resource as ExtendedCalendarEvent)?.isSession
+                                        );
+                                        const parentEvent = dayEvents.find(event =>
+                                          !event.title?.startsWith('[SESSION]') &&
+                                          !(event.resource as ExtendedCalendarEvent)?.isSession
+                                        );
+
+                                        if (parentEvent) {
+                                          return (
+                                            <div className="space-y-1">
+                                              <div className="truncate px-1 text-caption-strong text-text-primary">
+                                                {parentEvent.title}
+                                              </div>
+
+                                              {sessions.length > 0 && sessions.map((event, idx) => (
+                                                <div
+                                                  key={idx}
+                                                  className="cal-event"
+                                                  style={accentVar(getEventAccent(event.resource as ExtendedCalendarEvent))}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleEventClick(event);
+                                                  }}
+                                                  title={`${event.title} - Click for details`}
+                                                >
+                                                  <span className="truncate">{event.title.replace('[SESSION] ', '')}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        } else {
+                                          return isAdmin && (
+                                            <div className="flex h-full items-center justify-center text-text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                                              <Add16Regular aria-hidden />
+                                            </div>
+                                          );
+                                        }
+                                      })()}
+                                    </div>
+                                  );
+                                }
+
+                                return weekCells;
+                              })()}
+                            </div>
+                          );
+                        }
+
+                        return hours;
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Day View */}
+              {currentView === 'day' && (
+                <div>
+                  {/* Day header */}
+                  <div className="border-b border-border-subtle px-4 py-3">
+                    <h3 className="text-subheading text-text-primary">
+                      {moment(currentDate).format('dddd, MMMM D, YYYY')}
+                    </h3>
+                    <p className="mt-0.5 text-caption text-text-muted">
+                      {viewFilteredEvents.length} events and sessions scheduled for today
+                    </p>
                   </div>
 
-                  {/* Week Calendar Grid */}
+                  {/* Day schedule */}
                   <div className="divide-y divide-border-subtle">
                     {(() => {
                       const hours = [];
-                      const startOfWeek = moment(currentDate).startOf('week');
-                      
+
                       for (let hour = 6; hour <= 22; hour++) {
+                        const hourEvents = viewFilteredEvents.filter(event =>
+                          isEventInHour(event, hour, moment(currentDate).format('YYYY-MM-DD'))
+                        );
+
                         hours.push(
-                          <div key={hour} className="grid grid-cols-8 divide-x divide-border-subtle min-h-[58px]">
-                            <div className="p-2 text-xs text-text-muted font-medium text-center bg-surface-subtle/20 flex items-start justify-center">
+                          <div key={hour} className="grid min-h-[56px] grid-cols-12 divide-x divide-border-subtle">
+                            <div className="col-span-3 px-3 pt-1.5 text-right text-caption tabular-nums text-text-muted sm:col-span-2">
                               {moment().hour(hour).minute(0).format('h:mm A')}
                             </div>
-                            {(() => {
-                              const weekCells = [];
-                              
-                              for (let i = 0; i < 7; i++) {
-                                const day = moment(startOfWeek).add(i, 'days');
-                                const dayEvents = viewFilteredEvents.filter(event => 
-                                  isEventInHour(event, hour, day.format('YYYY-MM-DD'))
-                                );
-                                const isToday = day.format('YYYY-MM-DD') === moment().local().format('YYYY-MM-DD');
-                                const isSaturday = day.day() === 6;
-                                
-                                weekCells.push(
-                                  <div 
-                                    key={`${day.format('YYYY-MM-DD')}-${hour}`}
-                                    onClick={() => {
-                                      if (!isAdmin) return;
-                                      
-                                      const sessionEvent = dayEvents.find(event => 
-                                        event.title?.startsWith('[SESSION]') || 
-                                        (event.resource as ExtendedCalendarEvent)?.isSession
-                                      );
-                                      
-                                      if (sessionEvent) {
-                                        handleEventClick(sessionEvent);
-                                      } else {
-                                        handleCellClick(day, hour);
-                                      }
-                                    }}
-                                    className={`p-1 transition-all group ${
-                                      isAdmin ? 'cursor-pointer hover:bg-surface-subtle/70' : ''
-                                    } ${
-                                      isToday
-                                        ? 'bg-action-primary-subtle/20'
-                                        : isSaturday
-                                          ? 'bg-status-error-subtle/10'
-                                          : 'bg-surface-default'
-                                    }`}
-                                    style={{
-                                      backgroundColor: (() => {
-                                        const parentEvent = dayEvents.find(event => 
-                                          !event.title?.startsWith('[SESSION]') && 
-                                          !(event.resource as ExtendedCalendarEvent)?.isSession
-                                        );
-                                        if (parentEvent) {
-                                          return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}30`;
-                                        }
-                                        return undefined;
-                                      })()
-                                    }}
-                                  >
-                                    {(() => {
-                                      const sessions = dayEvents.filter(event => 
-                                        event.title?.startsWith('[SESSION]') || 
-                                        (event.resource as ExtendedCalendarEvent)?.isSession
-                                      );
-                                      const parentEvent = dayEvents.find(event => 
-                                        !event.title?.startsWith('[SESSION]') && 
-                                        !(event.resource as ExtendedCalendarEvent)?.isSession
-                                      );
+                            <div
+                              className={`group col-span-9 p-2 transition-colors duration-150 ease-fluent-standard sm:col-span-10 ${
+                                isAdmin ? 'cursor-pointer hover:bg-surface-hover' : ''
+                              }`}
+                              style={{
+                                backgroundColor: (() => {
+                                  const parentEvent = hourEvents.find(event =>
+                                    !event.title?.startsWith('[SESSION]') &&
+                                    !(event.resource as ExtendedCalendarEvent)?.isSession
+                                  );
+                                  if (parentEvent) {
+                                    return tintColor(getEventAccent(parentEvent.resource as ExtendedCalendarEvent));
+                                  }
+                                  return undefined;
+                                })()
+                              }}
+                              onClick={() => {
+                                if (!isAdmin) return;
 
-                                      if (parentEvent) {
-                                        return (
-                                          <div className="space-y-1">
-                                            <div className="text-[11px] font-semibold text-text-primary px-1.5 py-0.5 rounded truncate">
-                                              {parentEvent.title}
-                                            </div>
-                                            
-                                            {sessions.length > 0 && sessions.map((event, idx) => (
-                                              <div 
-                                                key={idx}
-                                                className="cursor-pointer hover:opacity-90 transition-opacity p-1 rounded text-[11px] font-medium text-white shadow-2xs"
-                                                style={{
-                                                  backgroundColor: (event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'
-                                                }}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handleEventClick(event);
-                                                }}
-                                                title={`${event.title} - Click for details`}
-                                              >
-                                                <div className="font-semibold truncate">
-                                                  {event.title.replace('[SESSION] ', '')}
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        );
-                                      } else {
-                                        return isAdmin && (
-                                          <div className="opacity-0 group-hover:opacity-60 text-xs text-text-muted text-center font-bold">
-                                            +
-                                          </div>
-                                        );
-                                      }
-                                    })()}
-                                  </div>
+                                const sessionEvent = hourEvents.find(event =>
+                                  event.title?.startsWith('[SESSION]') ||
+                                  (event.resource as ExtendedCalendarEvent)?.isSession
                                 );
-                              }
-                              
-                              return weekCells;
-                            })()}
+
+                                if (sessionEvent) {
+                                  handleEventClick(sessionEvent);
+                                } else {
+                                  handleCellClick(moment(currentDate), hour);
+                                }
+                              }}
+                            >
+                              {(() => {
+                                const sessions = hourEvents.filter(event =>
+                                  event.title?.startsWith('[SESSION]') ||
+                                  (event.resource as ExtendedCalendarEvent)?.isSession
+                                );
+                                const parentEvent = hourEvents.find(event =>
+                                  !event.title?.startsWith('[SESSION]') &&
+                                  !(event.resource as ExtendedCalendarEvent)?.isSession
+                                );
+
+                                if (parentEvent) {
+                                  return (
+                                    <div className="space-y-1.5">
+                                      <div className="text-caption-strong text-text-primary">
+                                        {parentEvent.title}
+                                      </div>
+
+                                      {sessions.length > 0 && (
+                                        <div className="flex flex-wrap gap-2">
+                                          {sessions.map((event, idx) => (
+                                            <div
+                                              key={idx}
+                                              className="cal-event cal-event--roomy"
+                                              style={accentVar(getEventAccent(event.resource as ExtendedCalendarEvent))}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleEventClick(event);
+                                              }}
+                                              title={`${event.title} - Click for details`}
+                                            >
+                                              <span>{event.title.replace('[SESSION] ', '')}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                } else {
+                                  return isAdmin && (
+                                    <div className="flex items-center gap-1.5 text-caption text-text-muted opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+                                      <Add16Regular aria-hidden />
+                                      Click to schedule session
+                                    </div>
+                                  );
+                                }
+                              })()}
+                            </div>
                           </div>
                         );
                       }
-                      
+
                       return hours;
                     })()}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
+          )}
+        </section>
 
-            {/* Day View */}
-            {currentView === 'day' && (
-              <div>
-                {/* Day Header Banner */}
-                <div className="bg-surface-subtle/80 border-b border-border-subtle p-4 text-center">
-                  <h3 className="text-lg sm:text-xl font-bold text-text-primary">
-                    {moment(currentDate).format('dddd, MMMM D, YYYY')}
-                  </h3>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    {viewFilteredEvents.length} events and sessions scheduled for today
-                  </p>
+        {/* Side panel */}
+        <aside className="space-y-4" aria-label="Calendar details">
+          {/* Upcoming events */}
+          <section className="rounded-lg bg-surface-default shadow">
+            <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-3">
+              <h3 className="text-subheading text-text-primary">Upcoming</h3>
+              <span className="text-caption text-text-muted">{moment(currentDate).format('MMMM YYYY')}</span>
+            </div>
+            {upcomingEvents.length === 0 ? (
+              <div className="flex flex-col items-center px-4 py-8 text-center">
+                <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                  <CalendarLtr20Regular aria-hidden />
                 </div>
-
-                {/* Day Schedule Grid */}
-                <div className="divide-y divide-border-subtle">
-                  {(() => {
-                    const hours = [];
-                    
-                    for (let hour = 6; hour <= 22; hour++) {
-                      const hourEvents = viewFilteredEvents.filter(event => 
-                        isEventInHour(event, hour, moment(currentDate).format('YYYY-MM-DD'))
-                      );
-                      
-                      hours.push(
-                        <div key={hour} className="grid grid-cols-12 divide-x divide-border-subtle min-h-[58px]">
-                          <div className="col-span-3 sm:col-span-2 p-3 text-xs font-semibold text-text-muted text-center bg-surface-subtle/20 flex items-start justify-center">
-                            {moment().hour(hour).minute(0).format('h:mm A')}
-                          </div>
-                          <div 
-                            className={`col-span-9 sm:col-span-10 p-2 sm:p-2.5 transition-all group ${
-                              isAdmin ? 'cursor-pointer hover:bg-surface-subtle/60' : ''
-                            }`}
-                            style={{
-                              backgroundColor: (() => {
-                                const parentEvent = hourEvents.find(event => 
-                                  !event.title?.startsWith('[SESSION]') && 
-                                  !(event.resource as ExtendedCalendarEvent)?.isSession
-                                );
-                                if (parentEvent) {
-                                  return `${(parentEvent.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'}25`;
-                                }
-                                return undefined;
-                              })()
-                            }}
-                            onClick={() => {
-                              if (!isAdmin) return;
-                              
-                              const sessionEvent = hourEvents.find(event => 
-                                event.title?.startsWith('[SESSION]') || 
-                                (event.resource as ExtendedCalendarEvent)?.isSession
-                              );
-                              
-                              if (sessionEvent) {
-                                handleEventClick(sessionEvent);
-                              } else {
-                                handleCellClick(moment(currentDate), hour);
-                              }
-                            }}
-                          >
-                            {(() => {
-                              const sessions = hourEvents.filter(event => 
-                                event.title?.startsWith('[SESSION]') || 
-                                (event.resource as ExtendedCalendarEvent)?.isSession
-                              );
-                              const parentEvent = hourEvents.find(event => 
-                                !event.title?.startsWith('[SESSION]') && 
-                                !(event.resource as ExtendedCalendarEvent)?.isSession
-                              );
-
-                              if (parentEvent) {
-                                return (
-                                  <div className="space-y-1.5">
-                                    <div className="text-xs font-semibold text-text-primary">
-                                      {parentEvent.title}
-                                    </div>
-                                    
-                                    {sessions.length > 0 && (
-                                      <div className="flex flex-wrap gap-2">
-                                        {sessions.map((event, idx) => (
-                                          <div 
-                                            key={idx}
-                                            className="cursor-pointer hover:opacity-90 transition-opacity px-2.5 py-1 rounded text-xs font-medium text-white shadow-2xs"
-                                            style={{
-                                              backgroundColor: (event.resource as ExtendedCalendarEvent)?.color_code || '#3B82F6'
-                                            }}
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleEventClick(event);
-                                            }}
-                                            title={`${event.title} - Click for details`}
-                                          >
-                                            <span className="font-semibold">{event.title.replace('[SESSION] ', '')}</span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              } else {
-                                return isAdmin && (
-                                  <div className="opacity-0 group-hover:opacity-50 text-text-muted text-xs font-medium">
-                                    + Click to schedule session
-                                  </div>
-                                );
-                              }
-                            })()}
-                          </div>
+                <p className="text-body-strong text-text-primary">No upcoming events</p>
+                <p className="mt-0.5 text-caption text-text-muted">
+                  Nothing else is scheduled in {moment(currentDate).format('MMMM')}.
+                </p>
+              </div>
+            ) : (
+              <ul className="space-y-0.5 p-2">
+                {upcomingEvents.map(ev => {
+                  const start = moment(ev.start_date);
+                  return (
+                    <li key={ev.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedEvent(ev);
+                          setShowEventModal(true);
+                        }}
+                        className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+                      >
+                        <div className="flex w-10 shrink-0 flex-col items-center rounded-md border border-border-subtle bg-surface-default py-0.5">
+                          <span className="text-overline text-text-muted">{start.format('MMM')}</span>
+                          <span className="text-subheading tabular-nums text-text-primary">{start.format('D')}</span>
                         </div>
-                      );
-                    }
-                    
-                    return hours;
-                  })()}
-                </div>
+                        <div
+                          className="min-w-0 flex-1 border-l-[3px] pl-2"
+                          style={{ borderLeftColor: getEventAccent(ev) }}
+                        >
+                          <p className="truncate text-body-strong text-text-primary">
+                            {getCleanTitle(ev.title, ev.event_type)}
+                          </p>
+                          <p className="truncate text-caption text-text-muted">
+                            {start.format('dddd')} ·{' '}
+                            {ev.is_all_day || !ev.start_time
+                              ? 'All day'
+                              : `${ev.start_time.slice(0, 5)}${ev.end_time ? ` – ${ev.end_time.slice(0, 5)}` : ''}`}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+
+          {/* Event types: filter + legend */}
+          <section className="rounded-lg bg-surface-default shadow">
+            <div className="flex items-center justify-between gap-2 border-b border-border-subtle px-4 py-3">
+              <h3 className="flex items-center gap-2 text-subheading text-text-primary">
+                <Filter20Regular className="text-text-muted" aria-hidden />
+                Event types
+              </h3>
+              <span className="text-caption text-text-muted">Nepal Institutional System</span>
+            </div>
+            <div className="space-y-0.5 p-2" role="radiogroup" aria-label="Filter by event type">
+              {[
+                { value: 'all', label: 'All Event Types', desc: 'Show every category' },
+                ...EVENT_TYPE_FILTERS,
+              ].map(opt => {
+                const selected = filterType === opt.value;
+                const count = opt.value === 'all' ? events.length : eventTypeCounts[opt.value] || 0;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setFilterType(opt.value)}
+                    className={`flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left transition-colors duration-150 ease-fluent-standard ${
+                      selected ? 'bg-brand-subtle' : 'hover:bg-surface-hover'
+                    }`}
+                  >
+                    <span className="flex w-4 shrink-0 justify-center">
+                      {opt.value === 'all' ? (
+                        <CalendarLtr16Regular className="text-text-muted" aria-hidden />
+                      ) : (
+                        <span className="cal-swatch" style={accentVar(EVENT_TYPE_ACCENTS[opt.value])} />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block truncate text-body ${
+                          selected ? 'font-semibold text-brand-foreground' : 'text-text-primary'
+                        }`}
+                      >
+                        {opt.label}
+                      </span>
+                      <span className="block truncate text-caption text-text-muted">{opt.desc}</span>
+                    </span>
+                    <span className="text-caption tabular-nums text-text-muted">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Nepal calendar message bar */}
+          <div className="flex items-start gap-2 rounded-md border border-status-info-border bg-status-info-subtle px-3 py-2 text-body text-text-primary">
+            <Info20Regular className="shrink-0 text-status-info" aria-hidden />
+            <p>
+              <span className="font-semibold">Nepal Academic Calendar Standard:</span> Saturday is the official weekly institutional holiday (marked in red). Sunday through Friday are active working academic days.
+            </p>
+          </div>
+        </aside>
+      </div>
+
+      {/* Event Details Dialog */}
+      {showEventModal && selectedEvent && (
+        <DialogShell
+          onClose={() => setShowEventModal(false)}
+          widthClass="max-w-xl"
+          icon={
+            <div className="cal-chip h-10 w-10" style={accentVar(getEventAccent(selectedEvent))}>
+              {React.createElement(getEventTypeInfo(selectedEvent.event_type).icon, {
+                className: 'h-5 w-5',
+                'aria-hidden': true
+              })}
+            </div>
+          }
+          title={getCleanTitle(selectedEvent.title, selectedEvent.event_type)}
+          description={
+            <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-border-subtle bg-surface-subtle px-2 py-0.5 text-caption text-text-secondary">
+              <span className="cal-swatch" style={accentVar(getEventAccent(selectedEvent))} />
+              {getEventTypeInfo(selectedEvent.event_type).label}
+            </span>
+          }
+          footer={
+            isAdmin ? (
+              <>
+                <Button variant="destructive" className="mr-auto" onClick={handleDeleteEvent}>
+                  <Delete20Regular aria-hidden />
+                  Delete
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowSessionModal(true);
+                    fetchEventSessions(selectedEvent.id);
+                  }}
+                >
+                  Manage Sessions
+                </Button>
+                <Button onClick={handleEditEvent}>
+                  <Edit20Regular aria-hidden />
+                  Edit Event
+                </Button>
+              </>
+            ) : undefined
+          }
+        >
+          <div className="space-y-4">
+            {selectedEvent.description && (
+              <div>
+                <h3 className="mb-1 text-caption-strong text-text-muted">Description</h3>
+                <p className="text-body text-text-primary">{selectedEvent.description}</p>
               </div>
             )}
-          </div>
-        )}
-      </div>
 
-      {/* Legend & Nepal Academic Calendar System Info */}
-      <div className="bg-surface-default border border-border-subtle rounded-xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm sm:text-base font-semibold text-text-primary flex items-center gap-2">
-            <Filter className="w-4 h-4 text-action-primary" />
-            <span>Event Types & Academic Schedule</span>
-          </h3>
-          <span className="text-xs text-text-muted font-medium">
-            Nepal Institutional System
-          </span>
-        </div>
-
-        {/* Nepal Calendar Banner */}
-        <div className="p-3 bg-action-primary-subtle/50 border border-action-primary/20 rounded-lg flex items-center gap-2.5 text-xs text-text-primary">
-          <Info className="w-4 h-4 text-action-primary shrink-0" />
-          <span>
-            <strong>Nepal Academic Calendar Standard:</strong> Saturday is the official weekly institutional holiday (marked in red). Sunday through Friday are active working academic days.
-          </span>
-        </div>
-
-        {/* Categories Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Object.entries({
-            class: { color: '#22C55E', icon: GraduationCap, label: 'Academic Days', desc: 'Lectures & regular classes' },
-            holiday: { color: '#EF4444', icon: PartyPopper, label: 'Holidays (Saturdays)', desc: 'Weekly offs & public holidays' },
-            exam: { color: '#F97316', icon: AlertCircle, label: 'Examinations', desc: 'Midterms & finals' },
-            special_event: { color: '#8B5CF6', icon: Users, label: 'Special Events', desc: 'Workshops & guest sessions' },
-            cancelled_class: { color: '#64748B', icon: CalendarX, label: 'Cancelled Classes', desc: 'Rescheduled sessions' }
-          }).map(([type, info]) => {
-            const Icon = info.icon;
-            return (
-              <div 
-                key={type} 
-                className="p-3 bg-surface-subtle/60 border border-border-subtle rounded-lg flex items-start gap-2.5 hover:bg-surface-subtle transition-colors"
-              >
-                <div 
-                  className="w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 shadow-2xs"
-                  style={{ backgroundColor: info.color }}
-                />
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-text-primary truncate">{info.label}</div>
-                  <div className="text-[10px] text-text-muted truncate mt-0.5">{info.desc}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-{/* Event Details Modal */}
-      {showEventModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-start justify-between mb-6">
-                <div className="flex items-start space-x-4">
-                  <div 
-                    className="p-3 rounded-xl"
-                    style={{ backgroundColor: selectedEvent.color_code + '20' }}
-                  >
-                    {React.createElement(getEventTypeInfo(selectedEvent.event_type).icon, {
-                      className: "w-6 h-6",
-                      style: { color: selectedEvent.color_code }
-                    })}
-                  </div>
-                  <div>
-                    <h2 className="text-2xl font-bold text-text-primary">{getCleanTitle(selectedEvent.title, selectedEvent.event_type)}</h2>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-action-primary-subtle text-action-primary mt-1.5">
-                      {getEventTypeInfo(selectedEvent.event_type).label}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setShowEventModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
-              </div>
-              
-              <div className="space-y-4">
-                {selectedEvent.description && (
-                  <div>
-                    <h3 className="text-sm font-medium text-text-muted mb-1.5">Description</h3>
-                    <p className="text-text-primary">{selectedEvent.description}</p>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-text-muted mb-1.5">Date & Time</h3>
-                    <div className="text-text-primary">
-                      <p>{moment(selectedEvent.start_date).format('MMMM D, YYYY')}</p>
-                      {!selectedEvent.is_all_day && selectedEvent.start_time && (
-                        <p className="text-sm text-text-muted">
-                         {selectedEvent.start_time} {selectedEvent.end_time && `- ${selectedEvent.end_time}`}
-                        </p>
-                      )}
-                      {selectedEvent.is_all_day && <p className="text-sm text-text-muted">All day</p>}
-                    </div>
-                  </div>
-                  
-                  {selectedEvent.location && (
-                    <div>
-                      <h3 className="text-sm font-medium text-text-muted mb-1.5">Location</h3>
-                      <p className="text-text-primary">{selectedEvent.location}</p>
-                    </div>
-                  )}
+            <dl className="divide-y divide-border-subtle rounded-md border border-border-subtle">
+              <div className="flex items-start gap-3 px-3 py-2.5">
+                <Clock20Regular className="shrink-0 text-text-muted" aria-hidden />
+                <div>
+                  <dt className="text-caption text-text-muted">Date & Time</dt>
+                  <dd className="text-body text-text-primary">
+                    <p>{moment(selectedEvent.start_date).format('MMMM D, YYYY')}</p>
+                    {!selectedEvent.is_all_day && selectedEvent.start_time && (
+                      <p className="text-caption text-text-muted">
+                        {selectedEvent.start_time} {selectedEvent.end_time && `- ${selectedEvent.end_time}`}
+                      </p>
+                    )}
+                    {selectedEvent.is_all_day && <p className="text-caption text-text-muted">All day</p>}
+                  </dd>
                 </div>
               </div>
 
-              {/* Admin Actions */}
-              {isAdmin && (
-                <div className="border-t border-border-subtle pt-4 mt-6">
-                  <div className="flex gap-3 flex-wrap">
-                    <button
-                      onClick={handleEditEvent}
-                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
-                    >
-                      Edit Event
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowSessionModal(true);
-                        fetchEventSessions(selectedEvent.id);
-                      }}
-                      className="flex-1 min-w-[120px] px-4 py-2.5 bg-action-primary text-white rounded-md hover:bg-action-primary-hover transition-colors font-medium"
-                    >
-                      Manage Sessions
-                    </button>
-                    <button
-                      onClick={handleDeleteEvent}
-                      className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                    >
-                      Delete
-                    </button>
+              {selectedEvent.location && (
+                <div className="flex items-start gap-3 px-3 py-2.5">
+                  <Location20Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <div>
+                    <dt className="text-caption text-text-muted">Location</dt>
+                    <dd className="text-body text-text-primary">{selectedEvent.location}</dd>
                   </div>
                 </div>
               )}
-            </div>
+            </dl>
           </div>
-        </div>
+        </DialogShell>
       )}
 
-      {/* Create Event Modal */}
+      {/* Create Event Dialog */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-text-primary">Create New Event</h2>
-                  {eventForm.start_date && (
-                    <div className="text-sm text-text-muted mt-1">
-                      <p className="flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                        </svg>
-                        Selected date: {moment(eventForm.start_date).format('MMMM D, YYYY')}
-                      </p>
-                      {eventForm.start_time && (
-                        <p className="flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd" />
-                          </svg>
-                          Selected time: {eventForm.start_time} - {eventForm.end_time}
-                        </p>
-                      )}
-                      {eventForm.is_all_day && (
-                        <p className="flex items-center gap-2">
-                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-                          </svg>
-                          All-day event
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
-              </div>
-
-              <form onSubmit={handleCreateEvent} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Title</label>
-                  <input
-                    type="text"
-                    value={eventForm.title}
-                    onChange={(e) => handleFormChange('title', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event title..."
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-                  <textarea
-                    rows={3}
-                    value={eventForm.description}
-                    onChange={(e) => handleFormChange('description', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event description..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Type</label>
-                  <select 
-                    value={eventForm.event_type}
-                    onChange={(e) => handleFormChange('event_type', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                  >
-                    <option value="class">Class</option>
-                    <option value="exam">Exam</option>
-                    <option value="holiday">Holiday</option>
-                    <option value="special_event">Special Event</option>
-                  </select>
-                  <p className="text-xs text-text-muted mt-1">Color will be automatically assigned based on event type</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Date</label>
-                    <input
-                      type="date"
-                      value={eventForm.start_date}
-                      onChange={(e) => handleFormChange('start_date', e.target.value)}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">End Date</label>
-                    <input
-                      type="date"
-                      value={eventForm.end_date}
-                      onChange={(e) => handleFormChange('end_date', e.target.value)}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mb-4">
-                  <input
-                    type="checkbox"
-                    id="allDay"
-                    checked={eventForm.is_all_day}
-                    onChange={(e) => handleFormChange('is_all_day', e.target.checked)}
-                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
-                  />
-                  <label htmlFor="allDay" className="text-sm font-medium text-text-secondary">All Day Event</label>
-                </div>
-
-                {!eventForm.is_all_day && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
-                      <input
-                        type="time"
-                        value={eventForm.start_time}
-                        onChange={(e) => handleFormChange('start_time', e.target.value)}
-                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
-                      <input
-                        type="time"
-                        value={eventForm.end_time}
-                        onChange={(e) => handleFormChange('end_time', e.target.value)}
-                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      />
-                    </div>
-                  </div>
+        <DialogShell
+          onClose={() => setShowCreateModal(false)}
+          widthClass="max-w-2xl"
+          title="Create New Event"
+          description={
+            eventForm.start_date ? (
+              <div className="mt-1 space-y-0.5">
+                <p className="flex items-center gap-1.5">
+                  <CalendarLtr16Regular aria-hidden />
+                  Selected date: {moment(eventForm.start_date).format('MMMM D, YYYY')}
+                </p>
+                {eventForm.start_time && (
+                  <p className="flex items-center gap-1.5">
+                    <Clock16Regular aria-hidden />
+                    Selected time: {eventForm.start_time} - {eventForm.end_time}
+                  </p>
                 )}
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
-                  <input
-                    type="text"
-                    value={eventForm.location}
-                    onChange={(e) => handleFormChange('location', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event location..."
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="flex-1 px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
-                  >
-                    Create Event
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+                {eventForm.is_all_day && (
+                  <p className="flex items-center gap-1.5">
+                    <CalendarLtr16Regular aria-hidden />
+                    All-day event
+                  </p>
+                )}
+              </div>
+            ) : undefined
+          }
+          footer={
+            <>
+              <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="create-event-form">
+                Create Event
+              </Button>
+            </>
+          }
+        >
+          <form id="create-event-form" onSubmit={handleCreateEvent} className="space-y-4">
+            {renderEventFields('create')}
+          </form>
+        </DialogShell>
       )}
 
-      {/* Edit Event Modal */}
+      {/* Edit Event Dialog */}
       {showEditModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">Edit Event</h2>
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
-              </div>
-
-              <form onSubmit={handleUpdateEvent} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Title</label>
-                  <input
-                    type="text"
-                    value={eventForm.title}
-                    onChange={(e) => handleFormChange('title', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event title..."
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-                  <textarea
-                    rows={3}
-                    value={eventForm.description}
-                    onChange={(e) => handleFormChange('description', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event description..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Event Type</label>
-                  <select 
-                    value={eventForm.event_type}
-                    onChange={(e) => handleFormChange('event_type', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                  >
-                    <option value="class">Class</option>
-                    <option value="exam">Exam</option>
-                    <option value="holiday">Holiday</option>
-                    <option value="special_event">Special Event</option>
-                  </select>
-                  <p className="text-xs text-text-muted mt-1">Color will be automatically assigned based on event type</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Date</label>
-                    <input
-                      type="date"
-                      value={eventForm.start_date}
-                      onChange={(e) => handleFormChange('start_date', e.target.value)}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">End Date</label>
-                    <input
-                      type="date"
-                      value={eventForm.end_date}
-                      onChange={(e) => handleFormChange('end_date', e.target.value)}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 mb-4">
-                  <input
-                    type="checkbox"
-                    id="editAllDay"
-                    checked={eventForm.is_all_day}
-                    onChange={(e) => handleFormChange('is_all_day', e.target.checked)}
-                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
-                  />
-                  <label htmlFor="editAllDay" className="text-sm font-medium text-text-secondary">All Day Event</label>
-                </div>
-
-                {!eventForm.is_all_day && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
-                      <input
-                        type="time"
-                        value={eventForm.start_time}
-                        onChange={(e) => handleFormChange('start_time', e.target.value)}
-                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
-                      <input
-                        type="time"
-                        value={eventForm.end_time}
-                        onChange={(e) => handleFormChange('end_time', e.target.value)}
-                        className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
-                  <input
-                    type="text"
-                    value={eventForm.location}
-                    onChange={(e) => handleFormChange('location', e.target.value)}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter event location..."
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeleteEvent}
-                    className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
-                  >
-                    Update Event
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+        <DialogShell
+          onClose={() => setShowEditModal(false)}
+          widthClass="max-w-2xl"
+          title="Edit Event"
+          footer={
+            <>
+              <Button type="button" variant="destructive" className="mr-auto" onClick={handleDeleteEvent}>
+                <Delete20Regular aria-hidden />
+                Delete
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" form="edit-event-form">
+                Update Event
+              </Button>
+            </>
+          }
+        >
+          <form id="edit-event-form" onSubmit={handleUpdateEvent} className="space-y-4">
+            {renderEventFields('edit')}
+          </form>
+        </DialogShell>
       )}
 
-      {/* Settings Modal */}
+      {/* Settings Dialog */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">Calendar Settings</h2>
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
+        <DialogShell
+          onClose={() => setShowSettingsModal(false)}
+          widthClass="max-w-md"
+          title="Calendar Settings"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowSettingsModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => setShowSettingsModal(false)}>
+                Save Settings
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="settings-default-view" className={fieldLabelClass}>Default View</label>
+              <NativeSelect id="settings-default-view">
+                <option>Month</option>
+                <option>Week</option>
+                <option>Day</option>
+              </NativeSelect>
+            </div>
+
+            <div>
+              <label htmlFor="settings-week-start" className={fieldLabelClass}>Week Starts On</label>
+              <NativeSelect id="settings-week-start">
+                <option>Sunday</option>
+                <option>Monday</option>
+              </NativeSelect>
+            </div>
+
+            <div className="divide-y divide-border-subtle rounded-md border border-border-subtle">
+              <div className="flex items-center justify-between gap-4 px-3 py-2.5">
+                <span className="text-body text-text-primary">Show Weekends</span>
+                <Switch defaultChecked aria-label="Show Weekends" />
               </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Default View</label>
-                  <select className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary">
-                    <option>Month</option>
-                    <option>Week</option>
-                    <option>Day</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Week Starts On</label>
-                  <select className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary">
-                    <option>Sunday</option>
-                    <option>Monday</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-300">Show Weekends</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-border-default peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-action-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-action-primary"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-slate-300">Show Time Grid</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" defaultChecked />
-                    <div className="w-11 h-6 bg-border-default peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-action-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-action-primary"></div>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-6">
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => setShowSettingsModal(false)}
-                  className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
-                >
-                  Save Settings
-                </button>
+              <div className="flex items-center justify-between gap-4 px-3 py-2.5">
+                <span className="text-body text-text-primary">Show Time Grid</span>
+                <Switch defaultChecked aria-label="Show Time Grid" />
               </div>
             </div>
           </div>
-        </div>
+        </DialogShell>
       )}
 
-      {/* Edit Session Modal */}
+      {/* Edit Session Dialog */}
       {showEditSessionModal && selectedSession && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">Edit Session</h2>
-                <button
-                  onClick={() => setShowEditSessionModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Session Title</label>
-                  <input
-                    type="text"
-                    value={selectedSession.title}
-                    onChange={(e) => setSelectedSession({...selectedSession, title: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter session title..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-                  <textarea
-                    rows={3}
-                    value={selectedSession.description || ''}
-                    onChange={(e) => setSelectedSession({...selectedSession, description: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter session description..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
-                    <input
-                      type="time"
-                      value={selectedSession.start_time}
-                      onChange={(e) => setSelectedSession({...selectedSession, start_time: e.target.value})}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
-                    <input
-                      type="time"
-                      value={selectedSession.end_time}
-                      onChange={(e) => setSelectedSession({...selectedSession, end_time: e.target.value})}
-                      className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
-                  <input
-                    type="text"
-                    value={selectedSession.presenter || ''}
-                    onChange={(e) => setSelectedSession({...selectedSession, presenter: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter presenter name..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
-                  <input
-                    type="text"
-                    value={selectedSession.location || ''}
-                    onChange={(e) => setSelectedSession({...selectedSession, location: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="Enter session location..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Session Type</label>
-                  <input
-                    type="text"
-                    value={selectedSession.session_type || ''}
-                    onChange={(e) => setSelectedSession({...selectedSession, session_type: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                    placeholder="e.g., Lecture, Workshop, Lab..."
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Color</label>
-                  <input
-                    type="color"
-                    value={selectedSession.color_code || '#3B82F6'}
-                    onChange={(e) => setSelectedSession({...selectedSession, color_code: e.target.value})}
-                    className="w-full bg-surface-canvas border border-border-default rounded-lg px-3 py-2 text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary focus:border-action-primary"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="attendance_required"
-                    checked={selectedSession.attendance_required}
-                    onChange={(e) => setSelectedSession({...selectedSession, attendance_required: e.target.checked})}
-                    className="w-4 h-4 text-action-primary bg-surface-canvas border-border-default rounded focus:ring-action-primary"
-                  />
-                  <label htmlFor="attendance_required" className="text-sm font-medium text-text-secondary">
-                    Attendance Required
-                  </label>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={() => setShowEditSessionModal(false)}
-                    className="px-4 py-2.5 bg-surface-subtle border border-border-subtle rounded-lg text-text-secondary hover:bg-surface-canvas transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (selectedSession && window.confirm('Are you sure you want to delete this session?')) {
-                        handleDeleteSession(selectedSession.id);
-                        setShowEditSessionModal(false);
-                      }
-                    }}
-                    className="px-4 py-2.5 bg-status-error text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                  >
-                    Delete
-                  </button>
-                  <button
-                    onClick={handleUpdateSession}
-                    className="flex-1 px-4 py-2.5 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors font-medium"
-                  >
-                    Update Session
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Clean notification toast */}
-      {snackbar.open && (
-        <div className="fixed bottom-4 right-4 z-50">
-          <div className={`px-4 py-3 rounded-lg shadow-lg border backdrop-blur-sm ${
-            snackbar.severity === 'success' 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{snackbar.message}</span>
-              <button
-                onClick={() => setSnackbar({ ...snackbar, open: false })}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+        <DialogShell
+          onClose={() => setShowEditSessionModal(false)}
+          widthClass="max-w-2xl"
+          title="Edit Session"
+          footer={
+            <>
+              <Button
+                variant="destructive"
+                className="mr-auto"
+                onClick={() => {
+                  if (selectedSession && window.confirm('Are you sure you want to delete this session?')) {
+                    handleDeleteSession(selectedSession.id);
+                    setShowEditSessionModal(false);
+                  }
+                }}
               >
-                <X className="w-4 h-4" />
-              </button>
+                <Delete20Regular aria-hidden />
+                Delete
+              </Button>
+              <Button variant="outline" onClick={() => setShowEditSessionModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateSession}>
+                Update Session
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="edit-session-title" className={fieldLabelClass}>Session Title</label>
+              <Input
+                id="edit-session-title"
+                type="text"
+                value={selectedSession.title}
+                onChange={(e) => setSelectedSession({...selectedSession, title: e.target.value})}
+                placeholder="Enter session title..."
+              />
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Session Management Modal */}
-      {showSessionModal && selectedEvent && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-text-primary">Manage Sessions</h2>
-                  <p className="text-text-muted mt-1">{selectedEvent.title}</p>
-                </div>
-                <button
-                  onClick={() => setShowSessionModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
-              </div>
+            <div>
+              <label htmlFor="edit-session-description" className={fieldLabelClass}>Description</label>
+              <Textarea
+                id="edit-session-description"
+                rows={3}
+                value={selectedSession.description || ''}
+                onChange={(e) => setSelectedSession({...selectedSession, description: e.target.value})}
+                placeholder="Enter session description..."
+              />
+            </div>
 
-              {/* Session Form */}
-              <div className="bg-surface-subtle rounded-lg p-4 mb-5">
-                <h3 className="text-base font-semibold text-text-primary mb-3">Add New Session</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Title</label>
-                    <input
-                      type="text"
-                      value={sessionForm.title}
-                      onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      placeholder="e.g., Introduction"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
-                    <input
-                      type="text"
-                      value={sessionForm.presenter}
-                      onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time</label>
-                    <input
-                      type="time"
-                      value={sessionForm.start_time}
-                      onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time</label>
-                    <input
-                      type="time"
-                      value={sessionForm.end_time}
-                      onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-                    <textarea
-                      value={sessionForm.description}
-                      onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      rows={2}
-                      placeholder="Optional session description"
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end mt-4">
-                  <button
-                    onClick={() => handleCreateSession()}
-                    className="px-4 py-2 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors text-sm font-medium"
-                  >
-                    Add Session
-                  </button>
-                </div>
-              </div>
-
-              {/* Sessions List */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <h3 className="text-base font-semibold text-text-primary mb-4">
-                  Sessions ({eventSessions.length})
-                </h3>
-                {eventSessions.length === 0 ? (
-                  <p className="text-text-muted text-center py-8">No sessions created yet</p>
-                ) : (
-                  <div className="space-y-3">
-                    {eventSessions.map((session, index) => (
-                      <div
-                        key={session.id}
-                        className="bg-surface-subtle rounded-lg p-3.5 border border-border-subtle"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-3">
-                              <span className="text-base font-semibold text-text-primary">
-                                {session.title}
-                              </span>
-                              <span className="text-sm text-text-muted">
-                                {session.start_time} - {session.end_time}
-                              </span>
-                            </div>
-                            {session.presenter && (
-                              <p className="text-sm text-text-secondary mt-1">
-                                Presenter: {session.presenter}
-                              </p>
-                            )}
-                            {session.description && (
-                              <p className="text-sm text-text-muted mt-2">
-                                {session.description}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleDeleteSession(session.id)}
-                            className="p-2 text-status-error hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <label htmlFor="edit-session-start" className={fieldLabelClass}>Start Time</label>
+                <Input
+                  id="edit-session-start"
+                  type="time"
+                  value={selectedSession.start_time}
+                  onChange={(e) => setSelectedSession({...selectedSession, start_time: e.target.value})}
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-session-end" className={fieldLabelClass}>End Time</label>
+                <Input
+                  id="edit-session-end"
+                  type="time"
+                  value={selectedSession.end_time}
+                  onChange={(e) => setSelectedSession({...selectedSession, end_time: e.target.value})}
+                />
               </div>
             </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="edit-session-presenter" className={fieldLabelClass}>Presenter</label>
+                <Input
+                  id="edit-session-presenter"
+                  type="text"
+                  value={selectedSession.presenter || ''}
+                  onChange={(e) => setSelectedSession({...selectedSession, presenter: e.target.value})}
+                  placeholder="Enter presenter name..."
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-session-location" className={fieldLabelClass}>Location</label>
+                <Input
+                  id="edit-session-location"
+                  type="text"
+                  value={selectedSession.location || ''}
+                  onChange={(e) => setSelectedSession({...selectedSession, location: e.target.value})}
+                  placeholder="Enter session location..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="edit-session-type" className={fieldLabelClass}>Session Type</label>
+                <Input
+                  id="edit-session-type"
+                  type="text"
+                  value={selectedSession.session_type || ''}
+                  onChange={(e) => setSelectedSession({...selectedSession, session_type: e.target.value})}
+                  placeholder="e.g., Lecture, Workshop, Lab..."
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-session-color" className={fieldLabelClass}>Color</label>
+                <input
+                  id="edit-session-color"
+                  type="color"
+                  value={selectedSession.color_code || '#3B82F6'}
+                  onChange={(e) => setSelectedSession({...selectedSession, color_code: e.target.value})}
+                  className="h-9 w-full cursor-pointer rounded-md border border-border-default bg-surface-default p-1 transition-colors duration-150 hover:border-border-strong"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="attendance_required"
+                checked={selectedSession.attendance_required}
+                onChange={(e) => setSelectedSession({...selectedSession, attendance_required: e.target.checked})}
+                className={checkboxClass}
+              />
+              <label htmlFor="attendance_required" className="cursor-pointer text-body text-text-primary">
+                Attendance Required
+              </label>
+            </div>
+          </div>
+        </DialogShell>
+      )}
+
+      {/* Toast (Fluent message bar) */}
+      {snackbar.open && (
+        <div className="fixed bottom-4 right-4 z-50 animate-fade-in-up" role="status" aria-live="polite">
+          <div className={`flex max-w-sm items-start gap-2 rounded-md border py-2 pl-3 pr-2 text-text-primary shadow-lg ${snackbarTone.box}`}>
+            <SnackbarIcon className={`mt-0.5 shrink-0 ${snackbarTone.iconClass}`} aria-hidden />
+            <span className="flex-1 py-0.5 text-body">{snackbar.message}</span>
+            <button
+              type="button"
+              onClick={() => setSnackbar({ ...snackbar, open: false })}
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-text-muted transition-colors duration-150 hover:bg-surface-hover hover:text-text-primary"
+              aria-label="Dismiss notification"
+            >
+              <Dismiss16Regular aria-hidden />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Create Session Modal */}
-      {showCreateSessionModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-surface-default bg-card text-text-primary border border-border rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-text-primary">Create Session</h2>
-                  <p className="text-text-muted mt-1">Creating a new session for {clickedDateForSession}</p>
-                </div>
-                <button
-                  onClick={() => setShowCreateSessionModal(false)}
-                  className="p-2 hover:bg-surface-subtle rounded-lg transition-colors"
-                >
-                  <X className="w-5 h-5 text-text-muted" />
-                </button>
+      {/* Session Management Dialog */}
+      {showSessionModal && selectedEvent && (
+        <DialogShell
+          onClose={() => setShowSessionModal(false)}
+          widthClass="max-w-4xl"
+          title="Manage Sessions"
+          description={selectedEvent.title}
+        >
+          {/* Add session */}
+          <div className="mb-5 rounded-lg border border-border-subtle bg-surface-subtle p-4">
+            <h3 className="mb-3 text-subheading text-text-primary">Add New Session</h3>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="manage-session-title" className={fieldLabelClass}>Session Title</label>
+                <Input
+                  id="manage-session-title"
+                  type="text"
+                  value={sessionForm.title}
+                  onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
+                  placeholder="e.g., Introduction"
+                />
               </div>
-
-              {/* Session Form */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Title *</label>
-                    <input
-                      type="text"
-                      value={sessionForm.title}
-                      onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      placeholder="e.g., Introduction to Programming"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Session Type</label>
-                    <select
-                      value={sessionForm.session_type}
-                      onChange={(e) => setSessionForm({...sessionForm, session_type: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    >
-                      <option value="lecture">Lecture</option>
-                      <option value="practical">Practical</option>
-                      <option value="tutorial">Tutorial</option>
-                      <option value="lab">Lab</option>
-                      <option value="workshop">Workshop</option>
-                      <option value="seminar">Seminar</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Start Time *</label>
-                    <input
-                      type="time"
-                      value={sessionForm.start_time}
-                      onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">End Time *</label>
-                    <input
-                      type="time"
-                      value={sessionForm.end_time}
-                      onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Presenter</label>
-                    <input
-                      type="text"
-                      value={sessionForm.presenter}
-                      onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-2">Location</label>
-                    <input
-                      type="text"
-                      value={sessionForm.location}
-                      onChange={(e) => setSessionForm({...sessionForm, location: e.target.value})}
-                      className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                      placeholder="Optional"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">Description</label>
-                  <textarea
-                    value={sessionForm.description}
-                    onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
-                    className="w-full px-3 py-2 bg-surface-canvas border border-border-default rounded-lg text-text-primary placeholder-text-muted focus:outline-none focus:ring-1 focus:ring-action-primary"
-                    rows={3}
-                    placeholder="Optional session description"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    onClick={() => setShowCreateSessionModal(false)}
-                    className="px-4 py-2 bg-surface-subtle border border-border-subtle text-text-secondary rounded-lg hover:bg-surface-canvas transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleCreateSessionWithEvent}
-                    className="px-6 py-2 bg-action-primary text-white rounded-lg hover:bg-action-primary-hover transition-colors text-sm font-medium"
-                  >
-                    Create Session
-                  </button>
-                </div>
+              <div>
+                <label htmlFor="manage-session-presenter" className={fieldLabelClass}>Presenter</label>
+                <Input
+                  id="manage-session-presenter"
+                  type="text"
+                  value={sessionForm.presenter}
+                  onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <label htmlFor="manage-session-start" className={fieldLabelClass}>Start Time</label>
+                <Input
+                  id="manage-session-start"
+                  type="time"
+                  value={sessionForm.start_time}
+                  onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
+                />
+              </div>
+              <div>
+                <label htmlFor="manage-session-end" className={fieldLabelClass}>End Time</label>
+                <Input
+                  id="manage-session-end"
+                  type="time"
+                  value={sessionForm.end_time}
+                  onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="manage-session-description" className={fieldLabelClass}>Description</label>
+                <Textarea
+                  id="manage-session-description"
+                  value={sessionForm.description}
+                  onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
+                  rows={2}
+                  placeholder="Optional session description"
+                />
               </div>
             </div>
+            <div className="mt-4 flex justify-end">
+              <Button onClick={() => handleCreateSession()}>
+                <Add20Regular aria-hidden />
+                Add Session
+              </Button>
+            </div>
           </div>
-        </div>
+
+          {/* Sessions list */}
+          <div>
+            <h3 className="mb-3 text-subheading text-text-primary">
+              Sessions ({eventSessions.length})
+            </h3>
+            {eventSessions.length === 0 ? (
+              <div className="flex flex-col items-center rounded-lg border border-dashed border-border-default py-8 text-center">
+                <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                  <CalendarLtr20Regular aria-hidden />
+                </div>
+                <p className="text-body text-text-muted">No sessions created yet</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {eventSessions.map((session) => (
+                  <li
+                    key={session.id}
+                    className="flex items-start gap-3 rounded-md border border-l-[3px] border-border-subtle bg-surface-default px-3 py-2.5"
+                    style={{ borderLeftColor: session.color_code || 'var(--chart-1)' }}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        <span className="text-body-strong text-text-primary">{session.title}</span>
+                        <span className="inline-flex items-center gap-1 text-caption tabular-nums text-text-muted">
+                          <Clock16Regular aria-hidden />
+                          {session.start_time} - {session.end_time}
+                        </span>
+                      </div>
+                      {session.presenter && (
+                        <p className="mt-1 flex items-center gap-1 text-caption text-text-secondary">
+                          <Person16Regular aria-hidden />
+                          Presenter: {session.presenter}
+                        </p>
+                      )}
+                      {session.description && (
+                        <p className="mt-1.5 text-caption text-text-muted">{session.description}</p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSession(session.id)}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-status-error transition-colors duration-150 hover:bg-status-error-subtle"
+                      aria-label={`Delete session ${session.title}`}
+                      title="Delete session"
+                    >
+                      <Delete20Regular aria-hidden />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </DialogShell>
+      )}
+
+      {/* Create Session Dialog */}
+      {showCreateSessionModal && (
+        <DialogShell
+          onClose={() => setShowCreateSessionModal(false)}
+          widthClass="max-w-2xl"
+          title="Create Session"
+          description={`Creating a new session for ${clickedDateForSession}`}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowCreateSessionModal(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateSessionWithEvent}>
+                Create Session
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="create-session-title" className={fieldLabelClass}>Session Title *</label>
+                <Input
+                  id="create-session-title"
+                  type="text"
+                  value={sessionForm.title}
+                  onChange={(e) => setSessionForm({...sessionForm, title: e.target.value})}
+                  placeholder="e.g., Introduction to Programming"
+                />
+              </div>
+              <div>
+                <label htmlFor="create-session-type" className={fieldLabelClass}>Session Type</label>
+                <NativeSelect
+                  id="create-session-type"
+                  value={sessionForm.session_type}
+                  onChange={(e) => setSessionForm({...sessionForm, session_type: e.target.value})}
+                >
+                  <option value="lecture">Lecture</option>
+                  <option value="practical">Practical</option>
+                  <option value="tutorial">Tutorial</option>
+                  <option value="lab">Lab</option>
+                  <option value="workshop">Workshop</option>
+                  <option value="seminar">Seminar</option>
+                </NativeSelect>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="create-session-start" className={fieldLabelClass}>Start Time *</label>
+                <Input
+                  id="create-session-start"
+                  type="time"
+                  value={sessionForm.start_time}
+                  onChange={(e) => setSessionForm({...sessionForm, start_time: e.target.value})}
+                />
+              </div>
+              <div>
+                <label htmlFor="create-session-end" className={fieldLabelClass}>End Time *</label>
+                <Input
+                  id="create-session-end"
+                  type="time"
+                  value={sessionForm.end_time}
+                  onChange={(e) => setSessionForm({...sessionForm, end_time: e.target.value})}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label htmlFor="create-session-presenter" className={fieldLabelClass}>Presenter</label>
+                <Input
+                  id="create-session-presenter"
+                  type="text"
+                  value={sessionForm.presenter}
+                  onChange={(e) => setSessionForm({...sessionForm, presenter: e.target.value})}
+                  placeholder="Optional"
+                />
+              </div>
+              <div>
+                <label htmlFor="create-session-location" className={fieldLabelClass}>Location</label>
+                <Input
+                  id="create-session-location"
+                  type="text"
+                  value={sessionForm.location}
+                  onChange={(e) => setSessionForm({...sessionForm, location: e.target.value})}
+                  placeholder="Optional"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="create-session-description" className={fieldLabelClass}>Description</label>
+              <Textarea
+                id="create-session-description"
+                value={sessionForm.description}
+                onChange={(e) => setSessionForm({...sessionForm, description: e.target.value})}
+                rows={3}
+                placeholder="Optional session description"
+              />
+            </div>
+          </div>
+        </DialogShell>
       )}
     </div>
   );

@@ -4,16 +4,35 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Email, ArrowLeft, CheckmarkFilled, Security, Locked, Renew } from '@carbon/icons-react';
+import logo from '@/assets/main.png';
+import {
+  ArrowLeft16Regular,
+  CheckmarkCircle20Filled,
+  Info20Regular,
+  LockClosed20Regular,
+  PersonSupport20Regular,
+} from '@fluentui/react-icons';
 import { apiClient } from '@/integrations/api/client';
 
 interface ForgotPasswordFormData {
   email: string;
 }
+
+/** Fluent spinner (tiny) for in-button loading states. */
+const ButtonSpinner = () => (
+  <span
+    className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-t-transparent"
+    aria-hidden
+  />
+);
+
+const AUTH_BACKDROP: React.CSSProperties = {
+  backgroundImage:
+    'radial-gradient(55% 60% at 0% 0%, var(--brand-subtle) 0%, transparent 70%), radial-gradient(45% 55% at 100% 100%, var(--brand-subtle) 0%, transparent 70%)',
+};
 
 const ForgotPasswordPage: React.FC = () => {
   const { register, handleSubmit, formState: { errors } } = useForm<ForgotPasswordFormData>();
@@ -24,7 +43,7 @@ const ForgotPasswordPage: React.FC = () => {
 
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setIsSubmitting(true);
-    
+
     try {
       const response = await apiClient.post<{ success: boolean; message: string }>(
         '/auth/forgot-password',
@@ -39,7 +58,7 @@ const ForgotPasswordPage: React.FC = () => {
       }
     } catch (error: unknown) {
       console.error('Forgot password error:', error);
-      
+
       // Even on error, show success message to prevent email enumeration
       setRequestRecorded(true);
       toast({
@@ -53,50 +72,48 @@ const ForgotPasswordPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-canvas text-text-primary">
+    <div className="flex min-h-screen flex-col bg-surface-canvas text-text-primary">
       <Navbar />
-      
-      <main className="flex-grow flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
-          {/* Header */}
-          <div className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-text-primary tracking-tight">AttendAI Account Recovery</h1>
-            <p className="text-sm text-text-secondary mt-1">
-              Request a secure password reset link
-            </p>
-          </div>
 
-          <Card className="border border-border-subtle bg-surface-default shadow-card rounded-lg">
-            <CardHeader className="border-b border-border-subtle pb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-lg bg-surface-canvas border border-border-subtle text-action-primary">
-                  {requestRecorded ? (
-                    <CheckmarkFilled className="w-6 h-6 text-status-success" />
-                  ) : (
-                    <Security className="w-6 h-6 text-action-primary" />
-                  )}
-                </div>
-                <div>
-                  <CardTitle className="text-base font-semibold text-text-primary">
-                    {requestRecorded ? 'Request Recorded' : 'Reset Your Password'}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-text-muted">
-                    {requestRecorded 
-                      ? 'Your recovery request has been submitted' 
-                      : 'Enter institutional email associated with your account'}
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
+      <main className="relative flex min-h-[calc(100vh-3.5rem)] flex-grow items-center justify-center overflow-hidden px-4 py-12">
+        {/* Soft brand-tinted backdrop (pure CSS) */}
+        <div className="pointer-events-none absolute inset-0" style={AUTH_BACKDROP} aria-hidden />
+
+        <div className="relative w-full max-w-[440px] space-y-3">
+          <div className="w-full rounded-lg bg-surface-default p-8 shadow-xl sm:p-11">
+            {/* Brand */}
+            <div className="flex items-center gap-2">
+              <img src={logo} alt="" className="h-6 w-6 object-contain" />
+              <span className="text-subheading text-text-primary">AttendAI</span>
+              <span className="mx-1 h-4 w-px bg-border-default" aria-hidden />
+              <span className="text-body text-text-secondary">Account Recovery</span>
+            </div>
+
+            <h1 className="mt-6 text-page-title text-text-primary">
+              {requestRecorded ? 'Request recorded' : 'Reset your password'}
+            </h1>
+            <p className="mt-1 text-body text-text-secondary">
+              {requestRecorded
+                ? 'Your recovery request has been submitted'
+                : 'Enter institutional email associated with your account'}
+            </p>
 
             {requestRecorded ? (
-              <CardContent className="pt-6 space-y-5">
-                <div className="p-4 rounded-lg bg-surface-canvas border border-border-subtle space-y-3">
+              <div className="mt-6 space-y-5">
+                <div
+                  role="status"
+                  className="flex items-start gap-2 rounded-md border border-status-success-border bg-status-success-subtle px-3 py-2 text-body text-text-primary"
+                >
+                  <CheckmarkCircle20Filled className="mt-px shrink-0 text-status-success" aria-hidden />
+                  <span>If the account exists, an admin can generate a reset link.</span>
+                </div>
+
+                <div className="rounded-md bg-surface-subtle p-4">
                   <div className="flex items-start gap-3">
-                    <Locked className="w-5 h-5 text-action-primary flex-shrink-0 mt-0.5" />
-                    <div className="space-y-2 text-xs">
-                      <h3 className="font-semibold text-text-primary">Next Steps</h3>
-                      <ul className="space-y-1.5 text-text-secondary list-disc pl-4">
+                    <LockClosed20Regular className="mt-px shrink-0 text-brand-foreground" aria-hidden />
+                    <div className="space-y-2">
+                      <h2 className="text-body-strong text-text-primary">Next Steps</h2>
+                      <ul className="list-disc space-y-1.5 pl-4 text-body text-text-secondary">
                         <li>An authorized administrator will review your account status.</li>
                         <li>Upon approval, a one-time secure password link will be activated.</li>
                         <li>Security links remain valid for 60 minutes after generation.</li>
@@ -105,89 +122,88 @@ const ForgotPasswordPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-2 pt-2">
-                  <Button 
-                    onClick={() => navigate('/login')} 
-                    className="w-full"
-                  >
-                    Return to Login
-                  </Button>
-                  <Button 
-                    onClick={() => setRequestRecorded(false)} 
-                    className="w-full"
+                <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+                  <Button
+                    onClick={() => setRequestRecorded(false)}
                     variant="outline"
                   >
                     Submit Another Request
                   </Button>
+                  <Button
+                    onClick={() => navigate('/login')}
+                    className="font-semibold"
+                  >
+                    Return to Login
+                  </Button>
                 </div>
-              </CardContent>
+              </div>
             ) : (
-              <form onSubmit={handleSubmit(onSubmit)}>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email" className="text-xs font-medium text-text-secondary">
-                      Registered Email Address
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="user@institution.edu"
-                        {...register('email', {
-                          required: 'Email is required',
-                          pattern: {
-                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                            message: 'Invalid email address',
-                          },
-                        })}
-                      />
-                    </div>
-                    {errors.email && (
-                      <p className="text-xs text-status-error">{errors.email.message}</p>
-                    )}
-                  </div>
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className="text-body-strong font-semibold text-text-primary">
+                    Registered Email Address
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    placeholder="user@institution.edu"
+                    aria-invalid={!!errors.email}
+                    {...register('email', {
+                      required: 'Email is required',
+                      pattern: {
+                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                        message: 'Invalid email address',
+                      },
+                    })}
+                  />
+                  {errors.email && (
+                    <p className="text-caption text-status-error">{errors.email.message}</p>
+                  )}
+                </div>
 
-                  <div className="p-3 rounded-md bg-surface-canvas border border-border-subtle flex items-start gap-2.5">
-                    <Security className="w-4 h-4 text-action-primary flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-text-secondary leading-relaxed">
-                      For institutional privacy, password reset links are verified before authorization.
-                    </p>
-                  </div>
-                </CardContent>
+                <div className="flex items-start gap-2 rounded-md border border-status-info-border bg-status-info-subtle px-3 py-2 text-body text-text-primary">
+                  <Info20Regular className="mt-px shrink-0 text-status-info" aria-hidden />
+                  <p>For institutional privacy, password reset links are verified before authorization.</p>
+                </div>
 
-                <CardFooter className="border-t border-border-subtle pt-4 flex flex-col space-y-2">
-                  <Button 
-                    type="submit" 
-                    className="w-full"
+                <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Button asChild type="button" variant="ghost" className="text-text-secondary hover:text-text-primary">
+                    <Link to="/login">
+                      <ArrowLeft16Regular aria-hidden />
+                      Back to Login
+                    </Link>
+                  </Button>
+
+                  <Button
+                    type="submit"
+                    className="min-w-[120px] font-semibold"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
-                      <span className="flex items-center gap-2">
-                        <Renew className="w-4 h-4 animate-spin" />
+                      <>
+                        <ButtonSpinner />
                         Submitting Request...
-                      </span>
+                      </>
                     ) : (
                       'Submit Request'
                     )}
                   </Button>
-
-                  <Link to="/login" className="w-full">
-                    <Button type="button" variant="ghost" className="w-full text-text-secondary hover:text-text-primary">
-                      <ArrowLeft className="mr-1.5 w-4 h-4" />
-                      Back to Login
-                    </Button>
-                  </Link>
-                </CardFooter>
+                </div>
               </form>
             )}
-          </Card>
+          </div>
 
-          <p className="text-center text-xs text-text-muted mt-6">
-            Need direct assistance? Contact institutional IT support.
-          </p>
+          {/* Secondary help card */}
+          <div className="flex w-full items-center gap-3 rounded-lg bg-surface-default px-8 py-3 shadow sm:px-11">
+            <PersonSupport20Regular className="shrink-0 text-text-secondary" aria-hidden />
+            <p className="text-body text-text-secondary">
+              Need direct assistance? Contact institutional IT support.
+            </p>
+          </div>
         </div>
       </main>
-      
+
       <Footer />
     </div>
   );

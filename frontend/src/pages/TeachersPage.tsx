@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,22 +37,78 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
-  Search,
-  Close,
-  UserMultiple,
-  Add,
-  Edit,
-  TrashCan,
-  Education,
-  Settings,
-  Calendar,
-  Copy,
-} from '@carbon/icons-react';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Search20Regular,
+  Dismiss16Regular,
+  People20Regular,
+  PersonAdd20Regular,
+  Add20Regular,
+  Edit20Regular,
+  Delete20Regular,
+  HatGraduation20Regular,
+  PeopleSearch20Regular,
+  BookOpen20Regular,
+  CalendarLtr24Regular,
+  Copy20Regular,
+  MoreHorizontal20Regular,
+  ChevronDown16Regular,
+  ChevronRight16Regular,
+  CheckmarkCircle20Regular,
+  Filter20Regular,
+} from '@fluentui/react-icons';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { LoadingState } from '@/components/feedback/LoadingState';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@/lib/utils';
+
+/** Two-letter initials for Teams-style avatars. */
+const getInitials = (name?: string) => {
+  const parts = (name || '').replace(/^(dr|prof|mr|mrs|ms)\.?\s+/i, '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+const TeacherAvatar: React.FC<{ name?: string; size?: 'sm' | 'lg' }> = ({ name, size = 'sm' }) => (
+  <span
+    aria-hidden
+    className={cn(
+      'grid shrink-0 place-items-center rounded-full bg-brand-subtle font-semibold text-brand-foreground',
+      size === 'lg' ? 'h-10 w-10 text-body-strong' : 'h-8 w-8 text-caption-strong'
+    )}
+  >
+    {getInitials(name)}
+  </span>
+);
+
+/** Fluent dialog form section: subheading + optional helper text + fields. */
+const FormSection: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children,
+}) => (
+  <section className="space-y-3 border-t border-border-subtle pt-4 first:border-t-0 first:pt-0">
+    <div>
+      <h3 className="text-subheading text-text-primary">{title}</h3>
+      {description && <p className="text-caption text-text-muted">{description}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+const RequiredMark = () => <span className="text-status-error" aria-hidden> *</span>;
+
+const fieldLabelClass = 'text-body-strong text-text-primary';
+const filterLabelClass = 'text-caption-strong text-text-secondary';
+const tableHeadClass = 'h-9 text-caption-strong text-text-secondary';
 
 interface Teacher {
   id: number;
@@ -696,117 +751,181 @@ const TeachersPage: React.FC = () => {
     }
   };
 
+  const isFiltered = Boolean(searchQuery || selectedFaculty !== 'all');
+
+  const statTiles = [
+    { label: 'Total Teachers', value: teachers.length, Icon: People20Regular },
+    { label: 'Faculties', value: faculties.length, Icon: HatGraduation20Regular },
+    { label: 'Active Filter Results', value: filteredTeachers.length, Icon: PeopleSearch20Regular },
+  ];
+
+  // Shared subject-assignment picker used by the Add and Edit dialogs
+  const renderSubjectAssignment = (title: string, description: string, emptyText: string) => (
+    <FormSection title={title} description={description}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label className={filterLabelClass}>Filter by Faculty</Label>
+          <Select value={formFilterFacultyId} onValueChange={(v) => { setFormFilterFacultyId(v); setFormFilterSemester('all'); }}>
+            <SelectTrigger className="h-8">
+              <SelectValue placeholder="Select faculty" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Select faculty</SelectItem>
+              {faculties.map((f) => (
+                <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label className={filterLabelClass}>Filter by Semester</Label>
+          <Select value={formFilterSemester} onValueChange={setFormFilterSemester} disabled={formFilterFacultyId === 'all'}>
+            <SelectTrigger className="h-8">
+              <SelectValue placeholder="All semesters" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Semesters</SelectItem>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                <SelectItem key={s} value={s.toString()}>Semester {s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      {formFilterFacultyId !== 'all' && (
+        <div className="max-h-[200px] divide-y divide-border-subtle overflow-y-auto rounded-md border border-border-subtle bg-surface-default">
+          {formSubjects.length === 0 ? (
+            <p className="py-6 text-center text-caption text-text-muted">{emptyText}</p>
+          ) : (
+            formSubjects.map((subject) => {
+              const checked = selectedSubjectIds.includes(subject.id);
+              return (
+                <label
+                  key={subject.id}
+                  className={cn(
+                    'flex cursor-pointer items-start gap-3 px-3 py-2 transition-colors duration-150 ease-fluent-standard',
+                    checked ? 'bg-brand-subtle' : 'hover:bg-surface-hover'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSubjectIds([...selectedSubjectIds, subject.id]);
+                      } else {
+                        setSelectedSubjectIds(selectedSubjectIds.filter((id) => id !== subject.id));
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-brand"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-body text-text-primary">
+                      {subject.name}{' '}
+                      <span className="font-mono text-caption text-text-muted">({subject.code})</span>
+                    </div>
+                    <div className="text-caption text-text-muted">
+                      {subject.credits} credits • {subject.description || 'General course'}
+                    </div>
+                  </div>
+                </label>
+              );
+            })
+          )}
+        </div>
+      )}
+      {selectedSubjectIds.length > 0 && (
+        <p className="flex items-center gap-1.5 text-caption-strong text-brand-foreground">
+          <CheckmarkCircle20Regular className="h-4 w-4" aria-hidden />
+          {selectedSubjectIds.length} subject(s) selected
+        </p>
+      )}
+    </FormSection>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-            Teachers Management
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            Manage faculty teacher accounts, course assignments, and classroom schedule links
-          </p>
-        </div>
-        <Button onClick={handleAddTeacher} className="flex items-center gap-2">
-          <Add size={16} />
-          <span>Add Teacher</span>
-        </Button>
+      <div className="flex flex-col gap-1">
+        <h1 className="text-page-title text-text-primary">
+          Teachers Management
+        </h1>
+        <p className="text-body text-text-muted">
+          Manage faculty teacher accounts, course assignments, and classroom schedule links
+        </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border border-border-default bg-surface-default shadow-none">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Total Teachers</p>
-                <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{teachers.length}</p>
-              </div>
-              <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                <UserMultiple size={20} />
-              </div>
+      {/* Stats */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {statTiles.map(({ label, value, Icon }) => (
+          <div key={label} className="flex items-center gap-4 rounded-lg bg-surface-default p-4 shadow">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <Icon aria-hidden />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border-default bg-surface-default shadow-none">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Faculties</p>
-                <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{faculties.length}</p>
-              </div>
-              <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-status-success">
-                <Education size={20} />
-              </div>
+            <div className="min-w-0">
+              <p className="text-caption text-text-muted">{label}</p>
+              <p className="text-[28px] font-semibold leading-9 text-text-primary tabular-nums">{value}</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border border-border-default bg-surface-default shadow-none">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Active Filter Results</p>
-                <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{filteredTeachers.length}</p>
-              </div>
-              <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-status-warning">
-                <Search size={20} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Filter Toolbar */}
-      <div className="bg-surface-default border border-border-default rounded-md p-3">
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
-            <Input
-              placeholder="Search by name, teacher ID, email, or department..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-8 h-9 text-sm"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-0.5 rounded"
-                aria-label="Clear search"
-              >
-                <Close size={14} />
-              </button>
-            )}
           </div>
-          <div className="w-full sm:w-64">
-            <Select value={selectedFaculty} onValueChange={setSelectedFaculty}>
-              <SelectTrigger className="h-9 text-sm">
-                <SelectValue placeholder="All Faculties" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Faculties</SelectItem>
-                {faculties.map((faculty) => (
-                  <SelectItem key={faculty.id} value={faculty.id.toString()}>
-                    {faculty.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Teachers Table View */}
-      <div className="bg-surface-default border border-border-default rounded-md overflow-hidden">
-        <div className="px-4 py-3 border-b border-border-default flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-text-primary">Faculty Roster</h2>
-            <p className="text-xs text-text-muted">
-              Showing {filteredTeachers.length} of {teachers.length} teacher{teachers.length === 1 ? '' : 's'}
-            </p>
+      {/* Directory */}
+      <section aria-label="Faculty Roster" className="overflow-hidden rounded-lg bg-surface-default shadow">
+        {/* Command bar */}
+        <div className="flex flex-col gap-3 border-b border-border-subtle px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <Button onClick={handleAddTeacher}>
+              <PersonAdd20Regular aria-hidden />
+              <span>Add Teacher</span>
+            </Button>
+            <div className="hidden h-6 w-px bg-border-subtle sm:block" aria-hidden />
+            <div className="min-w-0">
+              <h2 className="text-body-strong text-text-primary">Faculty Roster</h2>
+              <p className="text-caption text-text-muted tabular-nums">
+                Showing {filteredTeachers.length} of {teachers.length} teacher{teachers.length === 1 ? '' : 's'}
+              </p>
+            </div>
+          </div>
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+            <div className="relative w-full sm:w-72">
+              <Search20Regular className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden />
+              <Input
+                placeholder="Search by name, teacher ID, email, or department..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-8 pl-8 pr-8"
+                aria-label="Search teachers"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                  aria-label="Clear search"
+                >
+                  <Dismiss16Regular aria-hidden />
+                </button>
+              )}
+            </div>
+            <div className="w-full sm:w-56">
+              <Select value={selectedFaculty} onValueChange={setSelectedFaculty}>
+                <SelectTrigger className="h-8" aria-label="Filter by faculty">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Filter20Regular className="h-4 w-4 shrink-0 text-text-muted" aria-hidden />
+                    <SelectValue placeholder="All Faculties" />
+                  </span>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Faculties</SelectItem>
+                  {faculties.map((faculty) => (
+                    <SelectItem key={faculty.id} value={faculty.id.toString()}>
+                      {faculty.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -817,92 +936,115 @@ const TeachersPage: React.FC = () => {
         ) : filteredTeachers.length === 0 ? (
           <div className="p-6">
             <EmptyState
-              title={searchQuery || selectedFaculty !== 'all' ? 'No teachers found' : 'No teachers registered yet'}
+              title={isFiltered ? 'No teachers found' : 'No teachers registered yet'}
               description={
-                searchQuery || selectedFaculty !== 'all'
+                isFiltered
                   ? 'Try clearing or changing your filters to see more results.'
                   : 'Get started by creating your first teacher profile.'
               }
-              isFiltered={Boolean(searchQuery || selectedFaculty !== 'all')}
-              actionLabel={searchQuery || selectedFaculty !== 'all' ? 'Reset Filters' : 'Add Teacher'}
+              isFiltered={isFiltered}
+              actionLabel={isFiltered ? 'Reset Filters' : 'Add Teacher'}
               onAction={
-                searchQuery || selectedFaculty !== 'all'
+                isFiltered
                   ? () => {
                       setSearchQuery('');
                       setSelectedFaculty('all');
                     }
                   : handleAddTeacher
               }
+              className="border-0"
             />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-border-default bg-surface-subtle">
-                  <TableHead className="w-[140px] text-xs font-semibold text-text-muted uppercase">Teacher ID</TableHead>
-                  <TableHead className="text-xs font-semibold text-text-muted uppercase">Full Name</TableHead>
-                  <TableHead className="text-xs font-semibold text-text-muted uppercase">Email Address</TableHead>
-                  <TableHead className="text-xs font-semibold text-text-muted uppercase">Faculty</TableHead>
-                  <TableHead className="text-xs font-semibold text-text-muted uppercase">Department</TableHead>
-                  <TableHead className="text-xs font-semibold text-text-muted uppercase">Phone</TableHead>
-                  <TableHead className="w-[140px] text-right text-xs font-semibold text-text-muted uppercase">Actions</TableHead>
+                <TableRow className="border-border-subtle bg-surface-subtle hover:bg-surface-subtle">
+                  <TableHead className={cn(tableHeadClass, 'min-w-[220px] pl-4')}>Full Name</TableHead>
+                  <TableHead className={cn(tableHeadClass, 'w-[140px]')}>Teacher ID</TableHead>
+                  <TableHead className={tableHeadClass}>Email Address</TableHead>
+                  <TableHead className={tableHeadClass}>Faculty</TableHead>
+                  <TableHead className={tableHeadClass}>Department</TableHead>
+                  <TableHead className={tableHeadClass}>Phone</TableHead>
+                  <TableHead className={cn(tableHeadClass, 'w-[96px] pr-4 text-right')}>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredTeachers.map((teacher: Teacher) => (
-                  <TableRow key={teacher.id} className="h-11 border-b border-border-subtle hover:bg-surface-subtle/50">
-                    <TableCell className="font-mono text-xs font-medium text-text-secondary">
-                      <span className="px-1.5 py-0.5 rounded bg-surface-subtle border border-border-subtle">
+                  <TableRow
+                    key={teacher.id}
+                    className="group border-b border-border-subtle transition-colors duration-150 hover:bg-surface-hover"
+                  >
+                    <TableCell className="py-2 pl-4">
+                      <div className="flex items-center gap-3">
+                        <TeacherAvatar name={teacher.name} />
+                        <span className="truncate text-body-strong text-text-primary">{teacher.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <span className="rounded bg-surface-subtle px-1.5 py-0.5 font-mono text-caption text-text-secondary">
                         {teacher.teacher_id}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium text-text-primary text-sm">
-                      {teacher.name}
-                    </TableCell>
-                    <TableCell className="text-sm text-text-secondary">
+                    <TableCell className="py-2 text-body text-text-secondary">
                       {teacher.user.email}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs font-normal">
+                    <TableCell className="py-2">
+                      <Badge variant="secondary" className="font-normal">
                         {getFacultyName(teacher.faculty_id)}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-text-muted">
+                    <TableCell className="py-2 text-body text-text-muted">
                       {teacher.department || '—'}
                     </TableCell>
-                    <TableCell className="text-sm text-text-muted font-mono">
+                    <TableCell className="py-2 text-body text-text-muted tabular-nums">
                       {teacher.phone_number || '—'}
                     </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
+                    <TableCell className="py-2 pr-4 text-right">
+                      <div className="flex items-center justify-end gap-0.5">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleManageAssignments(teacher)}
-                          className="h-8 w-8 p-0 text-text-muted hover:text-action-primary"
+                          className="h-8 w-8 p-0 text-text-secondary hover:text-brand-foreground"
                           title="Manage Subject Assignments"
+                          aria-label={`Manage subject assignments for ${teacher.name}`}
                         >
-                          <Settings size={16} />
+                          <BookOpen20Regular aria-hidden />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleEditTeacher(teacher)}
-                          className="h-8 w-8 p-0 text-text-muted hover:text-text-primary"
-                          title="Edit Personal Information"
-                        >
-                          <Edit size={16} />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteTeacher(teacher)}
-                          className="h-8 w-8 p-0 text-text-muted hover:text-status-danger"
-                          title="Delete Teacher"
-                        >
-                          <TrashCan size={16} />
-                        </Button>
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-text-secondary"
+                              title="More actions"
+                              aria-label={`More actions for ${teacher.name}`}
+                            >
+                              <MoreHorizontal20Regular aria-hidden />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-60">
+                            <DropdownMenuItem onSelect={() => handleManageAssignments(teacher)} className="gap-2">
+                              <BookOpen20Regular className="h-4 w-4 text-text-muted" aria-hidden />
+                              Manage Subject Assignments
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleEditTeacher(teacher)} className="gap-2">
+                              <Edit20Regular className="h-4 w-4 text-text-muted" aria-hidden />
+                              Edit Personal Information
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => handleDeleteTeacher(teacher)}
+                              className="gap-2 text-status-error focus:bg-status-error-subtle focus:text-status-error"
+                            >
+                              <Delete20Regular className="h-4 w-4" aria-hidden />
+                              Delete Teacher
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -911,7 +1053,7 @@ const TeachersPage: React.FC = () => {
             </Table>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Add Teacher Dialog */}
       <Dialog
@@ -925,169 +1067,114 @@ const TeachersPage: React.FC = () => {
         }}
       >
         <DialogContent
-          className="max-w-2xl"
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
           onEscapeKeyDown={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Add New Teacher</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-section-title text-text-primary">Add New Teacher</DialogTitle>
+            <DialogDescription className="text-body text-text-muted">
               Create an authenticated teacher profile with credentials and optional subject assignments.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="full_name">Full Name *</Label>
-              <Input
-                id="full_name"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                placeholder="e.g. Dr. Sarah Jenkins"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Teacher ID</Label>
-              <div className="h-9 px-3 flex items-center rounded-md border border-dashed border-border-default bg-surface-subtle text-xs text-text-muted">
-                Generated automatically by server
+          <div className="space-y-5 py-1">
+            <FormSection title="Account" description="Sign-in credentials for the teacher portal.">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="full_name" className={fieldLabelClass}>Full Name<RequiredMark /></Label>
+                  <Input
+                    id="full_name"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    placeholder="e.g. Dr. Sarah Jenkins"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={fieldLabelClass}>Teacher ID</Label>
+                  <div className="flex h-9 items-center rounded-md border border-dashed border-border-default bg-surface-subtle px-3 text-caption text-text-muted">
+                    Generated automatically by server
+                  </div>
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="email" className={fieldLabelClass}>Email Address<RequiredMark /></Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="sarah.jenkins@university.edu"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password" className={fieldLabelClass}>Initial Password<RequiredMark /></Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="confirmPassword" className={fieldLabelClass}>Confirm Password<RequiredMark /></Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="email">Email Address *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="sarah.jenkins@university.edu"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">Initial Password *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="confirmPassword">Confirm Password *</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={formData.confirmPassword}
-                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Faculty Department</Label>
-              <Select
-                value={formData.faculty_id ? formData.faculty_id.toString() : ''}
-                onValueChange={(v) => setFormData({ ...formData, faculty_id: v ? parseInt(v, 10) : undefined })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select faculty" />
-                </SelectTrigger>
-                <SelectContent>
-                  {faculties.map((f) => (
-                    <SelectItem key={f.id} value={f.id.toString()}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="phone_number">Phone Number (Optional)</Label>
-              <Input
-                id="phone_number"
-                value={formData.phone_number}
-                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                placeholder="+1-555-0100"
-              />
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="office_location">Office Location (Optional)</Label>
-              <Input
-                id="office_location"
-                value={formData.office_location}
-                onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
-                placeholder="Building B, Room 304"
-              />
-            </div>
+            </FormSection>
 
-            {/* Subject Assignment Section */}
-            <div className="col-span-2 pt-3 border-t border-border-default space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">Assign Subjects (Optional)</h3>
-                <p className="text-xs text-text-muted">Link teaching responsibilities immediately on account creation.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Filter by Faculty</Label>
-                  <Select value={formFilterFacultyId} onValueChange={(v) => { setFormFilterFacultyId(v); setFormFilterSemester('all'); }}>
-                    <SelectTrigger className="mt-1 h-8 text-xs">
+            <FormSection title="Profile" description="Department and contact details shown in the directory.">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className={fieldLabelClass}>Faculty Department</Label>
+                  <Select
+                    value={formData.faculty_id ? formData.faculty_id.toString() : ''}
+                    onValueChange={(v) => setFormData({ ...formData, faculty_id: v ? parseInt(v, 10) : undefined })}
+                  >
+                    <SelectTrigger>
                       <SelectValue placeholder="Select faculty" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Select faculty</SelectItem>
                       {faculties.map((f) => (
-                        <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                        <SelectItem key={f.id} value={f.id.toString()}>
+                          {f.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className="text-xs">Filter by Semester</Label>
-                  <Select value={formFilterSemester} onValueChange={setFormFilterSemester} disabled={formFilterFacultyId === 'all'}>
-                    <SelectTrigger className="mt-1 h-8 text-xs disabled:opacity-50">
-                      <SelectValue placeholder="All semesters" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Semesters</SelectItem>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                        <SelectItem key={s} value={s.toString()}>Semester {s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5">
+                  <Label htmlFor="phone_number" className={fieldLabelClass}>Phone Number (Optional)</Label>
+                  <Input
+                    id="phone_number"
+                    value={formData.phone_number}
+                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                    placeholder="+1-555-0100"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="office_location" className={fieldLabelClass}>Office Location (Optional)</Label>
+                  <Input
+                    id="office_location"
+                    value={formData.office_location}
+                    onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
+                    placeholder="Building B, Room 304"
+                  />
                 </div>
               </div>
-              {formFilterFacultyId !== 'all' && (
-                <div className="max-h-[160px] overflow-y-auto rounded-md border border-border-default bg-surface-subtle/30 p-2 space-y-1">
-                  {formSubjects.length === 0 ? (
-                    <p className="text-text-muted text-xs text-center py-4">No subjects found for selection</p>
-                  ) : (
-                    formSubjects.map((subject) => (
-                      <label key={subject.id} className="flex items-start gap-2.5 p-2 hover:bg-surface-subtle rounded cursor-pointer border border-transparent hover:border-border-subtle">
-                        <input
-                          type="checkbox"
-                          checked={selectedSubjectIds.includes(subject.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedSubjectIds([...selectedSubjectIds, subject.id]);
-                            } else {
-                              setSelectedSubjectIds(selectedSubjectIds.filter((id) => id !== subject.id));
-                            }
-                          }}
-                          className="mt-0.5 rounded border-border-default text-action-primary focus:ring-action-primary"
-                        />
-                        <div className="flex-1 text-xs">
-                          <div className="text-text-primary font-medium">{subject.name} <span className="text-text-muted font-mono">({subject.code})</span></div>
-                          <div className="text-text-muted mt-0.5">
-                            {subject.credits} credits • {subject.description || 'General course'}
-                          </div>
-                        </div>
-                      </label>
-                    ))
-                  )}
-                </div>
-              )}
-              {selectedSubjectIds.length > 0 && (
-                <p className="text-xs text-action-primary font-medium">{selectedSubjectIds.length} subject(s) selected</p>
-              )}
-            </div>
+            </FormSection>
+
+            {/* Subject Assignment Section */}
+            {renderSubjectAssignment(
+              'Assign Subjects (Optional)',
+              'Link teaching responsibilities immediately on account creation.',
+              'No subjects found for selection'
+            )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => setIsAddDialogOpen(false)}
@@ -1117,157 +1204,109 @@ const TeachersPage: React.FC = () => {
         }}
       >
         <DialogContent
-          className="max-w-2xl"
+          className="max-w-2xl max-h-[90vh] overflow-y-auto"
           onEscapeKeyDown={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
           <DialogHeader>
-            <DialogTitle>Edit Teacher Profile</DialogTitle>
-            <DialogDescription>
-              Update personal details and sync course assignments for this teacher.
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <TeacherAvatar name={formData.full_name} size="lg" />
+              <div className="min-w-0">
+                <DialogTitle className="text-section-title text-text-primary">Edit Teacher Profile</DialogTitle>
+                <DialogDescription className="text-body text-text-muted">
+                  Update personal details and sync course assignments for this teacher.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 py-2">
-            <div className="space-y-1.5 col-span-2">
-              <Label>Teacher ID (Read-only)</Label>
-              <div className="flex gap-2">
-                <Input value={formData.teacher_id} disabled readOnly className="font-mono bg-surface-subtle" />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    if (formData.teacher_id) {
-                      navigator.clipboard.writeText(formData.teacher_id);
-                      toast({ title: 'Copied', description: 'Teacher ID copied to clipboard' });
-                    }
-                  }}
-                  title="Copy Teacher ID"
-                >
-                  <Copy size={16} />
-                </Button>
+          <div className="space-y-5 py-1">
+            <FormSection title="Identity" description="These values are managed by the system.">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="space-y-1.5">
+                  <Label className={fieldLabelClass}>Teacher ID (Read-only)</Label>
+                  <div className="flex gap-2">
+                    <Input value={formData.teacher_id} disabled readOnly className="bg-surface-subtle font-mono" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        if (formData.teacher_id) {
+                          navigator.clipboard.writeText(formData.teacher_id);
+                          toast({ title: 'Copied', description: 'Teacher ID copied to clipboard' });
+                        }
+                      }}
+                      title="Copy Teacher ID"
+                      aria-label="Copy Teacher ID"
+                    >
+                      <Copy20Regular aria-hidden />
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={fieldLabelClass}>Email Address (Read-only)</Label>
+                  <Input value={formData.email} disabled className="bg-surface-subtle" />
+                </div>
               </div>
-            </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Email Address (Read-only)</Label>
-              <Input value={formData.email} disabled className="bg-surface-subtle" />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit_name">Full Name *</Label>
-              <Input
-                id="edit_name"
-                value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Faculty Department</Label>
-              <Select
-                value={formData.faculty_id ? formData.faculty_id.toString() : ''}
-                onValueChange={(v) => setFormData({ ...formData, faculty_id: v ? parseInt(v, 10) : undefined })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select faculty" />
-                </SelectTrigger>
-                <SelectContent>
-                  {faculties.map((f) => (
-                    <SelectItem key={f.id} value={f.id.toString()}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit_phone_number">Phone Number (Optional)</Label>
-              <Input
-                id="edit_phone_number"
-                value={formData.phone_number}
-                onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                placeholder="+1-555-0100"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="edit_office_location">Office Location (Optional)</Label>
-              <Input
-                id="edit_office_location"
-                value={formData.office_location}
-                onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
-                placeholder="Building B, Room 304"
-              />
-            </div>
+            </FormSection>
 
-            {/* Subject Assignment Section in Edit */}
-            <div className="col-span-2 pt-3 border-t border-border-default space-y-3">
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">Manage Subject Assignments</h3>
-                <p className="text-xs text-text-muted">Check or uncheck subjects to sync scheduled teaching sessions.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Filter by Faculty</Label>
-                  <Select value={formFilterFacultyId} onValueChange={(v) => { setFormFilterFacultyId(v); setFormFilterSemester('all'); }}>
-                    <SelectTrigger className="mt-1 h-8 text-xs">
+            <FormSection title="Profile">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit_name" className={fieldLabelClass}>Full Name<RequiredMark /></Label>
+                  <Input
+                    id="edit_name"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className={fieldLabelClass}>Faculty Department</Label>
+                  <Select
+                    value={formData.faculty_id ? formData.faculty_id.toString() : ''}
+                    onValueChange={(v) => setFormData({ ...formData, faculty_id: v ? parseInt(v, 10) : undefined })}
+                  >
+                    <SelectTrigger>
                       <SelectValue placeholder="Select faculty" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Select faculty</SelectItem>
                       {faculties.map((f) => (
-                        <SelectItem key={f.id} value={f.id.toString()}>{f.name}</SelectItem>
+                        <SelectItem key={f.id} value={f.id.toString()}>
+                          {f.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
-                  <Label className="text-xs">Filter by Semester</Label>
-                  <Select value={formFilterSemester} onValueChange={setFormFilterSemester} disabled={formFilterFacultyId === 'all'}>
-                    <SelectTrigger className="mt-1 h-8 text-xs disabled:opacity-50">
-                      <SelectValue placeholder="All semesters" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Semesters</SelectItem>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                        <SelectItem key={s} value={s.toString()}>Semester {s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit_phone_number" className={fieldLabelClass}>Phone Number (Optional)</Label>
+                  <Input
+                    id="edit_phone_number"
+                    value={formData.phone_number}
+                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                    placeholder="+1-555-0100"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit_office_location" className={fieldLabelClass}>Office Location (Optional)</Label>
+                  <Input
+                    id="edit_office_location"
+                    value={formData.office_location}
+                    onChange={(e) => setFormData({ ...formData, office_location: e.target.value })}
+                    placeholder="Building B, Room 304"
+                  />
                 </div>
               </div>
-              {formFilterFacultyId !== 'all' && (
-                <div className="max-h-[160px] overflow-y-auto rounded-md border border-border-default bg-surface-subtle/30 p-2 space-y-1">
-                  {formSubjects.length === 0 ? (
-                    <p className="text-text-muted text-xs text-center py-4">No subjects found</p>
-                  ) : (
-                    formSubjects.map((subject) => (
-                      <label key={subject.id} className="flex items-start gap-2.5 p-2 hover:bg-surface-subtle rounded cursor-pointer border border-transparent hover:border-border-subtle">
-                        <input
-                          type="checkbox"
-                          checked={selectedSubjectIds.includes(subject.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedSubjectIds([...selectedSubjectIds, subject.id]);
-                            } else {
-                              setSelectedSubjectIds(selectedSubjectIds.filter((id) => id !== subject.id));
-                            }
-                          }}
-                          className="mt-0.5 rounded border-border-default text-action-primary focus:ring-action-primary"
-                        />
-                        <div className="flex-1 text-xs">
-                          <div className="text-text-primary font-medium">{subject.name} <span className="text-text-muted font-mono">({subject.code})</span></div>
-                          <div className="text-text-muted mt-0.5">
-                            {subject.credits} credits • {subject.description || 'General course'}
-                          </div>
-                        </div>
-                      </label>
-                    ))
-                  )}
-                </div>
-              )}
-              {selectedSubjectIds.length > 0 && (
-                <p className="text-xs text-action-primary font-medium">{selectedSubjectIds.length} subject(s) selected</p>
-              )}
-            </div>
+            </FormSection>
+
+            {/* Subject Assignment Section in Edit */}
+            {renderSubjectAssignment(
+              'Manage Subject Assignments',
+              'Check or uncheck subjects to sync scheduled teaching sessions.',
+              'No subjects found'
+            )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button
               variant="outline"
               onClick={() => setIsEditDialogOpen(false)}
@@ -1289,146 +1328,164 @@ const TeachersPage: React.FC = () => {
       <Dialog open={isManageDialogOpen} onOpenChange={setIsManageDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Subject Assignments: {selectedTeacher?.name}</DialogTitle>
-            <DialogDescription>
-              Review active classroom assignments, view session schedules, or add new course sessions.
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <TeacherAvatar name={selectedTeacher?.name} size="lg" />
+              <div className="min-w-0">
+                <DialogTitle className="text-section-title text-text-primary">
+                  Subject Assignments: {selectedTeacher?.name}
+                </DialogTitle>
+                <DialogDescription className="text-body text-text-muted">
+                  Review active classroom assignments, view session schedules, or add new course sessions.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="flex items-center justify-between">
+          <div className="space-y-3 py-1">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-text-primary">
-                  Assigned Courses ({groupedAssignments.length})
+                <h3 className="flex items-center gap-2 text-subheading text-text-primary">
+                  Assigned Courses
+                  <Badge variant="secondary" shape="pill" className="border-transparent bg-brand-subtle text-brand-foreground">
+                    {groupedAssignments.length}
+                  </Badge>
                 </h3>
-                <p className="text-xs text-text-muted">Courses currently linked to this teacher.</p>
+                <p className="text-caption text-text-muted">Courses currently linked to this teacher.</p>
               </div>
-              <Button onClick={handleAddAssignment} size="sm" className="flex items-center gap-1.5">
-                <Add size={14} />
+              <Button onClick={handleAddAssignment} size="sm">
+                <Add20Regular aria-hidden />
                 <span>Add Assignment</span>
               </Button>
             </div>
 
             {groupedAssignments.length === 0 ? (
-              <div className="p-8 text-center rounded-lg border border-dashed border-border-default bg-surface-subtle/30">
-                <Calendar size={28} className="mx-auto text-text-muted mb-2 opacity-60" />
-                <h4 className="text-sm font-semibold text-text-primary">No subject assignments yet</h4>
-                <p className="text-xs text-text-muted mt-1 max-w-sm mx-auto">
+              <div className="flex flex-col items-center rounded-lg border border-dashed border-border-default bg-surface-subtle px-6 py-10 text-center">
+                <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-default text-text-muted">
+                  <CalendarLtr24Regular aria-hidden />
+                </div>
+                <h4 className="text-subheading text-text-primary">No subject assignments yet</h4>
+                <p className="mx-auto mt-1 max-w-sm text-body text-text-muted">
                   Click "Add Assignment" to assign unassigned course sessions to this instructor.
                 </p>
               </div>
             ) : (
-              <div className="border border-border-default rounded-md overflow-hidden">
+              <div className="overflow-hidden rounded-md border border-border-subtle">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-surface-subtle border-border-default">
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Subject</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Faculty</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Semester</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Sessions</TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-text-muted uppercase">Actions</TableHead>
+                    <TableRow className="border-border-subtle bg-surface-subtle hover:bg-surface-subtle">
+                      <TableHead className={tableHeadClass}>Subject</TableHead>
+                      <TableHead className={tableHeadClass}>Faculty</TableHead>
+                      <TableHead className={tableHeadClass}>Semester</TableHead>
+                      <TableHead className={tableHeadClass}>Sessions</TableHead>
+                      <TableHead className={cn(tableHeadClass, 'text-right')}>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {groupedAssignments.map((group) => (
-                      <React.Fragment key={group.subject_id}>
-                        <TableRow className="border-b border-border-subtle hover:bg-surface-subtle/40">
-                          <TableCell className="font-medium text-text-primary text-sm">
-                            <div>{group.subject_name}</div>
-                            <div className="text-xs text-text-muted font-mono">{group.subject_code}</div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">
-                              {group.faculty_name}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-xs text-text-secondary">
-                            Semester {group.semester}
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary" className="text-xs tabular-nums">
-                              {group.schedules.length} session{group.schedules.length === 1 ? '' : 's'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => toggleSubjectExpand(group.subject_id)}
-                                className="h-7 text-xs px-2"
-                              >
-                                {expandedSubjectIds.includes(group.subject_id) ? 'Hide details' : 'View sessions'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAssignAllForSubject(group.subject_id)}
-                                disabled={assignAllLoadingSubjectId === group.subject_id}
-                                className="h-7 text-xs px-2"
-                              >
-                                {assignAllLoadingSubjectId === group.subject_id ? 'Assigning...' : 'Assign All'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRemoveAllForSubject(group.subject_id)}
-                                disabled={removeAssignmentMutation.isPending}
-                                className="h-7 text-xs px-2 text-status-danger hover:bg-status-danger/10 hover:border-status-danger"
-                              >
-                                Remove All
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                        {expandedSubjectIds.includes(group.subject_id) && (
-                          <TableRow className="bg-surface-subtle/30">
-                            <TableCell colSpan={5} className="p-3">
-                              <div className="rounded border border-border-subtle bg-surface-default overflow-hidden">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow className="bg-surface-subtle/60 border-border-subtle">
-                                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Day / Slot</TableHead>
-                                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Room</TableHead>
-                                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Students</TableHead>
-                                      <TableHead className="text-right text-xs font-semibold text-text-muted uppercase">Remove</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {group.schedules.map((assignment: TeacherAssignment) => (
-                                      <TableRow key={assignment.id} className="border-b border-border-subtle h-9">
-                                        <TableCell className="text-xs font-medium text-text-primary">
-                                          <span>{assignment.day_of_week}</span>
-                                          <span className="text-text-muted ml-2 font-normal font-mono">{assignment.time_slot_display}</span>
-                                        </TableCell>
-                                        <TableCell className="text-xs text-text-secondary">
-                                          {assignment.classroom || '—'}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-text-secondary tabular-nums">
-                                          {assignment.student_count || 0} enrolled
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleRemoveAssignment(assignment.id)}
-                                            disabled={removeAssignmentMutation.isPending}
-                                            className="h-7 w-7 p-0 text-text-muted hover:text-status-danger"
-                                            title="Unassign session"
-                                          >
-                                            <Close size={14} />
-                                          </Button>
-                                        </TableCell>
-                                      </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
+                    {groupedAssignments.map((group) => {
+                      const expanded = expandedSubjectIds.includes(group.subject_id);
+                      return (
+                        <React.Fragment key={group.subject_id}>
+                          <TableRow className={cn('border-b border-border-subtle hover:bg-surface-hover', expanded && 'bg-surface-selected hover:bg-surface-selected')}>
+                            <TableCell className="py-2">
+                              <div className="text-body-strong text-text-primary">{group.subject_name}</div>
+                              <div className="font-mono text-caption text-text-muted">{group.subject_code}</div>
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <Badge variant="secondary" className="font-normal">
+                                {group.faculty_name}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-2 text-body text-text-secondary">
+                              Semester {group.semester}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <Badge variant="secondary" className="border-transparent bg-brand-subtle text-brand-foreground">
+                                {group.schedules.length} session{group.schedules.length === 1 ? '' : 's'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => toggleSubjectExpand(group.subject_id)}
+                                  aria-expanded={expanded}
+                                  className="h-7 px-2 text-caption"
+                                >
+                                  {expanded ? <ChevronDown16Regular aria-hidden /> : <ChevronRight16Regular aria-hidden />}
+                                  {expanded ? 'Hide details' : 'View sessions'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleAssignAllForSubject(group.subject_id)}
+                                  disabled={assignAllLoadingSubjectId === group.subject_id}
+                                  className="h-7 px-2 text-caption"
+                                >
+                                  {assignAllLoadingSubjectId === group.subject_id ? 'Assigning...' : 'Assign All'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleRemoveAllForSubject(group.subject_id)}
+                                  disabled={removeAssignmentMutation.isPending}
+                                  className="h-7 px-2 text-caption text-status-error hover:border-status-error-border hover:bg-status-error-subtle hover:text-status-error"
+                                >
+                                  Remove All
+                                </Button>
                               </div>
                             </TableCell>
                           </TableRow>
-                        )}
-                      </React.Fragment>
-                    ))}
+                          {expanded && (
+                            <TableRow className="bg-surface-subtle hover:bg-surface-subtle">
+                              <TableCell colSpan={5} className="py-3 pl-8 pr-3">
+                                <div className="overflow-hidden rounded-md border border-border-subtle bg-surface-default">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow className="border-border-subtle bg-surface-subtle hover:bg-surface-subtle">
+                                        <TableHead className={cn(tableHeadClass, 'h-8')}>Day / Slot</TableHead>
+                                        <TableHead className={cn(tableHeadClass, 'h-8')}>Room</TableHead>
+                                        <TableHead className={cn(tableHeadClass, 'h-8')}>Students</TableHead>
+                                        <TableHead className={cn(tableHeadClass, 'h-8 text-right')}>Remove</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {group.schedules.map((assignment: TeacherAssignment) => (
+                                        <TableRow key={assignment.id} className="border-b border-border-subtle hover:bg-surface-hover">
+                                          <TableCell className="py-1.5 text-body text-text-primary">
+                                            <span className="capitalize">{assignment.day_of_week}</span>
+                                            <span className="ml-2 text-caption text-text-muted tabular-nums">{assignment.time_slot_display}</span>
+                                          </TableCell>
+                                          <TableCell className="py-1.5 text-body text-text-secondary">
+                                            {assignment.classroom || '—'}
+                                          </TableCell>
+                                          <TableCell className="py-1.5 text-body text-text-secondary tabular-nums">
+                                            {assignment.student_count || 0} enrolled
+                                          </TableCell>
+                                          <TableCell className="py-1.5 text-right">
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => handleRemoveAssignment(assignment.id)}
+                                              disabled={removeAssignmentMutation.isPending}
+                                              className="h-7 w-7 p-0 text-text-muted hover:bg-status-error-subtle hover:text-status-error"
+                                              title="Unassign session"
+                                              aria-label="Unassign session"
+                                            >
+                                              <Dismiss16Regular aria-hidden />
+                                            </Button>
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -1453,18 +1510,18 @@ const TeachersPage: React.FC = () => {
       <Dialog open={isAddAssignmentDialogOpen} onOpenChange={setIsAddAssignmentDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Assign Course to {selectedTeacher?.name}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-section-title text-text-primary">Assign Course to {selectedTeacher?.name}</DialogTitle>
+            <DialogDescription className="text-body text-text-muted">
               Browse available course schedules without an assigned teacher.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <Label className="text-xs">Faculty</Label>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label className={filterLabelClass}>Faculty</Label>
                 <Select value={filterFacultyId} onValueChange={(v) => { setFilterFacultyId(v); setFilterSemester('all'); setFilterSubjectId('all'); }}>
-                  <SelectTrigger className="mt-1 h-8 text-xs">
+                  <SelectTrigger className="h-8">
                     <SelectValue placeholder="Select faculty" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1475,10 +1532,10 @@ const TeachersPage: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-xs">Semester</Label>
+              <div className="space-y-1.5">
+                <Label className={filterLabelClass}>Semester</Label>
                 <Select value={filterSemester} onValueChange={(v) => { setFilterSemester(v); setFilterSubjectId('all'); }} disabled={filterFacultyId === 'all'}>
-                  <SelectTrigger className="mt-1 h-8 text-xs disabled:opacity-50">
+                  <SelectTrigger className="h-8">
                     <SelectValue placeholder="Select semester" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1489,10 +1546,10 @@ const TeachersPage: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-xs">Subject</Label>
+              <div className="space-y-1.5">
+                <Label className={filterLabelClass}>Subject</Label>
                 <Select value={filterSubjectId} onValueChange={setFilterSubjectId} disabled={filterFacultyId === 'all'}>
-                  <SelectTrigger className="mt-1 h-8 text-xs disabled:opacity-50">
+                  <SelectTrigger className="h-8">
                     <SelectValue placeholder="Filter by subject" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1506,63 +1563,67 @@ const TeachersPage: React.FC = () => {
             </div>
 
             <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none" />
+              <Search20Regular className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-muted" aria-hidden />
               <Input
                 placeholder="Search by course name, code, or faculty..."
                 value={assignmentSearchQuery}
                 onChange={(e) => setAssignmentSearchQuery(e.target.value)}
-                className="pl-8 h-8 text-xs"
+                className="h-8 pl-8 pr-8"
+                aria-label="Search unassigned courses"
               />
               {assignmentSearchQuery && (
                 <button
                   type="button"
                   onClick={() => setAssignmentSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
+                  className="absolute right-1.5 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded text-text-muted hover:bg-surface-hover hover:text-text-primary"
+                  aria-label="Clear search"
                 >
-                  <Close size={12} />
+                  <Dismiss16Regular aria-hidden />
                 </button>
               )}
             </div>
 
             {groupedUnassignedSubjects.length === 0 ? (
-              <div className="p-8 text-center rounded-lg border border-dashed border-border-default bg-surface-subtle/30">
-                <Calendar size={24} className="mx-auto text-text-muted mb-2 opacity-60" />
-                <h4 className="text-sm font-semibold text-text-primary">No unassigned courses available</h4>
-                <p className="text-xs text-text-muted mt-1">
+              <div className="flex flex-col items-center rounded-lg border border-dashed border-border-default bg-surface-subtle px-6 py-10 text-center">
+                <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-default text-text-muted">
+                  <CalendarLtr24Regular aria-hidden />
+                </div>
+                <h4 className="text-subheading text-text-primary">No unassigned courses available</h4>
+                <p className="mt-1 text-body text-text-muted">
                   All course schedules match existing assigned instructors.
                 </p>
               </div>
             ) : (
-              <div className="max-h-[340px] overflow-y-auto border border-border-default rounded-md">
+              <div className="max-h-[340px] overflow-y-auto rounded-md border border-border-subtle">
                 <Table>
-                  <TableHeader className="sticky top-0 bg-surface-subtle z-10">
-                    <TableRow className="border-border-default">
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Subject</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Faculty</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Semester</TableHead>
-                      <TableHead className="text-xs font-semibold text-text-muted uppercase">Sessions</TableHead>
-                      <TableHead className="text-right text-xs font-semibold text-text-muted uppercase">Action</TableHead>
+                  <TableHeader className="sticky top-0 z-10 bg-surface-subtle">
+                    <TableRow className="border-border-subtle hover:bg-surface-subtle">
+                      <TableHead className={tableHeadClass}>Subject</TableHead>
+                      <TableHead className={tableHeadClass}>Faculty</TableHead>
+                      <TableHead className={tableHeadClass}>Semester</TableHead>
+                      <TableHead className={tableHeadClass}>Sessions</TableHead>
+                      <TableHead className={cn(tableHeadClass, 'text-right')}>Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {groupedUnassignedSubjects.map((subject) => (
-                      <TableRow key={subject.subject_id} className="border-b border-border-subtle h-10 hover:bg-surface-subtle/40">
-                        <TableCell className="font-medium text-text-primary text-xs">
-                          <div>{subject.subject_name}</div>
-                          <div className="text-text-muted font-mono">{subject.subject_code}</div>
+                      <TableRow key={subject.subject_id} className="border-b border-border-subtle hover:bg-surface-hover">
+                        <TableCell className="py-2">
+                          <div className="text-body-strong text-text-primary">{subject.subject_name}</div>
+                          <div className="font-mono text-caption text-text-muted">{subject.subject_code}</div>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
+                        <TableCell className="py-2">
+                          <Badge variant="secondary" className="font-normal">
                             {subject.faculty_name}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-xs text-text-secondary">
+                        <TableCell className="py-2 text-body text-text-secondary">
                           Semester {subject.semester}
                         </TableCell>
-                        <TableCell className="text-xs text-text-secondary tabular-nums">
+                        <TableCell className="py-2 text-body text-text-secondary tabular-nums">
                           {subject.scheduleCount} session{subject.scheduleCount === 1 ? '' : 's'}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="py-2 text-right">
                           <Button
                             size="sm"
                             onClick={() => {
@@ -1571,7 +1632,7 @@ const TeachersPage: React.FC = () => {
                               });
                             }}
                             disabled={addAssignmentMutation.isPending}
-                            className="h-7 text-xs px-2.5"
+                            className="h-7 px-2.5 text-caption"
                           >
                             Assign All
                           </Button>
@@ -1602,7 +1663,7 @@ const TeachersPage: React.FC = () => {
             <AlertDialogTitle>Delete Teacher Account</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to permanently delete teacher{' '}
-              <strong className="text-text-primary">{selectedTeacher?.name}</strong>? This action removes
+              <strong className="font-semibold text-text-primary">{selectedTeacher?.name}</strong>? This action removes
               their user credentials, profile records, and course assignments. It cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -1613,7 +1674,7 @@ const TeachersPage: React.FC = () => {
             <AlertDialogAction
               onClick={handleSubmitDelete}
               disabled={deleteTeacherMutation.isPending}
-              className="bg-status-danger text-white hover:bg-status-danger/90"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleteTeacherMutation.isPending ? 'Deleting...' : 'Delete Teacher'}
             </AlertDialogAction>

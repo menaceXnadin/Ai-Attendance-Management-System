@@ -1,16 +1,37 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Edit2, Trash2, Calendar, Clock, Users, MapPin, User, FileText, ToggleLeft, ToggleRight, Filter, Search, X, AlertTriangle } from 'lucide-react';
+import {
+  Add20Regular,
+  Edit20Regular,
+  Delete20Regular,
+  CalendarLtr20Regular,
+  CalendarLtr24Regular,
+  CalendarDay20Regular,
+  CalendarWorkWeek20Regular,
+  TextBulletListLtr20Regular,
+  Clock16Regular,
+  Location16Regular,
+  Person16Regular,
+  Note16Regular,
+  Timer16Regular,
+  BuildingMultiple20Regular,
+  Filter20Regular,
+  FilterDismiss20Regular,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
+  Warning24Regular,
+  ErrorCircle20Regular,
+} from '@fluentui/react-icons';
 import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Textarea } from './ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from './ui/dialog';
-import { Alert, AlertDescription } from './ui/alert';
-import { Separator } from './ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { Switch } from './ui/switch';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { api } from '../integrations/api/client';
 import { Schedule, Subject, Faculty, DayOfWeek } from '../integrations/api/types';
@@ -56,6 +77,100 @@ const semesterOptions = Array.from({ length: 8 }, (_, i) => ({
   label: `Semester ${i + 1}`
 }));
 
+
+// ---------------------------------------------------------------------------
+// Calendar presentation helpers (Outlook / Teams calendar look)
+// ---------------------------------------------------------------------------
+
+type CalendarView = 'day' | 'week' | 'list';
+
+const VIEW_OPTIONS: { value: CalendarView; label: string; Icon: typeof CalendarDay20Regular }[] = [
+  { value: 'day', label: 'Day', Icon: CalendarDay20Regular },
+  { value: 'week', label: 'Week', Icon: CalendarWorkWeek20Regular },
+  { value: 'list', label: 'List', Icon: TextBulletListLtr20Regular },
+];
+
+/** Height of one hour row in the time grid, in px. */
+const HOUR_HEIGHT = 56;
+
+/** Per-subject event tones, cycling through the categorical chart palette. */
+const EVENT_TONES = [
+  { block: 'bg-chart-1/15 hover:bg-chart-1/25 border-l-chart-1', bar: 'bg-chart-1' },
+  { block: 'bg-chart-2/15 hover:bg-chart-2/25 border-l-chart-2', bar: 'bg-chart-2' },
+  { block: 'bg-chart-3/15 hover:bg-chart-3/25 border-l-chart-3', bar: 'bg-chart-3' },
+  { block: 'bg-chart-4/15 hover:bg-chart-4/25 border-l-chart-4', bar: 'bg-chart-4' },
+  { block: 'bg-chart-5/15 hover:bg-chart-5/25 border-l-chart-5', bar: 'bg-chart-5' },
+  { block: 'bg-chart-6/15 hover:bg-chart-6/25 border-l-chart-6', bar: 'bg-chart-6' },
+  { block: 'bg-chart-7/15 hover:bg-chart-7/25 border-l-chart-7', bar: 'bg-chart-7' },
+  { block: 'bg-chart-8/15 hover:bg-chart-8/25 border-l-chart-8', bar: 'bg-chart-8' },
+];
+
+const toneFor = (subjectId: number) =>
+  EVENT_TONES[Math.abs(Number(subjectId) || 0) % EVENT_TONES.length];
+
+const toMinutes = (time: string) => {
+  const [h, m] = (time || '0:0').split(':').map((part) => parseInt(part, 10) || 0);
+  return h * 60 + m;
+};
+
+const formatTimeLabel = (time: string) => {
+  const date = new Date(`2000-01-01T${(time || '00:00').slice(0, 5)}:00`);
+  if (Number.isNaN(date.getTime())) return time;
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+};
+
+const formatHourLabel = (hour: number) =>
+  new Date(2000, 0, 1, hour).toLocaleTimeString('en-US', { hour: 'numeric', hour12: true });
+
+interface PositionedSchedule {
+  schedule: Schedule;
+  start: number;
+  end: number;
+  lane: number;
+  lanes: number;
+}
+
+/** Packs overlapping events of one day into side-by-side lanes. */
+const layoutDay = (items: Schedule[]): PositionedSchedule[] => {
+  const sorted = items
+    .map((schedule) => {
+      const start = toMinutes(schedule.start_time);
+      return { schedule, start, end: Math.max(toMinutes(schedule.end_time), start + 15) };
+    })
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const result: PositionedSchedule[] = [];
+  let cluster: PositionedSchedule[] = [];
+  let laneEnds: number[] = [];
+  let clusterEnd = -1;
+
+  const flush = () => {
+    const lanes = Math.max(1, laneEnds.length);
+    cluster.forEach((item) => {
+      item.lanes = lanes;
+    });
+    result.push(...cluster);
+    cluster = [];
+    laneEnds = [];
+    clusterEnd = -1;
+  };
+
+  sorted.forEach((item) => {
+    if (cluster.length && item.start >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((end) => end <= item.start);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(item.end);
+    } else {
+      laneEnds[lane] = item.end;
+    }
+    cluster.push({ ...item, lane, lanes: 1 });
+    clusterEnd = Math.max(clusterEnd, item.end);
+  });
+  if (cluster.length) flush();
+
+  return result;
+};
 const ScheduleManagement: React.FC = () => {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -78,6 +193,12 @@ const ScheduleManagement: React.FC = () => {
 
   const [selectedFaculty, setSelectedFaculty] = useState<number | null>(null);
   const [selectedSemester, setSelectedSemester] = useState<number>(initialFormData.semester);
+
+
+  // Presentation-only calendar state
+  const [calendarView, setCalendarView] = useState<CalendarView>('week');
+  const [focusDayIndex, setFocusDayIndex] = useState<number>(new Date().getDay());
+  const todayValue = dayOptions[new Date().getDay()].value;
 
   const queryClient = useQueryClient();
 
@@ -274,399 +395,452 @@ const ScheduleManagement: React.FC = () => {
     });
   };
 
+
   if (schedulesError) {
     return (
-      <Alert className="m-4">
-        <AlertDescription>
-          Failed to load schedules. Please check your connection and try again.
-        </AlertDescription>
-      </Alert>
+      <div
+        role="alert"
+        className="flex items-start gap-2 rounded-md border border-status-error-border bg-status-error-subtle px-3 py-2 text-body text-text-primary"
+      >
+        <ErrorCircle20Regular className="mt-0.5 shrink-0 text-status-error" aria-hidden />
+        <span>Failed to load schedules. Please check your connection and try again.</span>
+      </div>
     );
   }
 
+  const visibleDays = calendarView === 'day' ? [dayOptions[focusDayIndex]] : dayOptions;
+
   return (
-    <div className="p-6 md:p-8">
-      <div className="w-full">
-      <div className="space-y-6">
-        {/* Header Section */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-6 border-b border-slate-700/50">
-          <div className="space-y-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-text-primary">
-              Schedule Management
-            </h1>
-            <p className="text-slate-400 text-sm sm:text-base">
+    <div className="w-full space-y-4">
+      {/* Header / command bar */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+            <CalendarLtr24Regular aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-section-title text-text-primary">Schedule Management</h1>
+            <p className="text-caption text-text-muted">
               Organize and manage class schedules and timetables
             </p>
           </div>
-          
-          <div className="flex gap-3">
-            <Button 
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 hover:text-white transition-all duration-200"
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </Button>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  onClick={resetForm}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 transition-all duration-200"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Schedule
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
-                <DialogHeader>
-                  <DialogTitle className="text-2xl font-semibold text-white">Create New Schedule</DialogTitle>
-                </DialogHeader>
-                <ScheduleForm
-                  formData={formData}
-                  setFormData={setFormData}
-                  subjects={subjects}
-                  faculties={faculties}
-                  isLoading={createScheduleMutation.isPending}
-                  onFacultyChange={setSelectedFaculty}
-                  onSemesterChange={setSelectedSemester}
-                />
-                <DialogFooter className="gap-2">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setIsCreateDialogOpen(false)}
-                    className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
-                  >
-                    Cancel
-                  </Button>
-                  <Button 
-                    onClick={handleCreateSchedule}
-                    disabled={createScheduleMutation.isPending}
-                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-                  >
-                    {createScheduleMutation.isPending ? 'Creating...' : 'Create Schedule'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
         </div>
 
-        {/* Filters Section */}
-        {showFilters && (
-          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Filter className="h-5 w-5 text-blue-400" />
-                  Filter Schedules
-                </CardTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="Calendar view"
+            className="inline-flex items-center rounded-md border border-border-default bg-surface-default p-0.5"
+          >
+            {VIEW_OPTIONS.map(({ value, label, Icon }) => {
+              const selected = calendarView === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setCalendarView(value)}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded px-2.5 text-body transition-colors duration-150 ease-fluent-standard',
+                    selected
+                      ? 'bg-brand-subtle font-semibold text-brand-foreground'
+                      : 'text-text-secondary hover:bg-surface-hover hover:text-text-primary'
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+          >
+            <Filter20Regular aria-hidden />
+            {showFilters ? 'Hide' : 'Show'} Filters
+          </Button>
+
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={resetForm}>
+                <Add20Regular aria-hidden />
+                Add Schedule
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="text-section-title text-text-primary">Create New Schedule</DialogTitle>
+                <DialogDescription className="text-body text-text-muted">
+                  Add a recurring weekly class session to the timetable.
+                </DialogDescription>
+              </DialogHeader>
+              <ScheduleForm
+                formData={formData}
+                setFormData={setFormData}
+                subjects={subjects}
+                faculties={faculties}
+                isLoading={createScheduleMutation.isPending}
+                onFacultyChange={setSelectedFaculty}
+                onSemesterChange={setSelectedSemester}
+              />
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleCreateSchedule} disabled={createScheduleMutation.isPending}>
+                  {createScheduleMutation.isPending ? 'Creating...' : 'Create Schedule'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Filters */}
+      {showFilters && (
+        <section aria-label="Filter schedules" className="rounded-lg bg-surface-default p-4 shadow">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-body-strong text-text-primary">
+              <Filter20Regular className="text-text-muted" aria-hidden />
+              Filter Schedules
+            </h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFilters({
+                faculty_id: 'all',
+                semester: 'all',
+                day_of_week: 'all',
+                status: 'active',
+                academic_year: new Date().getFullYear().toString()
+              })}
+              className="text-text-secondary"
+            >
+              <FilterDismiss20Regular aria-hidden />
+              Clear Filters
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-faculty" className="text-caption-strong text-text-secondary">Faculty</Label>
+              <Select
+                value={filters.faculty_id}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, faculty_id: value }))}
+              >
+                <SelectTrigger id="filter-faculty">
+                  <SelectValue placeholder="All Faculties" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Faculties</SelectItem>
+                  {faculties.map((faculty) => (
+                    <SelectItem key={faculty.id} value={faculty.id.toString()}>
+                      {faculty.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-semester" className="text-caption-strong text-text-secondary">Semester</Label>
+              <Select
+                value={filters.semester}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
+              >
+                <SelectTrigger id="filter-semester">
+                  <SelectValue placeholder="All Semesters" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Semesters</SelectItem>
+                  {semesterOptions.map((sem) => (
+                    <SelectItem key={sem.value} value={sem.value.toString()}>
+                      {sem.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-day" className="text-caption-strong text-text-secondary">Day of Week</Label>
+              <Select
+                value={filters.day_of_week}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, day_of_week: value }))}
+              >
+                <SelectTrigger id="filter-day">
+                  <SelectValue placeholder="All Days" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Days</SelectItem>
+                  {dayOptions.map((day) => (
+                    <SelectItem key={day.value} value={day.value}>
+                      {day.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-status" className="text-caption-strong text-text-secondary">Status</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+              >
+                <SelectTrigger id="filter-status">
+                  <SelectValue placeholder="All Statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="active">Active Only</SelectItem>
+                  <SelectItem value="inactive">Inactive Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="filter-year" className="text-caption-strong text-text-secondary">Academic Year</Label>
+              <Input
+                id="filter-year"
+                type="number"
+                value={filters.academic_year}
+                onChange={(e) => setFilters(prev => ({ ...prev, academic_year: e.target.value }))}
+                min="2020"
+                max="2030"
+                className="tabular-nums"
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Calendar surface */}
+      <section aria-label="Schedules" className="overflow-hidden rounded-lg bg-surface-default shadow">
+        {/* Calendar toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-subtle px-3 py-2">
+          <div className="flex min-w-0 items-center gap-1">
+            {calendarView === 'day' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setFocusDayIndex(new Date().getDay())}
+                  className="mr-1"
+                >
+                  <CalendarLtr20Regular aria-hidden />
+                  Today
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setFilters({
-                    faculty_id: 'all',
-                    semester: 'all',
-                    day_of_week: 'all',
-                    status: 'active',
-                    academic_year: new Date().getFullYear().toString()
-                  })}
-                  className="text-slate-400 hover:text-white hover:bg-slate-700/50 text-xs"
+                  className="h-8 w-8 p-0"
+                  aria-label="Previous day"
+                  onClick={() => setFocusDayIndex((i) => (i + 6) % 7)}
                 >
-                  <X className="h-3 w-3 mr-1" />
-                  Clear Filters
+                  <ChevronLeft20Regular aria-hidden />
                 </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="filter-faculty" className="text-slate-300 text-sm font-medium">Faculty</Label>
-                  <Select
-                    value={filters.faculty_id}
-                    onValueChange={(value) => setFilters(prev => ({ ...prev, faculty_id: value }))}
-                  >
-                    <SelectTrigger 
-                      id="filter-faculty" 
-                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-                    >
-                      <SelectValue placeholder="All Faculties" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
-                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Faculties</SelectItem>
-                      {faculties.map((faculty) => (
-                        <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                          {faculty.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="filter-semester" className="text-slate-300 text-sm font-medium">Semester</Label>
-                  <Select
-                    value={filters.semester}
-                    onValueChange={(value) => setFilters(prev => ({ ...prev, semester: value }))}
-                  >
-                    <SelectTrigger 
-                      id="filter-semester" 
-                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-                    >
-                      <SelectValue placeholder="All Semesters" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
-                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Semesters</SelectItem>
-                      {semesterOptions.map((sem) => (
-                        <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                          {sem.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="filter-day" className="text-slate-300 text-sm font-medium">Day of Week</Label>
-                  <Select
-                    value={filters.day_of_week}
-                    onValueChange={(value) => setFilters(prev => ({ ...prev, day_of_week: value }))}
-                  >
-                    <SelectTrigger 
-                      id="filter-day" 
-                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-                    >
-                      <SelectValue placeholder="All Days" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
-                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Days</SelectItem>
-                      {dayOptions.map((day) => (
-                        <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                          {day.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="filter-status" className="text-slate-300 text-sm font-medium">Status</Label>
-                  <Select
-                    value={filters.status}
-                    onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
-                  >
-                    <SelectTrigger 
-                      id="filter-status" 
-                      className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-                    >
-                      <SelectValue placeholder="All Statuses" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
-                      <SelectItem value="all" className="text-white hover:bg-slate-800 focus:bg-slate-800">All Statuses</SelectItem>
-                      <SelectItem value="active" className="text-white hover:bg-slate-800 focus:bg-slate-800">Active Only</SelectItem>
-                      <SelectItem value="inactive" className="text-white hover:bg-slate-800 focus:bg-slate-800">Inactive Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="filter-year" className="text-slate-300 text-sm font-medium">Academic Year</Label>
-                  <Input
-                    id="filter-year"
-                    type="number"
-                    value={filters.academic_year}
-                    onChange={(e) => setFilters(prev => ({ ...prev, academic_year: e.target.value }))}
-                    min="2020"
-                    max="2030"
-                    className="bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Schedules List */}
-        <div className="space-y-4">
-          {isLoadingSchedules ? (
-            // Skeleton loading animation
-            <div className="grid gap-4">
-              {Array.from({ length: 3 }, (_, index) => (
-                <ScheduleCardSkeleton key={index} />
-              ))}
-            </div>
-          ) : schedules.length === 0 ? (
-            <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <div className="w-20 h-20 rounded-full bg-slate-700/30 flex items-center justify-center mb-4">
-                  <Calendar className="h-10 w-10 text-slate-500" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-2">No schedules found</h3>
-                <p className="text-slate-400 text-center max-w-md mb-6">
-                  Create your first schedule or adjust the filters to see existing schedules.
-                </p>
                 <Button
-                  onClick={() => {
-                    resetForm();
-                    setIsCreateDialogOpen(true);
-                  }}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                  aria-label="Next day"
+                  onClick={() => setFocusDayIndex((i) => (i + 1) % 7)}
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Schedule
+                  <ChevronRight20Regular aria-hidden />
                 </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid gap-4">
-              {schedules.map((schedule) => (
-                <ScheduleCard
-                  key={schedule.id}
-                  schedule={schedule}
-                  onEdit={handleEditSchedule}
-                  onDelete={handleDeleteSchedule}
-                  onToggleStatus={(id) => toggleScheduleMutation.mutate(id)}
-                  isToggling={toggleScheduleMutation.isPending}
-                />
-              ))}
-            </div>
-          )}
+              </>
+            )}
+            <span className="ml-1 truncate text-subheading text-text-primary">
+              {calendarView === 'day'
+                ? dayOptions[focusDayIndex].label
+                : calendarView === 'week'
+                ? 'Weekly timetable'
+                : 'All schedules'}
+            </span>
+          </div>
+          <span className="text-caption text-text-muted tabular-nums">
+            Academic year {filters.academic_year || '—'}
+          </span>
         </div>
+
+        {isLoadingSchedules ? (
+          // Skeleton loading animation
+          <div className="divide-y divide-border-subtle">
+            {Array.from({ length: 3 }, (_, index) => (
+              <ScheduleCardSkeleton key={index} />
+            ))}
+          </div>
+        ) : schedules.length === 0 ? (
+          <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+            <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+              <CalendarLtr24Regular aria-hidden />
+            </div>
+            <h3 className="text-subheading text-text-primary">No schedules found</h3>
+            <p className="mt-1 mb-4 max-w-md text-body text-text-muted">
+              Create your first schedule or adjust the filters to see existing schedules.
+            </p>
+            <Button
+              onClick={() => {
+                resetForm();
+                setIsCreateDialogOpen(true);
+              }}
+            >
+              <Add20Regular aria-hidden />
+              Create Schedule
+            </Button>
+          </div>
+        ) : calendarView === 'list' ? (
+          <div className="divide-y divide-border-subtle">
+            {schedules.map((schedule) => (
+              <ScheduleCard
+                key={schedule.id}
+                schedule={schedule}
+                onEdit={handleEditSchedule}
+                onDelete={handleDeleteSchedule}
+                onToggleStatus={(id) => toggleScheduleMutation.mutate(id)}
+                isToggling={toggleScheduleMutation.isPending}
+              />
+            ))}
+          </div>
+        ) : (
+          <ScheduleCalendar
+            schedules={schedules}
+            days={visibleDays}
+            todayValue={todayValue}
+            onEdit={handleEditSchedule}
+            onDelete={handleDeleteSchedule}
+            onToggleStatus={(id) => toggleScheduleMutation.mutate(id)}
+            isToggling={toggleScheduleMutation.isPending}
+          />
+        )}
 
         {/* Pagination Controls */}
         {schedules.length > 0 && (
-          <Card className="bg-slate-800/40 backdrop-blur-sm border-slate-700/50 shadow-xl">
-            <CardContent className="py-4">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-sm text-slate-400">
-                  Showing <span className="font-semibold text-white">{schedules.length}</span> schedule(s) on page <span className="font-semibold text-white">{page}</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page === 1 || isLoadingSchedules}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                  >
-                    Previous
-                  </Button>
-                  <div className="px-3 py-1 bg-slate-900/50 border border-slate-700 rounded-md text-sm font-medium text-white">
-                    {page}
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isLoadingSchedules || schedules.length < pageSize}
-                    onClick={() => setPage((p) => p + 1)}
-                    className="bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 hover:border-slate-600 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-                  >
-                    Next
-                  </Button>
-                  <Select
-                    value={String(pageSize)}
-                    onValueChange={(v) => {
-                      setPageSize(parseInt(v));
-                      setPage(1);
-                    }}
-                  >
-                    <SelectTrigger className="w-[130px] bg-slate-900/50 border-slate-700 text-white hover:bg-slate-800/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-700">
-                      <SelectItem value="10" className="text-white hover:bg-slate-800">10 / page</SelectItem>
-                      <SelectItem value="20" className="text-white hover:bg-slate-800">20 / page</SelectItem>
-                      <SelectItem value="50" className="text-white hover:bg-slate-800">50 / page</SelectItem>
-                      <SelectItem value="100" className="text-white hover:bg-slate-800">100 / page</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Edit Dialog */}
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-semibold text-white">Edit Schedule</DialogTitle>
-            </DialogHeader>
-            <ScheduleForm
-              formData={formData}
-              setFormData={setFormData}
-              subjects={subjects}
-              faculties={faculties}
-              isLoading={updateScheduleMutation.isPending}
-              onFacultyChange={setSelectedFaculty}
-              onSemesterChange={setSelectedSemester}
-            />
-            <DialogFooter className="gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsEditDialogOpen(false);
-                  resetForm();
-                }}
-                className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={handleUpdateSchedule}
-                disabled={updateScheduleMutation.isPending}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-              >
-                {updateScheduleMutation.isPending ? 'Updating...' : 'Update Schedule'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-          <DialogContent className="max-w-md bg-slate-900 border-slate-700">
-            <DialogHeader>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                  <AlertTriangle className="h-6 w-6 text-red-500" />
-                </div>
-                <div>
-                  <DialogTitle className="text-xl font-semibold text-white">Delete Schedule</DialogTitle>
-                  <DialogDescription className="text-slate-400 text-sm mt-1">
-                    This action cannot be undone
-                  </DialogDescription>
-                </div>
-              </div>
-            </DialogHeader>
-            <div className="py-4">
-              <p className="text-slate-300 leading-relaxed">
-                Are you sure you want to delete this schedule? This will permanently remove the schedule from the system and cannot be recovered.
-              </p>
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-border-subtle bg-surface-subtle px-4 py-2.5 sm:flex-row">
+            <div className="text-caption text-text-muted">
+              Showing <span className="font-semibold text-text-primary tabular-nums">{schedules.length}</span> schedule(s) on page <span className="font-semibold text-text-primary tabular-nums">{page}</span>
             </div>
-            <DialogFooter className="gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setIsDeleteDialogOpen(false);
-                  setScheduleToDelete(null);
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1 || isLoadingSchedules}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft20Regular aria-hidden />
+                Previous
+              </Button>
+              <div className="grid h-8 min-w-8 place-items-center rounded-md border border-border-default bg-surface-default px-2.5 text-body-strong text-text-primary tabular-nums">
+                {page}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isLoadingSchedules || schedules.length < pageSize}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+                <ChevronRight20Regular aria-hidden />
+              </Button>
+              <Select
+                value={String(pageSize)}
+                onValueChange={(v) => {
+                  setPageSize(parseInt(v));
+                  setPage(1);
                 }}
-                className="bg-slate-800 border-slate-700 hover:bg-slate-700 hover:border-slate-600 text-slate-300"
               >
-                Cancel
-              </Button>
-              <Button 
-                onClick={confirmDelete}
-                disabled={deleteScheduleMutation.isPending}
-                className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
-              >
-                {deleteScheduleMutation.isPending ? 'Deleting...' : 'Delete Schedule'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-      </div>
+                <SelectTrigger className="h-8 w-[120px]" aria-label="Schedules per page">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / page</SelectItem>
+                  <SelectItem value="20">20 / page</SelectItem>
+                  <SelectItem value="50">50 / page</SelectItem>
+                  <SelectItem value="100">100 / page</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-section-title text-text-primary">Edit Schedule</DialogTitle>
+            <DialogDescription className="text-body text-text-muted">
+              Update the session details for this recurring class.
+            </DialogDescription>
+          </DialogHeader>
+          <ScheduleForm
+            formData={formData}
+            setFormData={setFormData}
+            subjects={subjects}
+            faculties={faculties}
+            isLoading={updateScheduleMutation.isPending}
+            onFacultyChange={setSelectedFaculty}
+            onSemesterChange={setSelectedSemester}
+          />
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsEditDialogOpen(false);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateSchedule} disabled={updateScheduleMutation.isPending}>
+              {updateScheduleMutation.isPending ? 'Updating...' : 'Update Schedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-status-error-subtle text-status-error">
+                <Warning24Regular aria-hidden />
+              </div>
+              <div>
+                <DialogTitle className="text-section-title text-text-primary">Delete Schedule</DialogTitle>
+                <DialogDescription className="mt-1 text-body text-text-muted">
+                  This action cannot be undone
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <p className="py-2 text-body text-text-secondary">
+            Are you sure you want to delete this schedule? This will permanently remove the schedule from the system and cannot be recovered.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsDeleteDialogOpen(false);
+                setScheduleToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleteScheduleMutation.isPending}
+            >
+              {deleteScheduleMutation.isPending ? 'Deleting...' : 'Delete Schedule'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
@@ -682,6 +856,24 @@ interface ScheduleFormProps {
   onSemesterChange: (semester: number) => void;
 }
 
+const formLabelClass = 'flex items-center gap-1 text-body-strong text-text-primary';
+const RequiredMark = () => <span className="text-status-error" aria-hidden>*</span>;
+
+const FormSection: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children
+}) => (
+  <fieldset className="space-y-4 border-t border-border-subtle pt-4 first:border-t-0 first:pt-0">
+    <legend className="sr-only">{title}</legend>
+    <div>
+      <h3 className="text-subheading text-text-primary">{title}</h3>
+      {description && <p className="text-caption text-text-muted">{description}</p>}
+    </div>
+    {children}
+  </fieldset>
+);
+
 const ScheduleForm: React.FC<ScheduleFormProps> = ({
   formData,
   setFormData,
@@ -692,227 +884,503 @@ const ScheduleForm: React.FC<ScheduleFormProps> = ({
   onSemesterChange
 }) => {
   return (
-    <div className="space-y-6 py-2">
-      {/* Faculty and Semester */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="faculty" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            Faculty <span className="text-red-400">*</span>
-          </Label>
-          <Select
-            value={formData.faculty_id?.toString() || ''}
-            onValueChange={(value) => {
-              const facultyId = value ? parseInt(value) : null;
-              setFormData(prev => ({ ...prev, faculty_id: facultyId, subject_id: null }));
-              onFacultyChange(facultyId);
-            }}
-            disabled={isLoading}
-          >
-            <SelectTrigger 
-              id="faculty" 
-              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+    <div className="space-y-5 py-2">
+      <FormSection title="Course" description="Choose the faculty, semester and subject for this session.">
+        {/* Faculty and Semester */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="faculty" className={formLabelClass}>
+              Faculty <RequiredMark />
+            </Label>
+            <Select
+              value={formData.faculty_id?.toString() || ''}
+              onValueChange={(value) => {
+                const facultyId = value ? parseInt(value) : null;
+                setFormData(prev => ({ ...prev, faculty_id: facultyId, subject_id: null }));
+                onFacultyChange(facultyId);
+              }}
+              disabled={isLoading}
             >
-              <SelectValue placeholder="Select a faculty" />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
-              {faculties.map((faculty) => (
-                <SelectItem key={faculty.id} value={faculty.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                  {faculty.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="semester" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            Semester <span className="text-red-400">*</span>
-          </Label>
-          <Select
-            value={formData.semester.toString()}
-            onValueChange={(value) => {
-              const semester = parseInt(value);
-              setFormData(prev => ({ ...prev, semester, subject_id: null }));
-              onSemesterChange(semester);
-            }}
-            disabled={isLoading}
-          >
-            <SelectTrigger 
-              id="semester" 
-              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
+              <SelectTrigger id="faculty">
+                <SelectValue placeholder="Select a faculty" />
+              </SelectTrigger>
+              <SelectContent>
+                {faculties.map((faculty) => (
+                  <SelectItem key={faculty.id} value={faculty.id.toString()}>
+                    {faculty.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="semester" className={formLabelClass}>
+              Semester <RequiredMark />
+            </Label>
+            <Select
+              value={formData.semester.toString()}
+              onValueChange={(value) => {
+                const semester = parseInt(value);
+                setFormData(prev => ({ ...prev, semester, subject_id: null }));
+                onSemesterChange(semester);
+              }}
+              disabled={isLoading}
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
-              {semesterOptions.map((sem) => (
-                <SelectItem key={sem.value} value={sem.value.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                  {sem.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+              <SelectTrigger id="semester">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {semesterOptions.map((sem) => (
+                  <SelectItem key={sem.value} value={sem.value.toString()}>
+                    {sem.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
 
-      {/* Subject */}
-      <div className="space-y-2">
-        <Label htmlFor="subject" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-          Subject <span className="text-red-400">*</span>
-        </Label>
-        <Select
-          value={formData.subject_id?.toString() || ''}
-          onValueChange={(value) => setFormData(prev => ({ 
-            ...prev, 
-            subject_id: value ? parseInt(value) : null 
-          }))}
-          disabled={isLoading || subjects.length === 0}
-        >
-          <SelectTrigger 
-            id="subject" 
-            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-          >
-            <SelectValue placeholder={
-              !formData.faculty_id || !formData.semester 
-                ? "Select faculty and semester first" 
-                : subjects.length === 0 
-                ? "No subjects found for this selection" 
-                : "Select a subject"
-            } />
-          </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700">
-            {subjects.map((subject) => (
-              <SelectItem key={subject.id} value={subject.id.toString()} className="text-white hover:bg-slate-800 focus:bg-slate-800">
-                {subject.code} - {subject.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Day and Time */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="day" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            Day <span className="text-red-400">*</span>
+        {/* Subject */}
+        <div className="space-y-1.5">
+          <Label htmlFor="subject" className={formLabelClass}>
+            Subject <RequiredMark />
           </Label>
           <Select
-            value={formData.day_of_week || ''}
-            onValueChange={(value) => setFormData(prev => ({ 
-              ...prev, 
-              day_of_week: value as DayOfWeek 
+            value={formData.subject_id?.toString() || ''}
+            onValueChange={(value) => setFormData(prev => ({
+              ...prev,
+              subject_id: value ? parseInt(value) : null
             }))}
-            disabled={isLoading}
+            disabled={isLoading || subjects.length === 0}
           >
-            <SelectTrigger 
-              id="day" 
-              className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-            >
-              <SelectValue placeholder="Select day" />
+            <SelectTrigger id="subject">
+              <SelectValue placeholder={
+                !formData.faculty_id || !formData.semester
+                  ? "Select faculty and semester first"
+                  : subjects.length === 0
+                  ? "No subjects found for this selection"
+                  : "Select a subject"
+              } />
             </SelectTrigger>
-            <SelectContent className="bg-slate-900 border-slate-700">
-              {dayOptions.map((day) => (
-                <SelectItem key={day.value} value={day.value} className="text-white hover:bg-slate-800 focus:bg-slate-800">
+            <SelectContent>
+              {subjects.map((subject) => (
+                <SelectItem key={subject.id} value={subject.id.toString()}>
+                  {subject.code} - {subject.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </FormSection>
+
+      <FormSection title="When" description="Sessions repeat every week on the selected day.">
+        {/* Day and Time */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="day" className={formLabelClass}>
+              Day <RequiredMark />
+            </Label>
+            <Select
+              value={formData.day_of_week || ''}
+              onValueChange={(value) => setFormData(prev => ({
+                ...prev,
+                day_of_week: value as DayOfWeek
+              }))}
+              disabled={isLoading}
+            >
+              <SelectTrigger id="day">
+                <SelectValue placeholder="Select day" />
+              </SelectTrigger>
+              <SelectContent>
+                {dayOptions.map((day) => (
+                  <SelectItem key={day.value} value={day.value}>
+                    {day.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="start-time" className={formLabelClass}>
+              Start Time <RequiredMark />
+            </Label>
+            <Input
+              id="start-time"
+              type="time"
+              value={formData.start_time}
+              onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
+              disabled={isLoading}
+              className="tabular-nums"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="end-time" className={formLabelClass}>
+              End Time <RequiredMark />
+            </Label>
+            <Input
+              id="end-time"
+              type="time"
+              value={formData.end_time}
+              onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
+              disabled={isLoading}
+              className="tabular-nums"
+            />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Details">
+        {/* Academic Year and Classroom */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="academic-year" className={formLabelClass}>
+              Academic Year <RequiredMark />
+            </Label>
+            <Input
+              id="academic-year"
+              type="number"
+              value={formData.academic_year}
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                academic_year: parseInt(e.target.value) || new Date().getFullYear()
+              }))}
+              min="2020"
+              max="2030"
+              disabled={isLoading}
+              className="tabular-nums"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="classroom" className={formLabelClass}>Classroom</Label>
+            <Input
+              id="classroom"
+              value={formData.classroom}
+              onChange={(e) => setFormData(prev => ({ ...prev, classroom: e.target.value }))}
+              placeholder="e.g., Room 101, Lab A"
+              disabled={isLoading}
+            />
+          </div>
+        </div>
+
+        {/* Instructor */}
+        <div className="space-y-1.5">
+          <Label htmlFor="instructor" className={formLabelClass}>Instructor Name</Label>
+          <Input
+            id="instructor"
+            value={formData.instructor_name}
+            onChange={(e) => setFormData(prev => ({ ...prev, instructor_name: e.target.value }))}
+            placeholder="e.g., Dr. John Smith"
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-1.5">
+          <Label htmlFor="notes" className={formLabelClass}>Notes</Label>
+          <Textarea
+            id="notes"
+            value={formData.notes}
+            onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+            placeholder="Additional notes about this schedule..."
+            rows={3}
+            disabled={isLoading}
+            className="resize-none"
+          />
+        </div>
+      </FormSection>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Week / day calendar grid
+// ---------------------------------------------------------------------------
+
+interface ScheduleActionsProps {
+  onEdit: (schedule: Schedule) => void;
+  onDelete: (id: number) => void;
+  onToggleStatus: (id: number) => void;
+  isToggling: boolean;
+}
+
+interface ScheduleCalendarProps extends ScheduleActionsProps {
+  schedules: Schedule[];
+  days: { value: string; label: string }[];
+  todayValue: string;
+}
+
+const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
+  schedules,
+  days,
+  todayValue,
+  ...actions
+}) => {
+  const { startHour, endHour } = useMemo(() => {
+    let min = 8 * 60;
+    let max = 17 * 60;
+    schedules.forEach((s) => {
+      min = Math.min(min, toMinutes(s.start_time));
+      max = Math.max(max, toMinutes(s.end_time));
+    });
+    return {
+      startHour: Math.max(0, Math.floor(min / 60)),
+      endHour: Math.min(24, Math.ceil(max / 60)),
+    };
+  }, [schedules]);
+
+  const hours = Array.from({ length: Math.max(1, endHour - startHour) }, (_, i) => startHour + i);
+  const gridHeight = hours.length * HOUR_HEIGHT;
+  const gridTemplateColumns = `56px repeat(${days.length}, minmax(0, 1fr))`;
+
+  const eventsByDay = useMemo(() => {
+    const map: Record<string, PositionedSchedule[]> = {};
+    days.forEach((day) => {
+      map[day.value] = layoutDay(
+        schedules.filter((s) => (s.day_of_week || '').toLowerCase() === day.value)
+      );
+    });
+    return map;
+  }, [schedules, days]);
+
+  return (
+    <div className="overflow-x-auto">
+      <div style={{ minWidth: days.length > 1 ? 56 + days.length * 128 : undefined }}>
+        {/* Day header row */}
+        <div className="grid border-b border-border-subtle" style={{ gridTemplateColumns }}>
+          <div aria-hidden />
+          {days.map((day) => {
+            const isToday = day.value === todayValue;
+            const count = eventsByDay[day.value]?.length ?? 0;
+            return (
+              <div key={day.value} className="relative border-l border-border-subtle px-3 py-2">
+                <div className={cn('text-body-strong', isToday ? 'text-brand-foreground' : 'text-text-primary')}>
                   {day.label}
-                </SelectItem>
+                </div>
+                <div className="text-caption text-text-muted tabular-nums">
+                  {isToday ? 'Today · ' : ''}
+                  {count} {count === 1 ? 'class' : 'classes'}
+                </div>
+                {isToday && <span className="absolute inset-x-0 bottom-0 h-[3px] bg-brand" aria-hidden />}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Time grid */}
+        <div className="grid" style={{ gridTemplateColumns, height: gridHeight }}>
+          {/* Time gutter */}
+          <div className="relative" aria-hidden>
+            {hours.map((hour, i) => (
+              <span
+                key={hour}
+                className="absolute right-2 pt-1 text-caption text-text-muted tabular-nums"
+                style={{ top: i * HOUR_HEIGHT }}
+              >
+                {formatHourLabel(hour)}
+              </span>
+            ))}
+          </div>
+
+          {days.map((day) => (
+            <div
+              key={day.value}
+              className={cn(
+                'relative border-l border-border-subtle',
+                day.value === todayValue && 'bg-brand-subtle/40'
+              )}
+            >
+              {hours.map((hour, i) => (
+                <React.Fragment key={hour}>
+                  <div
+                    className="absolute inset-x-0 border-t border-border-subtle"
+                    style={{ top: i * HOUR_HEIGHT }}
+                    aria-hidden
+                  />
+                  <div
+                    className="absolute inset-x-0 border-t border-dashed border-border-subtle/60"
+                    style={{ top: i * HOUR_HEIGHT + HOUR_HEIGHT / 2 }}
+                    aria-hidden
+                  />
+                </React.Fragment>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="start-time" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            Start Time <span className="text-red-400">*</span>
-          </Label>
-          <Input
-            id="start-time"
-            type="time"
-            value={formData.start_time}
-            onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))}
-            disabled={isLoading}
-            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-          />
+              {(eventsByDay[day.value] || []).map((item) => {
+                const top = ((item.start - startHour * 60) / 60) * HOUR_HEIGHT;
+                const height = Math.max(((item.end - item.start) / 60) * HOUR_HEIGHT, 24);
+                return (
+                  <CalendarEvent
+                    key={item.schedule.id}
+                    item={item}
+                    style={{
+                      top: top + 1,
+                      height: height - 2,
+                      left: `calc(${(item.lane / item.lanes) * 100}% + 2px)`,
+                      width: `calc(${100 / item.lanes}% - 4px)`,
+                    }}
+                    {...actions}
+                  />
+                );
+              })}
+            </div>
+          ))}
         </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="end-time" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            End Time <span className="text-red-400">*</span>
-          </Label>
-          <Input
-            id="end-time"
-            type="time"
-            value={formData.end_time}
-            onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))}
-            disabled={isLoading}
-            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-          />
-        </div>
-      </div>
-
-      {/* Academic Year and Classroom */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="academic-year" className="text-slate-300 text-sm font-medium flex items-center gap-1">
-            Academic Year <span className="text-red-400">*</span>
-          </Label>
-          <Input
-            id="academic-year"
-            type="number"
-            value={formData.academic_year}
-            onChange={(e) => setFormData(prev => ({ 
-              ...prev, 
-              academic_year: parseInt(e.target.value) || new Date().getFullYear() 
-            }))}
-            min="2020"
-            max="2030"
-            disabled={isLoading}
-            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200"
-          />
-        </div>
-        
-        <div className="space-y-2">
-          <Label htmlFor="classroom" className="text-slate-300 text-sm font-medium">Classroom</Label>
-          <Input
-            id="classroom"
-            value={formData.classroom}
-            onChange={(e) => setFormData(prev => ({ ...prev, classroom: e.target.value }))}
-            placeholder="e.g., Room 101, Lab A"
-            disabled={isLoading}
-            className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
-          />
-        </div>
-      </div>
-
-      {/* Instructor */}
-      <div className="space-y-2">
-        <Label htmlFor="instructor" className="text-slate-300 text-sm font-medium">Instructor Name</Label>
-        <Input
-          id="instructor"
-          value={formData.instructor_name}
-          onChange={(e) => setFormData(prev => ({ ...prev, instructor_name: e.target.value }))}
-          placeholder="e.g., Dr. John Smith"
-          disabled={isLoading}
-          className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500"
-        />
-      </div>
-
-      {/* Notes */}
-      <div className="space-y-2">
-        <Label htmlFor="notes" className="text-slate-300 text-sm font-medium">Notes</Label>
-        <Textarea
-          id="notes"
-          value={formData.notes}
-          onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-          placeholder="Additional notes about this schedule..."
-          rows={3}
-          disabled={isLoading}
-          className="bg-slate-800/50 border-slate-700 text-white hover:bg-slate-700/50 hover:border-slate-600 focus:ring-2 focus:ring-blue-500/40 transition-all duration-200 placeholder:text-slate-500 resize-none"
-        />
       </div>
     </div>
   );
 };
 
-// Schedule Card Component
+interface CalendarEventProps extends ScheduleActionsProps {
+  item: PositionedSchedule;
+  style: React.CSSProperties;
+}
+
+const CalendarEvent: React.FC<CalendarEventProps> = ({ item, style, ...actions }) => {
+  const schedule = item.schedule;
+  const tone = toneFor(schedule.subject_id);
+  const compact = item.end - item.start < 45;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          style={style}
+          title={`${schedule.subject_name} · ${formatTimeLabel(schedule.start_time)} – ${formatTimeLabel(schedule.end_time)}`}
+          className={cn(
+            'absolute z-[1] overflow-hidden rounded border-l-4 px-2 py-1 text-left transition-colors duration-150 ease-fluent-standard focus-visible:z-[2]',
+            tone.block,
+            !schedule.is_active && 'opacity-60'
+          )}
+        >
+          <p className="truncate text-caption-strong text-text-primary">
+            {schedule.subject_name}
+          </p>
+          {!compact && (
+            <p className="truncate text-caption text-text-secondary tabular-nums">
+              {formatTimeLabel(schedule.start_time)} – {formatTimeLabel(schedule.end_time)}
+            </p>
+          )}
+          {!compact && (schedule.classroom || !schedule.is_active) && (
+            <p className="truncate text-caption text-text-muted">
+              {!schedule.is_active ? 'Inactive' : schedule.classroom}
+            </p>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 overflow-hidden p-0">
+        <SchedulePeek schedule={schedule} {...actions} />
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+/** Outlook-style peek card shown when an event is clicked. */
+const SchedulePeek: React.FC<ScheduleActionsProps & { schedule: Schedule }> = ({
+  schedule,
+  onEdit,
+  onDelete,
+  onToggleStatus,
+  isToggling
+}) => {
+  const tone = toneFor(schedule.subject_id);
+  return (
+    <div>
+      <div className="flex">
+        <div className={cn('w-1 shrink-0', tone.bar)} aria-hidden />
+        <div className="min-w-0 flex-1 space-y-3 p-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-subheading text-text-primary">{schedule.subject_name}</p>
+              <p className="font-mono text-caption text-text-muted">{schedule.subject_code}</p>
+            </div>
+            <Badge variant={schedule.is_active ? 'success' : 'secondary'} shape="pill" className="shrink-0">
+              {schedule.is_active ? 'Active' : 'Inactive'}
+            </Badge>
+          </div>
+          <ul className="space-y-2 text-body text-text-secondary">
+            <li className="flex items-start gap-2">
+              <Clock16Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+              <span>
+                <span className="capitalize">{schedule.day_of_week}</span>
+                {', '}
+                <span className="tabular-nums">
+                  {formatTimeLabel(schedule.start_time)} – {formatTimeLabel(schedule.end_time)}
+                </span>
+              </span>
+            </li>
+            <li className="flex items-start gap-2">
+              <BuildingMultiple20Regular className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" aria-hidden />
+              <span>
+                {schedule.faculty_name} · Semester {schedule.semester} · {schedule.academic_year}
+              </span>
+            </li>
+            {schedule.classroom && (
+              <li className="flex items-start gap-2">
+                <Location16Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+                <span>{schedule.classroom}</span>
+              </li>
+            )}
+            {schedule.instructor_name && (
+              <li className="flex items-start gap-2">
+                <Person16Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+                <span>{schedule.instructor_name}</span>
+              </li>
+            )}
+            <li className="flex items-start gap-2">
+              <Timer16Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+              <span className="tabular-nums">Duration: {schedule.duration_minutes} minutes</span>
+            </li>
+            {schedule.notes && (
+              <li className="flex items-start gap-2">
+                <Note16Regular className="mt-0.5 shrink-0 text-text-muted" aria-hidden />
+                <span className="text-text-muted">{schedule.notes}</span>
+              </li>
+            )}
+          </ul>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2 border-t border-border-subtle bg-surface-subtle px-4 py-2">
+        <label className="flex items-center gap-2 text-caption text-text-secondary">
+          <Switch
+            checked={schedule.is_active}
+            onCheckedChange={() => onToggleStatus(schedule.id)}
+            disabled={isToggling}
+            aria-label={schedule.is_active ? 'Deactivate schedule' : 'Activate schedule'}
+          />
+          {schedule.is_active ? 'Active' : 'Inactive'}
+        </label>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onEdit(schedule)}
+            className="h-8 w-8 p-0 text-text-secondary"
+            title="Edit schedule"
+            aria-label="Edit schedule"
+          >
+            <Edit20Regular aria-hidden />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onDelete(schedule.id)}
+            className="h-8 w-8 p-0 text-status-error hover:bg-status-error-subtle hover:text-status-error"
+            title="Delete schedule"
+            aria-label="Delete schedule"
+          >
+            <Delete20Regular aria-hidden />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Schedule Card Component (agenda list row)
 interface ScheduleCardProps {
   schedule: Schedule;
   onEdit: (schedule: Schedule) => void;
@@ -935,223 +1403,107 @@ const ScheduleCard: React.FC<ScheduleCardProps> = ({
       hour12: true
     });
   };
+  const tone = toneFor(schedule.subject_id);
 
   return (
-    <Card className={`group relative overflow-hidden transition-all duration-300 border ${
-      !schedule.is_active 
-        ? 'bg-slate-800/30 backdrop-blur-sm border-slate-700/30 opacity-75 hover:opacity-90' 
-        : 'bg-slate-800/40 backdrop-blur-sm border-slate-700/50 hover:border-slate-600/60 hover:shadow-2xl hover:shadow-blue-500/10'
-    }`}>
-      {/* Gradient accent on hover */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-indigo-500/0 to-purple-500/0 group-hover:from-blue-500/5 group-hover:via-indigo-500/5 group-hover:to-purple-500/5 transition-all duration-500"></div>
-      
-      <CardHeader className="pb-4 relative">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-          <div className="flex-1 space-y-3">
-            {/* Title and Code */}
-            <div className="flex flex-wrap items-center gap-3">
-              <CardTitle className={`text-xl font-bold transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-400' : 'text-white'
-              }`}>
-                {schedule.subject_name}
-              </CardTitle>
-              <Badge variant="secondary" className="bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors duration-200 font-mono text-xs px-2.5 py-0.5">
-                {schedule.subject_code}
-              </Badge>
-              <div className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all duration-300 ${
-                schedule.is_active 
-                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-emerald-500/10 shadow-sm' 
-                  : 'bg-slate-600/20 text-slate-400 border border-slate-600/30'
-              }`}>
-                {schedule.is_active ? 'Active' : 'Inactive'}
-              </div>
-            </div>
-            
-            {/* Meta Info */}
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className={`font-medium transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-              }`}>
-                {schedule.faculty_name}
-              </span>
-              <span className="text-slate-600">•</span>
-              <span className={`transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-              }`}>
-                Semester {schedule.semester}
-              </span>
-              <span className="text-slate-600">•</span>
-              <span className={`transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-              }`}>
-                {schedule.academic_year}
-              </span>
-            </div>
-          </div>
-          
-          {/* Action Buttons */}
-          <div className="flex gap-2 shrink-0">
-            {/* Toggle Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onToggleStatus(schedule.id)}
-              disabled={isToggling}
-              className={`group/toggle relative overflow-hidden transition-all duration-300 hover:scale-105 px-3 py-2 h-auto ${
-                schedule.is_active 
-                  ? 'hover:bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50' 
-                  : 'hover:bg-slate-600/10 border border-slate-600/30 hover:border-slate-600/50'
-              }`}
-              title={schedule.is_active ? 'Deactivate schedule' : 'Activate schedule'}
-            >
-              <div className={`flex items-center gap-2 transition-all duration-300 ${
-                isToggling ? 'animate-pulse' : ''
-              }`}>
-                <div className={`w-11 h-6 rounded-full relative transition-all duration-300 ${
-                  schedule.is_active 
-                    ? 'bg-emerald-500 shadow-emerald-500/30 shadow-sm' 
-                    : 'bg-slate-600'
-                }`}>
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${
-                    schedule.is_active 
-                      ? 'translate-x-6' 
-                      : 'translate-x-1'
-                  }`}></div>
-                </div>
-                <span className={`text-xs font-bold uppercase tracking-wide transition-colors duration-300 ${
-                  schedule.is_active ? 'text-emerald-400' : 'text-slate-400'
-                }`}>
-                  {schedule.is_active ? 'ON' : 'OFF'}
-                </span>
-              </div>
-            </Button>
-            
-            {/* Edit Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEdit(schedule)}
-              className="hover:bg-blue-500/10 text-slate-400 hover:text-blue-400 border border-blue-500/0 hover:border-blue-500/30 transition-all duration-200 h-auto p-2"
-              title="Edit schedule"
-            >
-              <Edit2 className="h-4 w-4" />
-            </Button>
-            
-            {/* Delete Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDelete(schedule.id)}
-              className="hover:bg-red-500/10 text-slate-400 hover:text-red-400 border border-red-500/0 hover:border-red-500/30 transition-all duration-200 h-auto p-2"
-              title="Delete schedule"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+    <div
+      className={cn(
+        'flex flex-col gap-3 px-4 py-3 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover sm:flex-row sm:items-center',
+        !schedule.is_active && 'bg-surface-subtle'
+      )}
+    >
+      <div className="flex min-w-0 flex-1 items-stretch gap-3">
+        <span className={cn('w-1 shrink-0 rounded-full', tone.bar, !schedule.is_active && 'opacity-50')} aria-hidden />
+
+        {/* Day & time */}
+        <div className="w-32 shrink-0">
+          <p className={cn('text-body-strong capitalize', schedule.is_active ? 'text-text-primary' : 'text-text-muted')}>
+            {schedule.day_of_week}
+          </p>
+          <p className="text-caption text-text-muted tabular-nums">
+            {formatTime(schedule.start_time)} – {formatTime(schedule.end_time)}
+          </p>
         </div>
-      </CardHeader>
-      
-      <CardContent className="pt-0 relative">
-        {/* Schedule Details Grid */}
-        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4 transition-colors duration-300 ${
-          !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-        }`}>
-          {/* Day */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
-            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
-              !schedule.is_active ? 'bg-slate-700/30' : 'bg-blue-500/10'
-            }`}>
-              <Calendar className={`h-5 w-5 transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-blue-400'
-              }`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Day</p>
-              <p className="font-semibold capitalize truncate">{schedule.day_of_week}</p>
-            </div>
+
+        {/* Subject & meta */}
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={cn('truncate text-body-strong', schedule.is_active ? 'text-text-primary' : 'text-text-muted')}>
+              {schedule.subject_name}
+            </span>
+            <Badge variant="outline" className="font-mono">
+              {schedule.subject_code}
+            </Badge>
+            <Badge variant={schedule.is_active ? 'success' : 'secondary'} shape="pill">
+              {schedule.is_active ? 'Active' : 'Inactive'}
+            </Badge>
           </div>
-          
-          {/* Time */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
-            <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
-              !schedule.is_active ? 'bg-slate-700/30' : 'bg-indigo-500/10'
-            }`}>
-              <Clock className={`h-5 w-5 transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-indigo-400'
-              }`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Time</p>
-              <p className="font-semibold text-sm truncate">{formatTime(schedule.start_time)} - {formatTime(schedule.end_time)}</p>
-            </div>
+          <p className="text-caption text-text-muted">
+            {schedule.faculty_name} · Semester {schedule.semester} · {schedule.academic_year}
+          </p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-caption text-text-secondary">
+            {schedule.classroom && (
+              <span className="inline-flex items-center gap-1">
+                <Location16Regular className="text-text-muted" aria-hidden />
+                {schedule.classroom}
+              </span>
+            )}
+            {schedule.instructor_name && (
+              <span className="inline-flex items-center gap-1">
+                <Person16Regular className="text-text-muted" aria-hidden />
+                {schedule.instructor_name}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 tabular-nums">
+              <Timer16Regular className="text-text-muted" aria-hidden />
+              Duration: {schedule.duration_minutes} minutes
+            </span>
           </div>
-          
-          {/* Classroom */}
-          {schedule.classroom && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
-                !schedule.is_active ? 'bg-slate-700/30' : 'bg-purple-500/10'
-              }`}>
-                <MapPin className={`h-5 w-5 transition-colors duration-300 ${
-                  !schedule.is_active ? 'text-slate-500' : 'text-purple-400'
-                }`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Location</p>
-                <p className="font-semibold truncate">{schedule.classroom}</p>
-              </div>
-            </div>
-          )}
-          
-          {/* Instructor */}
-          {schedule.instructor_name && (
-            <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30 hover:bg-slate-700/30 hover:border-slate-600/40 transition-all duration-200">
-              <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center transition-colors duration-300 ${
-                !schedule.is_active ? 'bg-slate-700/30' : 'bg-emerald-500/10'
-              }`}>
-                <User className={`h-5 w-5 transition-colors duration-300 ${
-                  !schedule.is_active ? 'text-slate-500' : 'text-emerald-400'
-                }`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-0.5">Instructor</p>
-                <p className="font-semibold truncate">{schedule.instructor_name}</p>
-              </div>
-            </div>
+          {schedule.notes && (
+            <p className="flex items-start gap-1 text-caption text-text-muted">
+              <Note16Regular className="mt-px shrink-0" aria-hidden />
+              <span>{schedule.notes}</span>
+            </p>
           )}
         </div>
-        
-        {/* Notes Section */}
-        {schedule.notes && (
-          <>
-            <Separator className="my-4 bg-slate-700/50" />
-            <div className={`flex items-start gap-3 p-3 rounded-lg bg-slate-700/10 border border-slate-700/20 transition-colors duration-300 ${
-              !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-            }`}>
-              <FileText className={`h-4 w-4 mt-0.5 flex-shrink-0 transition-colors duration-300 ${
-                !schedule.is_active ? 'text-slate-500' : 'text-slate-400'
-              }`} />
-              <div className="flex-1">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium mb-1">Notes</p>
-                <p className={`text-sm leading-relaxed transition-colors duration-300 ${
-                  !schedule.is_active ? 'text-slate-500' : 'text-slate-300'
-                }`}>
-                  {schedule.notes}
-                </p>
-              </div>
-            </div>
-          </>
-        )}
-        
-        {/* Duration Badge */}
-        <div className="mt-4 flex justify-end">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-700/30 border border-slate-700/40 text-xs font-medium text-slate-400">
-            <Clock className="h-3 w-3" />
-            Duration: {schedule.duration_minutes} minutes
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-1 pl-4 sm:pl-2">
+        <label
+          className="mr-1 flex items-center gap-2 text-caption text-text-secondary"
+          title={schedule.is_active ? 'Deactivate schedule' : 'Activate schedule'}
+        >
+          <Switch
+            checked={schedule.is_active}
+            onCheckedChange={() => onToggleStatus(schedule.id)}
+            disabled={isToggling}
+            aria-label={schedule.is_active ? 'Deactivate schedule' : 'Activate schedule'}
+          />
+          <span className="w-6">{schedule.is_active ? 'On' : 'Off'}</span>
+        </label>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onEdit(schedule)}
+          className="h-8 w-8 p-0 text-text-secondary"
+          title="Edit schedule"
+          aria-label="Edit schedule"
+        >
+          <Edit20Regular aria-hidden />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDelete(schedule.id)}
+          className="h-8 w-8 p-0 text-text-secondary hover:bg-status-error-subtle hover:text-status-error"
+          title="Delete schedule"
+          aria-label="Delete schedule"
+        >
+          <Delete20Regular aria-hidden />
+        </Button>
+      </div>
+    </div>
   );
 };
 
@@ -1160,40 +1512,21 @@ export default ScheduleManagement;
 // Skeleton Loading Component
 const ScheduleCardSkeleton: React.FC = () => {
   return (
-    <Card className="animate-pulse bg-slate-800/40 backdrop-blur-sm border-slate-700/50">
-      <CardHeader className="pb-4">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
-          <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-7 bg-slate-700/50 rounded-lg w-48"></div>
-              <div className="h-6 bg-slate-700/50 rounded-full w-16"></div>
-              <div className="h-6 bg-slate-700/50 rounded-full w-20"></div>
-            </div>
-            <div className="h-4 bg-slate-700/50 rounded w-64"></div>
-          </div>
-          <div className="flex gap-2">
-            <div className="h-10 w-20 bg-slate-700/50 rounded-lg"></div>
-            <div className="h-10 w-10 bg-slate-700/50 rounded-lg"></div>
-            <div className="h-10 w-10 bg-slate-700/50 rounded-lg"></div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/20 border border-slate-700/30">
-              <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex-shrink-0"></div>
-              <div className="flex-1 space-y-2">
-                <div className="h-3 bg-slate-700/50 rounded w-12"></div>
-                <div className="h-4 bg-slate-700/50 rounded w-20"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="flex justify-end">
-          <div className="h-7 bg-slate-700/50 rounded-full w-40"></div>
-        </div>
-      </CardContent>
-    </Card>
+    <div className="flex animate-pulse items-center gap-3 px-4 py-3" aria-hidden>
+      <div className="h-12 w-1 rounded-full bg-surface-pressed" />
+      <div className="w-32 space-y-2">
+        <div className="h-3.5 w-20 rounded bg-surface-pressed" />
+        <div className="h-3 w-24 rounded bg-surface-subtle" />
+      </div>
+      <div className="flex-1 space-y-2">
+        <div className="h-3.5 w-48 rounded bg-surface-pressed" />
+        <div className="h-3 w-64 rounded bg-surface-subtle" />
+      </div>
+      <div className="flex gap-2">
+        <div className="h-6 w-11 rounded-full bg-surface-subtle" />
+        <div className="h-8 w-8 rounded bg-surface-subtle" />
+        <div className="h-8 w-8 rounded bg-surface-subtle" />
+      </div>
+    </div>
   );
 };

@@ -1,26 +1,25 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { 
-  BarChart3, 
-  PieChart, 
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Calendar,
-  Clock,
-  Target,
-  Award,
-  AlertTriangle,
-  Download,
-  Filter,
-  Eye,
-  ChevronRight
-} from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/integrations/api/client';
+import {
+  DataBarVertical16Regular,
+  DataBarVertical20Regular,
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  ArrowTrending20Regular,
+  ArrowTrendingDown20Regular,
+  People16Regular,
+  CalendarLtr16Regular,
+  Clock16Regular,
+  Target16Regular,
+  Target20Regular,
+  Trophy16Regular,
+  Warning20Regular,
+  ArrowDownload16Regular,
+  Filter16Regular,
+  ChevronRight12Regular,
+} from '@fluentui/react-icons';
 
 interface AttendanceAnalyticsProps {
   className?: string;
@@ -99,130 +98,146 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
   const [activeTab, setActiveTab] = useState<'overview' | 'trends' | 'insights'>('overview');
 
   const getAttendanceColor = (rate: number) => {
-    if (rate >= 90) return 'text-green-400';
-    if (rate >= 75) return 'text-yellow-400';
-    return 'text-red-400';
+    if (rate >= 90) return 'text-status-success';
+    if (rate >= 75) return 'text-status-warning';
+    return 'text-status-error';
   };
 
   const getInsightIcon = (type: string) => {
     switch (type) {
       case 'positive':
-        return <TrendingUp className="h-4 w-4 text-green-400" />;
+        return <ArrowTrending20Regular className="shrink-0 text-status-success" aria-hidden />;
       case 'warning':
-        return <AlertTriangle className="h-4 w-4 text-yellow-400" />;
+        return <Warning20Regular className="shrink-0 text-status-warning" aria-hidden />;
       case 'negative':
-        return <TrendingDown className="h-4 w-4 text-red-400" />;
+        return <ArrowTrendingDown20Regular className="shrink-0 text-status-error" aria-hidden />;
       default:
-        return <Target className="h-4 w-4 text-blue-400" />;
+        return <Target20Regular className="shrink-0 text-status-info" aria-hidden />;
+    }
+  };
+
+  /** MessageBar tone per insight type. */
+  const getInsightTone = (type: string) => {
+    switch (type) {
+      case 'positive':
+        return 'bg-status-success-subtle border-status-success-border';
+      case 'warning':
+        return 'bg-status-warning-subtle border-status-warning-border';
+      case 'negative':
+        return 'bg-status-error-subtle border-status-error-border';
+      default:
+        return 'bg-status-info-subtle border-status-info-border';
     }
   };
 
   return (
-    <Card className={`bg-slate-900/60 backdrop-blur-md border-slate-700/50 ${className}`}>
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
+    <Card className={className}>
+      <CardHeader className="pb-0">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-action-primary flex items-center justify-center">
-              <BarChart3 className="h-4 w-4 text-white" />
+            <div className="h-10 w-10 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+              <DataBarVertical20Regular aria-hidden />
             </div>
             <div>
-              <CardTitle className="text-lg text-white">Attendance Analytics</CardTitle>
-              <p className="text-sm text-slate-400">Comprehensive insights and trends</p>
+              <CardTitle>Attendance Analytics</CardTitle>
+              <p className="text-caption text-text-muted mt-0.5">Comprehensive insights and trends</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-              <Filter className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm">
+              <Filter16Regular aria-hidden />
               Filter
             </Button>
-            <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-              <Download className="h-4 w-4 mr-2" />
+            <Button variant="outline" size="sm">
+              <ArrowDownload16Regular aria-hidden />
               Export
             </Button>
           </div>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1 bg-slate-800/50 p-1 rounded-lg mt-4">
+        {/* Tab Navigation — Fluent TabList (underline indicator) */}
+        <div role="tablist" className="flex items-center gap-1 border-b border-border-subtle mt-4 -mx-5 px-3 overflow-x-auto">
           {[
-            { id: 'overview', label: 'Overview', icon: BarChart3 },
-            { id: 'trends', label: 'Trends', icon: TrendingUp },
-            { id: 'insights', label: 'Insights', icon: Target }
+            { id: 'overview', label: 'Overview', icon: DataBarVertical16Regular },
+            { id: 'trends', label: 'Trends', icon: ArrowTrending16Regular },
+            { id: 'insights', label: 'Insights', icon: Target16Regular }
           ].map((tab) => (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id as 'overview' | 'trends' | 'insights')}
-              className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`relative flex items-center gap-1.5 px-3 py-3 text-body transition-colors duration-150 ease-fluent-standard after:absolute after:left-3 after:right-3 after:-bottom-px after:h-[3px] after:rounded-full after:transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-action-primary text-white shadow-xs'
-                  : 'text-slate-300 hover:text-white hover:bg-slate-700/50'
+                  ? 'text-text-primary font-semibold after:bg-brand'
+                  : 'text-text-secondary hover:text-text-primary after:bg-transparent hover:after:bg-border-default'
               }`}
             >
-              <tab.icon className="h-4 w-4" />
+              <tab.icon className={`shrink-0 ${activeTab === tab.id ? 'text-brand-foreground' : ''}`} aria-hidden />
               {tab.label}
             </button>
           ))}
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-6 pt-5">
         {activeTab === 'overview' && (
           <>
             {/* Key Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="p-3 rounded-lg bg-slate-800/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Users className="h-4 w-4 text-blue-400" />
-                  <span className="text-xs text-slate-400">Total Students</span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="p-3 rounded-md bg-surface-subtle border border-border-subtle">
+                <div className="flex items-center gap-2 mb-1">
+                  <People16Regular className="shrink-0 text-brand-foreground" aria-hidden />
+                  <span className="text-caption text-text-muted">Total Students</span>
                 </div>
-                <p className="text-xl font-bold text-white">{data.totalStudents}</p>
+                <p className="text-section-title tabular-nums text-text-primary">{data.totalStudents}</p>
               </div>
-              
-              <div className="p-3 rounded-lg bg-slate-800/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Calendar className="h-4 w-4 text-green-400" />
-                  <span className="text-xs text-slate-400">Present Today</span>
+
+              <div className="p-3 rounded-md bg-surface-subtle border border-border-subtle">
+                <div className="flex items-center gap-2 mb-1">
+                  <CalendarLtr16Regular className="shrink-0 text-status-success" aria-hidden />
+                  <span className="text-caption text-text-muted">Present Today</span>
                 </div>
-                <p className="text-xl font-bold text-white">{data.presentToday}</p>
+                <p className="text-section-title tabular-nums text-text-primary">{data.presentToday}</p>
               </div>
-              
-              <div className="p-3 rounded-lg bg-slate-800/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Target className="h-4 w-4 text-purple-400" />
-                  <span className="text-xs text-slate-400">Attendance Rate</span>
+
+              <div className="p-3 rounded-md bg-surface-subtle border border-border-subtle">
+                <div className="flex items-center gap-2 mb-1">
+                  <Target16Regular className="shrink-0 text-brand-foreground" aria-hidden />
+                  <span className="text-caption text-text-muted">Attendance Rate</span>
                 </div>
-                <p className={`text-xl font-bold ${getAttendanceColor(data.attendanceRate)}`}>
+                <p className={`text-section-title tabular-nums ${getAttendanceColor(data.attendanceRate)}`}>
                   {data.attendanceRate}%
                 </p>
               </div>
-              
-              <div className="p-3 rounded-lg bg-slate-800/50">
-                <div className="flex items-center gap-2 mb-2">
-                  <Clock className="h-4 w-4 text-amber-400" />
-                  <span className="text-xs text-slate-400">Weekly Trend</span>
+
+              <div className="p-3 rounded-md bg-surface-subtle border border-border-subtle">
+                <div className="flex items-center gap-2 mb-1">
+                  <Clock16Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <span className="text-caption text-text-muted">Weekly Trend</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <p className={`text-xl font-bold ${data.weeklyTrend > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <p className={`text-section-title tabular-nums ${data.weeklyTrend > 0 ? 'text-status-success' : 'text-status-error'}`}>
                     {data.weeklyTrend > 0 ? '+' : ''}{data.weeklyTrend}%
                   </p>
                   {data.weeklyTrend > 0 ? (
-                    <TrendingUp className="h-3 w-3 text-green-400" />
+                    <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />
                   ) : (
-                    <TrendingDown className="h-3 w-3 text-red-400" />
+                    <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />
                   )}
                 </div>
               </div>
             </div>
 
             {/* Attendance Rate Progress */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Today's Attendance Progress</span>
-                <span className="text-sm font-medium text-white">
+                <span className="text-body text-text-secondary">Today's Attendance Progress</span>
+                <span className="text-body-strong text-text-primary tabular-nums">
                   {data.presentToday} / {data.totalStudents}
                 </span>
               </div>
-              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-3" />
+              <Progress value={(data.presentToday / data.totalStudents) * 100} className="h-1.5" />
             </div>
           </>
         )}
@@ -231,26 +246,26 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
           <>
             {/* Weekly Data */}
             <div className="space-y-4">
-              <h4 className="text-sm font-medium text-white">Weekly Attendance Pattern</h4>
+              <h4 className="text-body-strong text-text-primary">Weekly Attendance Pattern</h4>
               {data.weeklyData.map((day) => (
-                <div key={day.day} className="space-y-2">
+                <div key={day.day} className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-300">{day.day}</span>
-                    <span className="text-sm text-white">
+                    <span className="text-body text-text-secondary">{day.day}</span>
+                    <span className="text-caption text-text-muted tabular-nums">
                       {day.present + day.absent + day.late} students
                     </span>
                   </div>
-                  <div className="flex rounded-lg overflow-hidden h-2">
-                    <div 
-                      className="bg-green-500" 
+                  <div className="flex gap-px rounded-sm overflow-hidden h-2 bg-surface-selected">
+                    <div
+                      className="bg-status-success"
                       style={{ width: `${(day.present / (day.present + day.absent + day.late)) * 100}%` }}
                     />
-                    <div 
-                      className="bg-yellow-500" 
+                    <div
+                      className="bg-status-warning"
                       style={{ width: `${(day.late / (day.present + day.absent + day.late)) * 100}%` }}
                     />
-                    <div 
-                      className="bg-red-500" 
+                    <div
+                      className="bg-status-error"
                       style={{ width: `${(day.absent / (day.present + day.absent + day.late)) * 100}%` }}
                     />
                   </div>
@@ -259,18 +274,18 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
             </div>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-green-500 rounded"></div>
-                <span className="text-slate-400">Present</span>
+            <div className="flex items-center gap-4 text-caption">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 bg-status-success rounded-sm"></div>
+                <span className="text-text-muted">Present</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                <span className="text-slate-400">Late</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 bg-status-warning rounded-sm"></div>
+                <span className="text-text-muted">Late</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded"></div>
-                <span className="text-slate-400">Absent</span>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 bg-status-error rounded-sm"></div>
+                <span className="text-text-muted">Absent</span>
               </div>
             </div>
           </>
@@ -279,42 +294,44 @@ const AttendanceAnalytics: React.FC<AttendanceAnalyticsProps> = ({ className = '
         {activeTab === 'insights' && (
           <>
             {/* Top Performers */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white flex items-center gap-2">
-                <Award className="h-4 w-4 text-yellow-400" />
+            <div className="space-y-2">
+              <h4 className="text-body-strong text-text-primary flex items-center gap-2">
+                <Trophy16Regular className="shrink-0 text-text-muted" aria-hidden />
                 Top Performers
               </h4>
-              {data.topPerformers.map((student, index) => (
-                <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center">
-                      <span className="text-sm font-bold text-white">{index + 1}</span>
+              <div className="-mx-3">
+                {data.topPerformers.map((student, index) => (
+                  <div key={index} className="flex items-center justify-between px-3 py-2 rounded-md hover:bg-surface-hover transition-colors duration-150 ease-fluent-standard">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-brand-subtle text-brand-foreground grid place-items-center">
+                        <span className="text-caption-strong tabular-nums">{index + 1}</span>
+                      </div>
+                      <span className="text-body-strong text-text-primary">{student.name}</span>
                     </div>
-                    <span className="text-sm text-white">{student.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-body-strong text-status-success tabular-nums">{student.rate}%</span>
+                      {student.trend === 'up' && <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />}
+                      {student.trend === 'down' && <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-green-400">{student.rate}%</span>
-                    {student.trend === 'up' && <TrendingUp className="h-3 w-3 text-green-400" />}
-                    {student.trend === 'down' && <TrendingDown className="h-3 w-3 text-red-400" />}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
             {/* Insights */}
-            <div className="space-y-3">
-              <h4 className="text-sm font-medium text-white">AI Insights</h4>
+            <div className="space-y-2">
+              <h4 className="text-body-strong text-text-primary">AI Insights</h4>
               {data.insights.map((insight, index) => (
-                <div key={index} className="p-4 rounded-lg bg-slate-800/50 border-l-4 border-purple-500">
+                <div key={index} className={`rounded-md border px-3 py-2.5 ${getInsightTone(insight.type)}`}>
                   <div className="flex items-start gap-3">
-                    {getInsightIcon(insight.type)}
-                    <div className="flex-1">
-                      <h5 className="text-sm font-medium text-white mb-1">{insight.title}</h5>
-                      <p className="text-xs text-slate-400 mb-2">{insight.description}</p>
+                    <span className="mt-0.5">{getInsightIcon(insight.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <h5 className="text-body-strong text-text-primary">{insight.title}</h5>
+                      <p className="text-body text-text-secondary mt-0.5">{insight.description}</p>
                       {insight.action && (
-                        <button className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1">
+                        <button className="mt-1.5 text-body text-brand-foreground hover:text-brand-foreground-hover hover:underline underline-offset-2 inline-flex items-center gap-1 transition-colors duration-150">
                           {insight.action}
-                          <ChevronRight className="h-3 w-3" />
+                          <ChevronRight12Regular aria-hidden />
                         </button>
                       )}
                     </div>

@@ -4,22 +4,23 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
-import { 
-  Activity, 
-  Users, 
-  Clock, 
-  Zap,
-  TrendingUp,
-  TrendingDown,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
-  CheckCircle,
-  RefreshCw,
-  Database,
-  Monitor,
-  HardDrive
-} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Pulse20Regular,
+  People20Regular,
+  Clock20Regular,
+  Flash20Regular,
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  Wifi120Regular,
+  WifiOff20Regular,
+  Warning16Regular,
+  CheckmarkCircle16Regular,
+  ArrowSync16Regular,
+  Database20Regular,
+  Desktop16Regular,
+  HardDrive16Regular,
+} from '@fluentui/react-icons';
 
 interface RealTimeStatsProps {
   className?: string;
@@ -134,114 +135,118 @@ const RealTimeStats: React.FC<RealTimeStatsProps> = ({ className = '' }) => {
   };
 
   const getStatusColor = (load: number) => {
-    if (load < 30) return 'text-green-400';
-    if (load < 70) return 'text-yellow-400';
-    return 'text-red-400';
+    if (load < 30) return 'text-status-success';
+    if (load < 70) return 'text-status-warning';
+    return 'text-status-error';
   };
 
   const getLoadColor = (load: number) => {
-    if (load < 30) return 'from-green-500 to-emerald-600';
-    if (load < 70) return 'from-yellow-500 to-orange-600';
-    return 'from-red-500 to-red-600';
+    if (load < 30) return 'bg-status-success';
+    if (load < 70) return 'bg-status-warning';
+    return 'bg-status-error';
   };
 
   return (
-    <Card className={`bg-slate-900/60 backdrop-blur-md border-slate-700/50 ${className}`}>
-      <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
+    <Card className={`border-0 shadow overflow-hidden ${className}`}>
+      <CardHeader className="border-b border-border-subtle px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-              <Activity className="h-4 w-4 text-white" />
+            <div className="grid h-9 w-9 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <Pulse20Regular aria-hidden />
             </div>
             <div>
-              <CardTitle className="text-lg text-white">System Status</CardTitle>
-              <p className="text-sm text-slate-400">Real-time monitoring</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              {stats.isConnected ? (
-                <Wifi className="h-4 w-4 text-green-400" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-red-400" />
-              )}
-              <Badge className={stats.isConnected ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}>
-                {stats.isConnected ? 'Connected' : 'Disconnected'}
-              </Badge>
-            </div>
-            <button
-              onClick={handleRefresh}
-              disabled={isLoading}
-              className="p-2 rounded-lg hover:bg-slate-800/50 transition-colors"
-            >
-              <RefreshCw className={`h-4 w-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Online Users */}
-        <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-              <Users className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">Active Users</p>
-              <p className="text-2xl font-bold text-white">
-                {stats.onlineUsers}
-                <span className="text-sm text-slate-400 font-normal ml-1">/ {stats.totalUsers}</span>
+              <CardTitle className="text-subheading text-text-primary">System Status</CardTitle>
+              <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                <span
+                  className={`h-2 w-2 rounded-full ${stats.isConnected ? 'animate-pulse bg-status-success' : 'bg-presence-offline'}`}
+                  aria-hidden
+                />
+                Real-time monitoring
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="flex items-center gap-1 text-green-400">
-              <TrendingUp className="h-3 w-3" />
-              <span className="text-xs">+12%</span>
+          <div className="flex items-center gap-1">
+            <Badge variant={stats.isConnected ? 'success' : 'destructive'} shape="pill" className="gap-1">
+              {stats.isConnected ? (
+                <Wifi120Regular className="h-4 w-4" aria-hidden />
+              ) : (
+                <WifiOff20Regular className="h-4 w-4" aria-hidden />
+              )}
+              {stats.isConnected ? 'Connected' : 'Disconnected'}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={handleRefresh}
+              disabled={isLoading}
+              aria-label="Refresh"
+              className="text-text-muted hover:text-text-primary"
+            >
+              <ArrowSync16Regular className={isLoading ? 'animate-spin' : ''} aria-hidden />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="divide-y divide-border-subtle p-0">
+        {/* Online Users */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <People20Regular aria-hidden />
             </div>
+            <div>
+              <p className="text-caption text-text-muted">Active Users</p>
+              <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
+                {stats.onlineUsers}
+                <span className="ml-1 text-body font-normal text-text-muted">/ {stats.totalUsers}</span>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-caption-strong text-status-success">
+            <ArrowTrending16Regular aria-hidden />
+            <span>+12%</span>
           </div>
         </div>
 
         {/* System Load */}
-        <div className="space-y-3">
+        <div className="space-y-2 px-5 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Zap className={`h-4 w-4 ${getStatusColor(stats.systemLoad)}`} />
-              <span className="text-sm text-slate-300">System Load</span>
+              <Flash20Regular className={getStatusColor(stats.systemLoad)} aria-hidden />
+              <span className="text-body text-text-secondary">System Load</span>
             </div>
-            <span className={`text-sm font-medium ${getStatusColor(stats.systemLoad)}`}>
+            <span className={`text-body-strong tabular-nums ${getStatusColor(stats.systemLoad)}`}>
               {stats.systemLoad}%
             </span>
           </div>
-          <div className="relative">
-            <Progress value={stats.systemLoad} className="h-2" />
-            <div 
-              className={`absolute top-0 left-0 h-2 rounded-full bg-gradient-to-r ${getLoadColor(stats.systemLoad)} transition-all`}
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-surface-subtle">
+            <div
+              className={`absolute left-0 top-0 h-full rounded-full ${getLoadColor(stats.systemLoad)} transition-all duration-300 ease-fluent-standard`}
               style={{ width: `${stats.systemLoad}%` }}
             />
           </div>
         </div>
 
         {/* Response Time */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-          <div className="flex items-center gap-3">
-            <Clock className="h-4 w-4 text-purple-400" />
-            <span className="text-sm text-slate-300">Response Time</span>
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2">
+            <Clock20Regular className="text-text-muted" aria-hidden />
+            <span className="text-body text-text-secondary">Response Time</span>
           </div>
           <div className="text-right">
-            <span className="text-lg font-bold text-white">
+            <span className="text-subheading tabular-nums text-text-primary">
               {stats.responseTime > 0 ? `${stats.responseTime.toFixed(2)}s` : 'N/A'}
             </span>
-            <div className={`flex items-center gap-1 ${stats.responseTime > 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <div className={`flex items-center justify-end gap-1 text-caption ${stats.responseTime > 0 ? 'text-status-success' : 'text-status-error'}`}>
               {stats.responseTime > 0 ? (
                 <>
-                  <TrendingDown className="h-3 w-3" />
-                  <span className="text-xs">Fast</span>
+                  <ArrowTrendingDown16Regular aria-hidden />
+                  <span>Fast</span>
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="h-3 w-3" />
-                  <span className="text-xs">No Data</span>
+                  <Warning16Regular aria-hidden />
+                  <span>No Data</span>
                 </>
               )}
             </div>
@@ -249,34 +254,32 @@ const RealTimeStats: React.FC<RealTimeStatsProps> = ({ className = '' }) => {
         </div>
 
         {/* Database Response Time */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-              <Database className="h-5 w-5 text-white" />
-            </div>
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2">
+            <Database20Regular className="text-text-muted" aria-hidden />
             <div>
-              <p className="text-sm text-slate-400">Database Response</p>
-              <p className="text-lg font-bold text-white">
-                {stats.dbResponseTime > 0 ? `${stats.dbResponseTime.toFixed(1)}ms` : 'N/A'}
-              </p>
+              <p className="text-body text-text-secondary">Database Response</p>
             </div>
           </div>
           <div className="text-right">
-            <div className={`flex items-center gap-1 ${stats.dbResponseTime > 0 && stats.dbResponseTime < 50 ? 'text-green-400' : 'text-yellow-400'}`}>
+            <p className="text-subheading tabular-nums text-text-primary">
+              {stats.dbResponseTime > 0 ? `${stats.dbResponseTime.toFixed(1)}ms` : 'N/A'}
+            </p>
+            <div className={`flex items-center justify-end gap-1 text-caption ${stats.dbResponseTime > 0 && stats.dbResponseTime < 50 ? 'text-status-success' : 'text-status-warning'}`}>
               {stats.dbResponseTime > 0 && stats.dbResponseTime < 50 ? (
                 <>
-                  <TrendingDown className="h-3 w-3" />
-                  <span className="text-xs">Fast</span>
+                  <ArrowTrendingDown16Regular aria-hidden />
+                  <span>Fast</span>
                 </>
               ) : stats.dbResponseTime > 0 ? (
                 <>
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="text-xs">Slow</span>
+                  <ArrowTrending16Regular aria-hidden />
+                  <span>Slow</span>
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="h-3 w-3" />
-                  <span className="text-xs">No Data</span>
+                  <Warning16Regular aria-hidden />
+                  <span>No Data</span>
                 </>
               )}
             </div>
@@ -284,60 +287,56 @@ const RealTimeStats: React.FC<RealTimeStatsProps> = ({ className = '' }) => {
         </div>
 
         {/* Memory & Disk Usage */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-lg bg-slate-800/50">
-            <div className="flex items-center gap-2 mb-2">
-              <Monitor className="h-4 w-4 text-blue-400" />
-              <span className="text-sm text-slate-300">Memory</span>
+        <div className="grid grid-cols-2 divide-x divide-border-subtle">
+          <div className="px-5 py-3">
+            <div className="mb-1 flex items-center gap-2">
+              <Desktop16Regular className="text-text-muted" aria-hidden />
+              <span className="text-caption text-text-muted">Memory</span>
             </div>
-            <div className="text-right">
-              <span className={`text-lg font-bold ${stats.memoryUsage > 80 ? 'text-red-400' : stats.memoryUsage > 60 ? 'text-yellow-400' : 'text-green-400'}`}>
-                {stats.memoryUsage.toFixed(1)}%
-              </span>
-            </div>
+            <span className={`text-subheading tabular-nums ${stats.memoryUsage > 80 ? 'text-status-error' : stats.memoryUsage > 60 ? 'text-status-warning' : 'text-status-success'}`}>
+              {stats.memoryUsage.toFixed(1)}%
+            </span>
           </div>
-          
-          <div className="p-3 rounded-lg bg-slate-800/50">
-            <div className="flex items-center gap-2 mb-2">
-              <HardDrive className="h-4 w-4 text-purple-400" />
-              <span className="text-sm text-slate-300">Disk</span>
+
+          <div className="px-5 py-3">
+            <div className="mb-1 flex items-center gap-2">
+              <HardDrive16Regular className="text-text-muted" aria-hidden />
+              <span className="text-caption text-text-muted">Disk</span>
             </div>
-            <div className="text-right">
-              <span className={`text-lg font-bold ${stats.diskUsage > 85 ? 'text-red-400' : stats.diskUsage > 70 ? 'text-yellow-400' : 'text-green-400'}`}>
-                {stats.diskUsage.toFixed(1)}%
-              </span>
-            </div>
+            <span className={`text-subheading tabular-nums ${stats.diskUsage > 85 ? 'text-status-error' : stats.diskUsage > 70 ? 'text-status-warning' : 'text-status-success'}`}>
+              {stats.diskUsage.toFixed(1)}%
+            </span>
           </div>
         </div>
 
         {/* Processing Queue */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-          <div className="flex items-center gap-3">
-            <div className={`h-3 w-3 rounded-full ${stats.processingQueue > 5 ? 'bg-amber-400 animate-pulse' : 'bg-green-400'}`}></div>
-            <span className="text-sm text-slate-300">Processing Queue</span>
+        <div className="flex items-center justify-between px-5 py-3">
+          <div className="flex items-center gap-2">
+            <div className={`h-2.5 w-2.5 rounded-full ${stats.processingQueue > 5 ? 'animate-pulse bg-status-warning' : 'bg-status-success'}`}></div>
+            <span className="text-body text-text-secondary">Processing Queue</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold text-white">{stats.processingQueue}</span>
+            <span className="text-subheading tabular-nums text-text-primary">{stats.processingQueue}</span>
             {stats.processingQueue > 5 ? (
-              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <Warning16Regular className="text-status-warning" aria-hidden />
             ) : (
-              <CheckCircle className="h-4 w-4 text-green-400" />
+              <CheckmarkCircle16Regular className="text-status-success" aria-hidden />
             )}
           </div>
         </div>
 
         {/* Uptime */}
-        <div className="pt-3 border-t border-slate-700/50">
+        <div className="bg-surface-subtle px-5 py-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-slate-400">System Uptime</span>
-            <span className={`text-sm font-medium ${
-              stats.uptime === 'Checking...' ? 'text-yellow-400' :
-              stats.uptime === '0%' ? 'text-red-400' : 'text-green-400'
+            <span className="text-body text-text-secondary">System Uptime</span>
+            <span className={`text-body-strong tabular-nums ${
+              stats.uptime === 'Checking...' ? 'text-status-warning' :
+              stats.uptime === '0%' ? 'text-status-error' : 'text-status-success'
             }`}>
               {stats.uptime}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="mt-0.5 text-caption text-text-muted">
             Last updated: {stats.lastUpdated.toLocaleTimeString()}
           </p>
         </div>

@@ -3,14 +3,24 @@ import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Fluent 2 MessageBar. Tinted status background + matching stroke; the icon
+ * (first child svg) takes the status color while text stays primary.
+ */
 const alertVariants = cva(
-  "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
+  "relative w-full rounded-md border px-3 py-2.5 text-body text-text-primary [&>svg~*]:pl-7 [&>svg]:absolute [&>svg]:left-3 [&>svg]:top-3 [&>svg]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-background text-foreground",
+        default:
+          "border-border-subtle bg-surface-subtle [&>svg]:text-text-secondary",
         destructive:
-          "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
+          "border-status-error-border bg-status-error-subtle [&>svg]:text-status-error",
+        success:
+          "border-status-success-border bg-status-success-subtle [&>svg]:text-status-success",
+        warning:
+          "border-status-warning-border bg-status-warning-subtle [&>svg]:text-status-warning",
+        info: "border-status-info-border bg-status-info-subtle [&>svg]:text-status-info",
       },
     },
     defaultVariants: {
@@ -38,7 +48,7 @@ const AlertTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h5
     ref={ref}
-    className={cn("mb-1 font-medium leading-none tracking-tight", className)}
+    className={cn("mb-0.5 text-body-strong text-text-primary", className)}
     {...props}
   />
 ))
@@ -50,7 +60,7 @@ const AlertDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-sm [&_p]:leading-relaxed", className)}
+    className={cn("text-body text-text-primary [&_p]:leading-5", className)}
     {...props}
   />
 ))

@@ -6,21 +6,35 @@ import { api } from '@/integrations/api/client';
 import { AppShell, type NavGroup } from '@/components/layout/AppShell';
 import NotificationCenter from '@/components/NotificationCenter';
 import {
-  Dashboard,
-  UserMultiple,
-  Collaborate,
-  Calendar,
-  Notebook,
-  Enterprise,
-  Time,
-  ChartLine,
-  Activity,
-  SettingsAdjust,
-  Flash,
-  Notification,
-  Password,
-  Settings,
-} from '@carbon/icons-react';
+  Home20Regular,
+  Home20Filled,
+  People20Regular,
+  People20Filled,
+  PeopleTeam20Regular,
+  PeopleTeam20Filled,
+  CalendarLtr20Regular,
+  CalendarLtr20Filled,
+  ClipboardTaskListLtr20Regular,
+  ClipboardTaskListLtr20Filled,
+  BuildingMultiple20Regular,
+  BuildingMultiple20Filled,
+  Clock20Regular,
+  Clock20Filled,
+  DataTrending20Regular,
+  DataTrending20Filled,
+  Pulse20Regular,
+  Pulse20Filled,
+  CalendarSettings20Regular,
+  CalendarSettings20Filled,
+  Flash20Regular,
+  Flash20Filled,
+  Alert20Regular,
+  Alert20Filled,
+  Key20Regular,
+  Key20Filled,
+  Settings20Regular,
+  Settings20Filled,
+} from '@fluentui/react-icons';
 
 interface DashboardSidebarProps {
   children: React.ReactNode;
@@ -68,30 +82,30 @@ const DashboardSidebar = ({ children }: DashboardSidebarProps) => {
     {
       groupLabel: 'Navigation',
       items: [
-        { label: 'Dashboard', to: '/app', icon: Dashboard, end: true },
-        { label: 'Students', to: '/app/students', icon: UserMultiple, badge: students.length > 0 ? students.length.toString() : undefined },
-        { label: 'Teachers', to: '/app/teachers', icon: Collaborate, isNew: true },
-        { label: 'Academic Calendar', to: '/app/calendar', icon: Calendar, isNew: true },
-        { label: 'Attendance', to: '/app/attendance', icon: Notebook },
-        { label: 'Faculties', to: '/app/faculties', icon: Enterprise, badge: classes.length > 0 ? classes.length.toString() : undefined },
-        { label: 'Schedules', to: '/app/schedules', icon: Time },
+        { label: 'Dashboard', to: '/app', icon: Home20Regular, activeIcon: Home20Filled, end: true },
+        { label: 'Students', to: '/app/students', icon: People20Regular, activeIcon: People20Filled, badge: students.length > 0 ? students.length.toString() : undefined },
+        { label: 'Teachers', to: '/app/teachers', icon: PeopleTeam20Regular, activeIcon: PeopleTeam20Filled, isNew: true },
+        { label: 'Academic Calendar', to: '/app/calendar', icon: CalendarLtr20Regular, activeIcon: CalendarLtr20Filled, isNew: true },
+        { label: 'Attendance', to: '/app/attendance', icon: ClipboardTaskListLtr20Regular, activeIcon: ClipboardTaskListLtr20Filled },
+        { label: 'Faculties', to: '/app/faculties', icon: BuildingMultiple20Regular, activeIcon: BuildingMultiple20Filled, badge: classes.length > 0 ? classes.length.toString() : undefined },
+        { label: 'Schedules', to: '/app/schedules', icon: Clock20Regular, activeIcon: Clock20Filled },
       ]
     },
     {
       groupLabel: 'Analytics',
       items: [
-        { label: 'Analytics', to: '/app/analytics', icon: ChartLine, isNew: true },
-        { label: 'System Monitor', to: '/app/monitoring', icon: Activity, isNew: true },
+        { label: 'Analytics', to: '/app/analytics', icon: DataTrending20Regular, activeIcon: DataTrending20Filled, isNew: true },
+        { label: 'System Monitor', to: '/app/monitoring', icon: Pulse20Regular, activeIcon: Pulse20Filled, isNew: true },
       ]
     },
     {
       groupLabel: 'System',
       items: [
-        { label: 'Semester Setup', to: '/app/admin/semester-configuration', icon: SettingsAdjust, isNew: true },
-        { label: 'Auto-Absent Control', to: '/app/auto-absent', icon: Flash, isNew: true },
-        { label: 'Notifications', to: '/app/notifications', icon: Notification, isNew: true },
-        { label: 'Password Reset', to: '/app/tools/reset-link', icon: Password, isNew: true },
-        { label: 'Settings', to: '/app/settings', icon: Settings },
+        { label: 'Semester Setup', to: '/app/admin/semester-configuration', icon: CalendarSettings20Regular, activeIcon: CalendarSettings20Filled, isNew: true },
+        { label: 'Auto-Absent Control', to: '/app/auto-absent', icon: Flash20Regular, activeIcon: Flash20Filled, isNew: true },
+        { label: 'Notifications', to: '/app/notifications', icon: Alert20Regular, activeIcon: Alert20Filled, isNew: true },
+        { label: 'Password Reset', to: '/app/tools/reset-link', icon: Key20Regular, activeIcon: Key20Filled, isNew: true },
+        { label: 'Settings', to: '/app/settings', icon: Settings20Regular, activeIcon: Settings20Filled },
       ]
     }
   ];

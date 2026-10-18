@@ -8,9 +8,15 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import { EmptyState } from '@/components/feedback/EmptyState';
 import { ErrorState } from '@/components/feedback/ErrorState';
-import { ArrowUp, ArrowDown, ArrowsVertical } from '@carbon/icons-react';
+import {
+  ArrowSort16Regular,
+  ArrowSortDown16Regular,
+  ArrowSortUp16Regular,
+  Search16Regular,
+} from '@fluentui/react-icons';
 import { cn } from '@/lib/utils';
 
 export interface ColumnDef<T> {
@@ -40,6 +46,15 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   keyExtractor?: (row: T, index: number) => string | number;
   className?: string;
+  /* ---- optional Fluent DataGrid toolbar ---- */
+  /** Controlled search value; the search box renders when `onSearchChange` is set. */
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  /** Extra toolbar content shown after the search box (filters, chips…). */
+  toolbar?: React.ReactNode;
+  /** Right-aligned toolbar actions (buttons). */
+  actions?: React.ReactNode;
 }
 
 export function DataTable<T>({
@@ -57,14 +72,50 @@ export function DataTable<T>({
   onSort,
   onRowClick,
   keyExtractor,
-  className
+  className,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder = 'Search',
+  toolbar,
+  actions,
 }: DataTableProps<T>) {
   if (error) {
     return <ErrorState message={error} onRetry={onRetry} />;
   }
 
+  const hasToolbar = Boolean(onSearchChange || toolbar || actions);
+
   return (
-    <div className={cn("w-full overflow-hidden rounded-lg border border-border bg-surface-default", className)}>
+    <div
+      className={cn(
+        "w-full overflow-hidden rounded-lg border bg-surface-default shadow [--dt-stroke:transparent] dark:[--dt-stroke:var(--border-subtle)] border-[color:var(--dt-stroke)]",
+        className
+      )}
+    >
+      {hasToolbar && (
+        <div className="flex flex-col gap-2 border-b border-border-subtle px-3 py-2.5 sm:flex-row sm:items-center">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {onSearchChange && (
+              <div className="relative w-full sm:w-64">
+                <Search16Regular
+                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={searchValue ?? ''}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  aria-label={searchPlaceholder}
+                  className="pl-8"
+                />
+              </div>
+            )}
+            {toolbar}
+          </div>
+          {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
@@ -93,17 +144,23 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => onSort(col.id)}
-                        className="inline-flex items-center gap-1.5 hover:text-text-primary focus:outline-none focus:text-text-primary"
+                        className={cn(
+                          "group/sort -mx-1.5 inline-flex h-7 items-center gap-1 rounded-md px-1.5 transition-colors duration-150 hover:bg-surface-hover hover:text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-text-primary",
+                          isSorted && "text-text-primary"
+                        )}
                       >
                         <span>{col.header}</span>
                         {isSorted ? (
                           sortDirection === 'asc' ? (
-                            <ArrowUp size={14} className="text-action-primary" aria-hidden="true" />
+                            <ArrowSortUp16Regular className="text-brand-foreground" aria-hidden="true" />
                           ) : (
-                            <ArrowDown size={14} className="text-action-primary" aria-hidden="true" />
+                            <ArrowSortDown16Regular className="text-brand-foreground" aria-hidden="true" />
                           )
                         ) : (
-                          <ArrowsVertical size={14} className="text-text-muted/60" aria-hidden="true" />
+                          <ArrowSort16Regular
+                            className="text-text-muted opacity-0 transition-opacity group-hover/sort:opacity-100 group-focus-visible/sort:opacity-100"
+                            aria-hidden="true"
+                          />
                         )}
                       </button>
                     ) : (
@@ -127,13 +184,14 @@ export function DataTable<T>({
               ))
             ) : data.length === 0 ? (
               <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={columns.length} className="p-8 text-center">
+                <TableCell colSpan={columns.length} className="p-0">
                   <EmptyState
                     title={emptyTitle}
                     description={emptyDescription}
                     isFiltered={isFiltered}
                     actionLabel={isFiltered ? "Clear filters" : undefined}
                     onAction={isFiltered ? onClearFilters : undefined}
+                    className="rounded-none bg-transparent"
                   />
                 </TableCell>
               </TableRow>
@@ -144,8 +202,21 @@ export function DataTable<T>({
                   <TableRow
                     key={key}
                     onClick={() => onRowClick?.(row)}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.target !== e.currentTarget) return;
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowClick ? 0 : undefined}
                     className={cn(
-                      onRowClick && "cursor-pointer focus-within:bg-surface-subtle",
+                      onRowClick &&
+                        "cursor-pointer focus-visible:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-text-primary",
                       "group"
                     )}
                   >

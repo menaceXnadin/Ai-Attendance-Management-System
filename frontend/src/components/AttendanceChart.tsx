@@ -16,14 +16,26 @@ interface AttendanceChartProps {
   type?: 'bar' | 'pie' | 'line';
 }
 
+// Theme-aware semantic series colors (present / absent / late)
+const colorSet = ['var(--status-success)', 'var(--status-error)', 'var(--status-warning)'];
+
+const gridColor = 'var(--border-subtle)';
+const axisTick = { fill: 'var(--text-muted)', fontSize: 12 };
+const tooltipStyle: React.CSSProperties = {
+  background: 'var(--surface-raised)',
+  border: '1px solid var(--border-subtle)',
+  borderRadius: 8,
+  boxShadow: 'var(--shadow-16)',
+  color: 'var(--text-primary)',
+  fontSize: 12,
+};
+const tooltipLabelStyle: React.CSSProperties = { color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 };
+const tooltipItemStyle: React.CSSProperties = { color: 'var(--text-secondary)' };
+const legendFormatter = (value: string) => (
+  <span style={{ color: 'var(--text-secondary)', fontSize: 12, textTransform: 'capitalize' }}>{value}</span>
+);
+
 const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceChartProps) => {
-  // Always use dark theme colors
-  const colorSet = ['#22c55e', '#ef4444', '#f59e0b']; // green-500, red-500, amber-500
-  
-  // Dark theme colors
-  const gridColor = '#374151';
-  const textColor = '#f9fafb';
-  
   const renderChart = () => {
     switch (type) {
       case 'pie': {
@@ -32,7 +44,7 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
           { name: 'Absent', value: data.reduce((acc, curr) => acc + curr.absent, 0) },
           { name: 'Late', value: data.reduce((acc, curr) => acc + curr.late, 0) }
         ];
-        
+
         return (
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
@@ -41,8 +53,11 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
                 cx="50%"
                 cy="50%"
                 labelLine={false}
+                innerRadius={64}
                 outerRadius={100}
-                fill="#8884d8"
+                paddingAngle={2}
+                stroke="var(--surface-default)"
+                strokeWidth={2}
                 dataKey="value"
                 label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
               >
@@ -50,42 +65,42 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
                   <Cell key={`cell-${index}`} fill={colorSet[index % colorSet.length]} />
                 ))}
               </Pie>
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
-              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} />
+              <Legend iconType="circle" iconSize={8} formatter={legendFormatter} />
             </PieChart>
           </ResponsiveContainer>
         );
       }
-        
+
       case 'line': {
         return (
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-              <XAxis dataKey="name" stroke={textColor} />
-              <YAxis stroke={textColor} />
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
-              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
-              <Line type="monotone" dataKey="present" stroke={colorSet[0]} activeDot={{ r: 8 }} />
-              <Line type="monotone" dataKey="absent" stroke={colorSet[1]} />
-              <Line type="monotone" dataKey="late" stroke={colorSet[2]} />
+            <LineChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey="name" tick={axisTick} axisLine={{ stroke: gridColor }} tickLine={false} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} cursor={{ stroke: gridColor }} />
+              <Legend iconType="circle" iconSize={8} formatter={legendFormatter} />
+              <Line type="monotone" dataKey="present" stroke={colorSet[0]} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="absent" stroke={colorSet[1]} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              <Line type="monotone" dataKey="late" stroke={colorSet[2]} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         );
       }
-        
+
       default: {
         return (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-              <XAxis dataKey="name" stroke={textColor} />
-              <YAxis stroke={textColor} />
-              <Tooltip contentStyle={{ backgroundColor: '#1f2937', borderColor: gridColor }} />
-              <Legend formatter={(value) => <span style={{ color: textColor }}>{value}</span>} />
-              <Bar dataKey="present" fill={colorSet[0]} />
-              <Bar dataKey="absent" fill={colorSet[1]} />
-              <Bar dataKey="late" fill={colorSet[2]} />
+            <BarChart data={data} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey="name" tick={axisTick} axisLine={{ stroke: gridColor }} tickLine={false} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} cursor={{ fill: 'var(--surface-hover)' }} />
+              <Legend iconType="circle" iconSize={8} formatter={legendFormatter} />
+              <Bar dataKey="present" fill={colorSet[0]} radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="absent" fill={colorSet[1]} radius={[4, 4, 0, 0]} maxBarSize={28} />
+              <Bar dataKey="late" fill={colorSet[2]} radius={[4, 4, 0, 0]} maxBarSize={28} />
             </BarChart>
           </ResponsiveContainer>
         );
@@ -94,12 +109,12 @@ const AttendanceChart = ({ data, title, description, type = 'bar' }: AttendanceC
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+    <Card className="border-0 bg-surface-default shadow">
+      <CardHeader className="space-y-0.5 px-5 py-4">
+        <CardTitle className="text-subheading text-text-primary">{title}</CardTitle>
+        {description && <CardDescription className="text-caption text-text-muted">{description}</CardDescription>}
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 pb-5">
         {renderChart()}
       </CardContent>
     </Card>

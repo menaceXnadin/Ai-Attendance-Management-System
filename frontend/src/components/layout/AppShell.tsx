@@ -1,40 +1,63 @@
-import React, { useState, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { Menu, Close, Logout, ChevronLeft, ChevronRight } from '@carbon/icons-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import * as React from 'react';
+import { useLocation } from 'react-router-dom';
+import {
+  Dismiss20Regular,
+  Navigation20Regular,
+  PanelLeftContract20Regular,
+  PanelLeftExpand20Regular,
+  Search20Regular,
+  SignOut20Regular,
+} from '@fluentui/react-icons';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import logo from '@/assets/main.png';
 import { cn } from '@/lib/utils';
+import type { NavGroup, ShellUser } from './shell-types';
+import { ShellNav } from './ShellNav';
+import { ShellCommandPalette, ShellSearchBox } from './ShellCommandPalette';
+import { ShellAccountMenu, ShellAvatar } from './ShellAccountMenu';
 
-export interface NavItem {
-  label: string;
-  to: string;
-  icon: React.ComponentType<{ size?: number; className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
-  badge?: string | number;
-  isNew?: boolean;
-  end?: boolean;
-}
-
-export interface NavGroup {
-  groupLabel?: string;
-  items: NavItem[];
-}
+export type { NavGroup, NavItem, NavIcon, ShellUser } from './shell-types';
 
 export interface AppShellProps {
   roleLabel: string;
   navGroups: NavGroup[];
-  user?: {
-    name?: string;
-    email?: string;
-    role?: string;
-  } | null;
+  user?: ShellUser | null;
   onSignOut: () => void;
   pageTitle?: string;
   pageDescription?: string;
+  /** Rendered in the title bar, left of the theme toggle (e.g. `<NotificationCenter />`). */
   headerActions?: React.ReactNode;
+  /** When provided, the avatar menu shows a "View profile" entry. */
+  onViewProfile?: () => void;
   children: React.ReactNode;
 }
+
+const COLLAPSE_STORAGE_KEY = 'attendai-shell-collapsed';
+
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSE_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+/** Neutral icon button used on the title bar (Fluent "subtle" button, 32px). */
+const titleBarButtonClass =
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors duration-150 ease-fluent-standard hover:bg-surface-default hover:text-text-primary active:bg-surface-pressed';
+
+const Brand: React.FC<{ roleLabel: string; showRole?: boolean }> = ({ roleLabel, showRole = true }) => (
+  <div className="flex min-w-0 items-center gap-2">
+    <img src={logo} alt="" aria-hidden="true" className="h-6 w-6 shrink-0 object-contain" />
+    <span className="truncate text-body-strong text-text-primary">AttendAI</span>
+    {showRole && (
+      <>
+        <span aria-hidden="true" className="hidden h-4 w-px shrink-0 bg-border-default md:block" />
+        <span className="hidden truncate text-caption text-text-muted md:block">{roleLabel}</span>
+      </>
+    )}
+  </div>
+);
 
 export const AppShell: React.FC<AppShellProps> = ({
   roleLabel,
@@ -44,30 +67,38 @@ export const AppShell: React.FC<AppShellProps> = ({
   pageTitle,
   pageDescription,
   headerActions,
+  onViewProfile,
   children,
 }) => {
   const location = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(() => {
-    return localStorage.getItem('attendai-shell-collapsed') === 'true';
-  });
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = React.useState(readCollapsed);
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
+  const [isSearchOpen, setIsSearchOpen] = React.useState(false);
+  const mainRef = React.useRef<HTMLElement>(null);
+  const drawerCloseRef = React.useRef<HTMLButtonElement>(null);
+  const drawerId = React.useId();
 
   // Toggle collapsed state and persist
   const toggleCollapse = () => {
     setIsCollapsed((prev) => {
       const next = !prev;
-      localStorage.setItem('attendai-shell-collapsed', String(next));
+      try {
+        localStorage.setItem(COLLAPSE_STORAGE_KEY, String(next));
+      } catch {
+        /* storage unavailable — keep in-memory state only */
+      }
       return next;
     });
   };
 
-  // Close mobile drawer on route change
-  useEffect(() => {
+  // Close mobile drawer on route change; reset content scroll position
+  React.useEffect(() => {
     setIsMobileOpen(false);
+    if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [location.pathname]);
 
   // Lock body scroll when mobile drawer is open
-  useEffect(() => {
+  React.useEffect(() => {
     if (isMobileOpen) {
       document.body.style.overflow = 'hidden';
     } else {
@@ -78,214 +109,216 @@ export const AppShell: React.FC<AppShellProps> = ({
     };
   }, [isMobileOpen]);
 
-  const sidebarContent = (
-    <div className="flex h-full flex-col justify-between overflow-hidden bg-nav-surface text-nav-text">
-      {/* Brand Header */}
-      <div className="flex h-14 items-center justify-between border-b border-border-subtle/20 px-3">
-        <div className="flex items-center gap-2.5 overflow-hidden">
-          <img src={logo} alt="AttendAI" className="h-7 w-7 shrink-0 object-contain" />
-          {(!isCollapsed || isMobileOpen) && (
-            <div className="min-w-0">
-              <span className="block truncate text-sm font-semibold tracking-tight text-white">
-                AttendAI
-              </span>
-              <span className="block text-[11px] font-medium text-text-muted">
-                {roleLabel}
-              </span>
-            </div>
-          )}
-        </div>
-        {/* Mobile close button */}
-        {isMobileOpen && (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => setIsMobileOpen(false)}
-            className="text-nav-text hover:bg-nav-hover hover:text-white lg:hidden"
-            aria-label="Close navigation drawer"
-          >
-            <Close size={18} aria-hidden="true" />
-          </Button>
-        )}
-      </div>
+  // Escape closes the mobile drawer; move focus into it when it opens
+  React.useEffect(() => {
+    if (!isMobileOpen) return;
+    drawerCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsMobileOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isMobileOpen]);
 
-      {/* Navigation Groups */}
-      <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-        {navGroups.map((group, gIdx) => (
-          <div key={gIdx} className="space-y-1">
-            {group.groupLabel && (!isCollapsed || isMobileOpen) && (
-              <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                {group.groupLabel}
-              </div>
-            )}
-            {group.items.map((item) => {
-              const IconComp = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    cn(
-                      "group flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium transition-colors duration-150 relative",
-                      isActive
-                        ? "bg-nav-active text-white before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-1 before:rounded-full before:bg-action-primary"
-                        : "text-nav-text/80 hover:bg-nav-hover hover:text-white",
-                      isCollapsed && !isMobileOpen && "justify-center px-0 py-2.5"
-                    )
-                  }
-                  title={isCollapsed && !isMobileOpen ? item.label : undefined}
-                >
-                  <IconComp size={18} className="shrink-0" aria-hidden="true" />
-                  {(!isCollapsed || isMobileOpen) && (
-                    <span className="truncate flex-1">{item.label}</span>
-                  )}
-                  {(!isCollapsed || isMobileOpen) && item.badge && (
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px] h-4 bg-nav-hover border-transparent text-nav-text">
-                      {item.badge}
-                    </Badge>
-                  )}
-                  {(!isCollapsed || isMobileOpen) && item.isNew && (
-                    <Badge variant="success" className="px-1 py-0 text-[10px] h-4">
-                      NEW
-                    </Badge>
-                  )}
-                </NavLink>
-              );
-            })}
-          </div>
-        ))}
-      </div>
+  // Ctrl+K / ⌘K opens the quick-navigation palette
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        !event.altKey &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === 'k'
+      ) {
+        event.preventDefault();
+        setIsMobileOpen(false);
+        setIsSearchOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
-      {/* Footer / User Profile & Sign Out */}
-      <div className="border-t border-border-subtle/20 p-2 space-y-2">
-        <div
-          className={cn(
-            "flex items-center gap-2.5 rounded-md p-2 bg-nav-hover/40",
-            isCollapsed && !isMobileOpen && "justify-center p-1.5"
-          )}
-        >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-action-primary text-xs font-semibold text-white">
-            {user?.name ? user.name.charAt(0).toUpperCase() : 'U'}
-          </div>
-          {(!isCollapsed || isMobileOpen) && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-white">{user?.name || 'User'}</p>
-              <p className="truncate text-[10px] text-text-muted">{user?.email || roleLabel}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onSignOut}
-            className={cn(
-              "w-full justify-start text-xs text-nav-text/80 hover:bg-nav-hover hover:text-status-error",
-              isCollapsed && !isMobileOpen && "justify-center px-0"
-            )}
-            title="Sign Out"
-            aria-label="Sign Out"
-          >
-            <Logout size={16} className="shrink-0" aria-hidden="true" />
-            {(!isCollapsed || isMobileOpen) && <span className="ml-2">Sign Out</span>}
-          </Button>
-
-          {/* Desktop Collapse Toggle */}
-          {!isMobileOpen && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={toggleCollapse}
-              className="hidden lg:flex shrink-0 text-nav-text/70 hover:bg-nav-hover hover:text-white"
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {isCollapsed ? (
-                <ChevronRight size={14} aria-hidden="true" />
-              ) : (
-                <ChevronLeft size={14} aria-hidden="true" />
-              )}
-            </Button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const openSearch = () => {
+    setIsMobileOpen(false);
+    setIsSearchOpen(true);
+  };
 
   return (
-    <div className="min-h-screen flex bg-surface-canvas text-text-primary antialiased">
-      {/* Desktop Persistent Sidebar */}
-      <aside
-        className={cn(
-          "hidden lg:block shrink-0 border-r border-border-subtle/40 transition-all duration-200 z-30 sticky top-0 h-screen",
-          isCollapsed ? "w-16" : "w-64"
-        )}
+    <div className="flex h-dvh flex-col overflow-hidden bg-titlebar text-text-primary antialiased">
+      <a
+        href="#app-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[60] focus:rounded-md focus:bg-surface-raised focus:px-3 focus:py-2 focus:text-body-strong focus:text-text-primary focus:shadow-lg"
       >
-        {sidebarContent}
-      </aside>
+        Skip to main content
+      </a>
 
-      {/* Mobile Drawer Backdrop & Sidebar */}
+      {/* ------------------------------------------------------------------ */}
+      {/* Title bar                                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <header className="relative z-30 flex h-12 shrink-0 items-center gap-2 bg-titlebar px-2 sm:gap-3 sm:px-3">
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setIsMobileOpen(true)}
+            className={cn(titleBarButtonClass, 'lg:hidden')}
+            aria-label="Open navigation menu"
+            aria-controls={drawerId}
+            aria-expanded={isMobileOpen}
+          >
+            <Navigation20Regular className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="min-w-0 pl-1">
+            <Brand roleLabel={roleLabel} />
+          </div>
+        </div>
+
+        <div className="hidden min-w-0 flex-[0_1_560px] sm:flex">
+          <ShellSearchBox onOpen={openSearch} />
+        </div>
+
+        <div className="flex min-w-0 flex-1 basis-0 items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={openSearch}
+            className={cn(titleBarButtonClass, 'sm:hidden')}
+            aria-label="Search"
+            aria-haspopup="dialog"
+          >
+            <Search20Regular className="h-5 w-5" aria-hidden="true" />
+          </button>
+          {headerActions}
+          <ThemeToggle className="h-8 w-8 rounded-md text-text-secondary hover:bg-surface-default hover:text-text-primary [&_svg]:size-5" />
+          <div className="ml-1">
+            <ShellAccountMenu
+              user={user}
+              roleLabel={roleLabel}
+              onSignOut={onSignOut}
+              onViewProfile={onViewProfile}
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Navigation + content                                               */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="flex min-h-0 flex-1 bg-nav-surface">
+        {/* Desktop navigation: NavDrawer (240px) or Teams app bar rail (68px) */}
+        <aside
+          aria-label="Primary"
+          className={cn(
+            'hidden shrink-0 flex-col overflow-hidden bg-nav-surface transition-[width] duration-200 ease-fluent-standard lg:flex',
+            isCollapsed ? 'w-[68px]' : 'w-60'
+          )}
+        >
+          <ShellNav navGroups={navGroups} variant={isCollapsed ? 'rail' : 'drawer'} />
+          <div className={cn('shrink-0 border-t border-border-subtle p-2', isCollapsed && 'flex justify-center px-1')}>
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              aria-label={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+              aria-expanded={!isCollapsed}
+              title={isCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+              className={cn(
+                'flex h-9 items-center gap-3 rounded-md text-body text-nav-text transition-colors duration-150 ease-fluent-standard hover:bg-nav-hover hover:text-text-primary active:bg-surface-pressed',
+                isCollapsed ? 'w-[60px] justify-center' : 'w-full px-3'
+              )}
+            >
+              {isCollapsed ? (
+                <PanelLeftExpand20Regular className="h-5 w-5 shrink-0" aria-hidden="true" />
+              ) : (
+                <PanelLeftContract20Regular className="h-5 w-5 shrink-0" aria-hidden="true" />
+              )}
+              {!isCollapsed && <span className="truncate">Collapse</span>}
+            </button>
+          </div>
+        </aside>
+
+        {/* Content pane */}
+        <main
+          id="app-main"
+          ref={mainRef}
+          tabIndex={-1}
+          className="min-w-0 flex-1 overflow-y-auto bg-surface-canvas outline-none lg:rounded-tl-lg lg:border-l lg:border-t lg:border-border-subtle"
+        >
+          <div className="shell-content mx-auto w-full max-w-[1600px] p-4 sm:p-6">
+            {/* Fallback page header; hidden via CSS when the page renders its own <h1> */}
+            {(pageTitle || pageDescription) && (
+              <div className="shell-page-header mb-4 min-w-0 sm:mb-6">
+                {pageTitle && (
+                  <h1 className="truncate text-section-title text-text-primary sm:text-page-title">{pageTitle}</h1>
+                )}
+                {pageDescription && <p className="mt-1 text-body text-text-muted">{pageDescription}</p>}
+              </div>
+            )}
+            <div className="shell-page-body">{children}</div>
+          </div>
+        </main>
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Mobile navigation drawer                                           */}
+      {/* ------------------------------------------------------------------ */}
       {isMobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs transition-opacity lg:hidden"
+          className="fixed inset-0 z-40 bg-black/40 animate-in fade-in-0 lg:hidden"
           onClick={() => setIsMobileOpen(false)}
           aria-hidden="true"
         />
       )}
       <aside
+        id={drawerId}
+        aria-label="Navigation"
+        aria-hidden={!isMobileOpen}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-64 transform transition-transform duration-200 ease-in-out lg:hidden",
-          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+          'fixed inset-y-0 left-0 z-50 flex w-[280px] max-w-[85vw] flex-col bg-nav-surface shadow-xl transition-[transform,visibility] duration-200 ease-fluent-decelerate lg:hidden',
+          isMobileOpen ? 'visible translate-x-0' : 'invisible -translate-x-full'
         )}
-        aria-label="Mobile navigation"
       >
-        {sidebarContent}
-      </aside>
+        <div className="flex h-12 shrink-0 items-center justify-between gap-2 border-b border-border-subtle px-3">
+          <div className="min-w-0">
+            <Brand roleLabel={roleLabel} showRole={false} />
+          </div>
+          <button
+            ref={drawerCloseRef}
+            type="button"
+            onClick={() => setIsMobileOpen(false)}
+            className={cn(titleBarButtonClass, 'hover:bg-nav-hover')}
+            aria-label="Close navigation drawer"
+          >
+            <Dismiss20Regular className="h-5 w-5" aria-hidden="true" />
+          </button>
+        </div>
 
-      {/* Main Content Area */}
-      <div className="flex flex-1 flex-col min-w-0">
-        {/* Top Bar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border-default bg-surface-default px-4 sm:px-6 shadow-xs">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Mobile Menu Toggle Button */}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setIsMobileOpen(true)}
-              className="lg:hidden text-text-secondary hover:text-text-primary"
-              aria-label="Open navigation menu"
-            >
-              <Menu size={20} aria-hidden="true" />
-            </Button>
+        <ShellNav navGroups={navGroups} variant="drawer" onNavigate={() => setIsMobileOpen(false)} />
 
-            <div className="min-w-0">
-              {pageTitle && (
-                <h1 className="text-base font-semibold leading-tight text-text-primary truncate">
-                  {pageTitle}
-                </h1>
-              )}
-              {pageDescription && (
-                <p className="text-xs text-text-muted truncate hidden sm:block">
-                  {pageDescription}
-                </p>
-              )}
+        <div className="shrink-0 space-y-1 border-t border-border-subtle p-2">
+          <div className="flex items-center gap-3 px-3 py-2">
+            <ShellAvatar name={user?.name} size="md" presence presenceRingClassName="ring-nav-surface" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-body-strong text-text-primary">{user?.name || 'User'}</p>
+              <p className="truncate text-caption text-text-muted">{user?.email || roleLabel}</p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="flex h-9 w-full items-center gap-3 rounded-md px-3 text-body text-nav-text transition-colors duration-150 ease-fluent-standard hover:bg-nav-hover hover:text-text-primary active:bg-surface-pressed"
+          >
+            <SignOut20Regular className="h-5 w-5 shrink-0" aria-hidden="true" />
+            Sign out
+          </button>
+        </div>
+      </aside>
 
-          <div className="flex items-center gap-2">
-            {headerActions}
-            <div className="h-4 w-px bg-border-subtle mx-0.5 hidden sm:block" />
-            <ThemeToggle />
-          </div>
-        </header>
-
-        {/* Page Main Content */}
-        <main className="flex-1 w-full max-w-[1600px] mx-auto p-4 sm:p-6 lg:p-8">
-          {children}
-        </main>
-      </div>
+      <ShellCommandPalette
+        open={isSearchOpen}
+        onOpenChange={setIsSearchOpen}
+        navGroups={navGroups}
+        onSignOut={onSignOut}
+      />
     </div>
   );
 };
+
+export default AppShell;

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,22 +8,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import TeacherSidebar from '@/components/TeacherSidebar';
-import { 
-  Send, 
-  Notification, 
-  NotificationNew, 
-  WarningAlt, 
-  Information, 
-  CheckmarkFilled, 
-  CloseFilled, 
-  UserMultiple, 
-  Book, 
-  Time, 
-  TrashCan, 
-  Close, 
-  Checkmark,
-  Renew
-} from '@carbon/icons-react';
+import { cn } from '@/lib/utils';
+import {
+  Alert20Regular,
+  Alert24Regular,
+  ArrowSync20Regular,
+  Book16Regular,
+  Checkmark16Regular,
+  CheckmarkCircle20Filled,
+  Clock12Regular,
+  Delete16Regular,
+  Dismiss16Regular,
+  DismissCircle20Filled,
+  History20Regular,
+  Info16Regular,
+  Info20Filled,
+  MailInbox20Regular,
+  People16Regular,
+  Send20Regular,
+  Warning16Regular,
+  Warning20Filled,
+} from '@fluentui/react-icons';
 import { api } from '@/integrations/api/client';
 
 interface TeacherClass {
@@ -205,24 +209,41 @@ const TeacherNotificationsPage: React.FC = () => {
   const getPriorityIcon = (p: string) => {
     switch (p) {
       case 'high':
-        return <WarningAlt className="w-3.5 h-3.5 text-status-error" />;
+        return <Warning16Regular className="text-status-error" aria-hidden />;
       case 'low':
-        return <Information className="w-3.5 h-3.5 text-text-muted" />;
+        return <Info16Regular className="text-text-muted" aria-hidden />;
       default:
-        return <Notification className="w-3.5 h-3.5 text-status-warning" />;
+        return <Alert20Regular className="h-4 w-4 text-status-warning" aria-hidden />;
     }
   };
 
+  /** Activity-feed icon chip, tinted by notification type. */
   const getTypeIcon = (t: string) => {
     switch (t) {
       case 'success':
-        return <CheckmarkFilled className="w-4 h-4 text-status-success" />;
+        return (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-status-success-subtle text-status-success">
+            <CheckmarkCircle20Filled aria-hidden />
+          </span>
+        );
       case 'warning':
-        return <WarningAlt className="w-4 h-4 text-status-warning" />;
+        return (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-status-warning-subtle text-status-warning">
+            <Warning20Filled aria-hidden />
+          </span>
+        );
       case 'danger':
-        return <CloseFilled className="w-4 h-4 text-status-error" />;
+        return (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-status-error-subtle text-status-error">
+            <DismissCircle20Filled aria-hidden />
+          </span>
+        );
       default:
-        return <Information className="w-4 h-4 text-action-primary" />;
+        return (
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-subtle text-brand-foreground">
+            <Info20Filled aria-hidden />
+          </span>
+        );
     }
   };
 
@@ -237,32 +258,183 @@ const TeacherNotificationsPage: React.FC = () => {
     }
   };
 
+  const inboxTotal = Array.isArray(inbox) ? inbox.length : 0;
+  const inboxUnread = Array.isArray(inbox) ? inbox.filter(n => !n.is_read).length : 0;
+
   return (
     <TeacherSidebar>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary tracking-tight">Notifications Center</h1>
-          <p className="text-sm text-text-secondary mt-0.5">
-            Broadcast class announcements to students and monitor system alerts
-          </p>
+      <div className="mx-auto max-w-7xl space-y-6">
+        <div className="page-header !mb-0">
+          <div>
+            <h1 className="text-page-title text-text-primary">Notifications Center</h1>
+            <p className="mt-1 text-body text-text-muted">
+              Broadcast class announcements to students and monitor system alerts
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Send Notification Form */}
-          <Card className="border border-border-subtle bg-surface-default shadow-card">
-            <CardHeader className="border-b border-border-subtle pb-4">
-              <CardTitle className="flex items-center gap-2 text-base font-semibold text-text-primary">
-                <Send className="w-4 h-4 text-action-primary" />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+          {/* Activity feed (inbox) */}
+          <section className="flex flex-col rounded-lg bg-surface-default shadow lg:col-span-3">
+            <div className="border-b border-border-subtle px-5 pt-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="flex items-center gap-2 text-subheading text-text-primary">
+                    <MailInbox20Regular className="text-brand-foreground" aria-hidden />
+                    Institutional Inbox
+                  </h2>
+                  <p className="mt-0.5 text-caption text-text-muted">
+                    Total: <strong className="font-semibold text-text-primary tabular-nums">{inboxTotal}</strong>
+                    <span className="mx-1.5" aria-hidden>·</span>
+                    Unread: <strong className="font-semibold text-brand-foreground tabular-nums">{inboxUnread}</strong>
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => clearAllMutation.mutate()}
+                  disabled={clearAllMutation.isPending || (Array.isArray(inbox) && inbox.length === 0)}
+                  className="text-status-error hover:bg-status-error-subtle hover:text-status-error"
+                >
+                  <Delete16Regular aria-hidden />
+                  Clear All
+                </Button>
+              </div>
+
+              {/* Fluent tab filters */}
+              <div role="tablist" aria-label="Inbox filter" className="mt-3 flex gap-1">
+                {[
+                  { label: 'All', active: !onlyUnread, value: false },
+                  { label: 'Unread', active: onlyUnread, value: true },
+                ].map((tab) => (
+                  <button
+                    key={tab.label}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.active}
+                    onClick={() => setOnlyUnread(tab.value)}
+                    className={cn(
+                      'relative px-3 pb-2.5 pt-1 text-body transition-colors duration-150 ease-fluent-standard',
+                      tab.active
+                        ? 'font-semibold text-text-primary after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-full after:bg-brand'
+                        : 'text-text-secondary hover:text-text-primary'
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex-1 p-2">
+              {inboxLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-body text-text-muted">
+                  <ArrowSync20Regular className="animate-spin text-brand-foreground" aria-hidden />
+                  <span>Loading notifications...</span>
+                </div>
+              ) : Array.isArray(inbox) && inbox.length === 0 ? (
+                <div className="flex flex-col items-center py-12 text-center">
+                  <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                    <Alert24Regular aria-hidden />
+                  </div>
+                  <p className="text-subheading text-text-primary">No notifications to display</p>
+                  {onlyUnread && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOnlyUnread(false)}
+                      className="mt-4"
+                    >
+                      Show All Notifications
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <ul className="max-h-[560px] space-y-0.5 overflow-y-auto">
+                  {inbox.map((n) => (
+                    <li
+                      key={n.id}
+                      className={cn(
+                        'group relative flex gap-3 rounded-md px-3 py-3 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover',
+                        !n.is_read && 'bg-brand-subtle/40'
+                      )}
+                    >
+                      {/* Unread brand dot */}
+                      <span
+                        className={cn(
+                          'absolute left-1 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full',
+                          n.is_read ? 'bg-transparent' : 'bg-brand'
+                        )}
+                        aria-hidden
+                      />
+                      {getTypeIcon(n.type)}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className={cn('text-body', n.is_read ? 'text-text-secondary' : 'font-semibold text-text-primary')}>
+                            {n.title}
+                            {!n.is_read && <span className="sr-only"> (unread)</span>}
+                          </p>
+                          <span className="flex shrink-0 items-center gap-1 text-caption text-text-muted tabular-nums">
+                            <Clock12Regular aria-hidden />
+                            {new Date(n.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-body text-text-secondary">{n.message}</p>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-caption text-text-muted">
+                            <Badge variant={getPriorityBadgeVariant(n.priority)} shape="pill" className="px-2 py-0 text-overline capitalize">
+                              {n.priority}
+                            </Badge>
+                            <span className="capitalize">{n.scope.replace('_', ' ')}</span>
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            {!n.is_read && (
+                              <button
+                                type="button"
+                                className="grid h-7 w-7 place-items-center rounded text-text-muted transition-colors hover:bg-surface-pressed hover:text-status-success"
+                                onClick={() => markReadMutation.mutate(n.id)}
+                                disabled={markReadMutation.isPending}
+                                title="Mark as read"
+                                aria-label="Mark as read"
+                              >
+                                <Checkmark16Regular aria-hidden />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="grid h-7 w-7 place-items-center rounded text-text-muted transition-colors hover:bg-surface-pressed hover:text-status-error"
+                              onClick={() => clearOneMutation.mutate(n.id)}
+                              disabled={clearOneMutation.isPending}
+                              title="Dismiss notification"
+                              aria-label="Dismiss notification"
+                            >
+                              <Dismiss16Regular aria-hidden />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
+          {/* Compose announcement */}
+          <section className="rounded-lg bg-surface-default shadow lg:col-span-2">
+            <div className="border-b border-border-subtle px-5 py-4">
+              <h2 className="flex items-center gap-2 text-subheading text-text-primary">
+                <Send20Regular className="text-brand-foreground" aria-hidden />
                 Dispatch Announcement
-              </CardTitle>
-              <CardDescription className="text-xs text-text-muted">
+              </h2>
+              <p className="mt-0.5 text-caption text-text-muted">
                 Create and broadcast an official notification to your enrolled class
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-6">
+              </p>
+            </div>
+            <div className="space-y-4 p-5">
               {/* Class Selection */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-text-secondary">Assigned Class</Label>
+                <Label className="text-body-strong text-text-primary">Assigned Class</Label>
                 <Select
                   value={selectedClass ? `${selectedClass.subject_id}:${selectedClass.semester}` : ''}
                   onValueChange={(value) => {
@@ -275,7 +447,7 @@ const TeacherNotificationsPage: React.FC = () => {
                     setSelectedClass(cls || null);
                   }}
                 >
-                  <SelectTrigger className="h-9">
+                  <SelectTrigger>
                     <SelectValue placeholder="Select target course and semester" />
                   </SelectTrigger>
                   <SelectContent>
@@ -296,16 +468,16 @@ const TeacherNotificationsPage: React.FC = () => {
                   </SelectContent>
                 </Select>
                 {selectedClass && (
-                  <div className="flex items-center gap-1.5 text-xs text-text-muted mt-1">
-                    <UserMultiple className="w-3.5 h-3.5 text-action-primary" />
+                  <p className="flex items-center gap-1.5 text-caption text-text-muted">
+                    <People16Regular className="text-brand-foreground" aria-hidden />
                     <span>{selectedClass.student_count} registered students will receive this notification</span>
-                  </div>
+                  </p>
                 )}
               </div>
 
               {/* Title */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-text-secondary">Notification Title</Label>
+                <Label className="text-body-strong text-text-primary">Notification Title</Label>
                 <Input
                   type="text"
                   placeholder="e.g., Assignment 2 Deadline Extension"
@@ -316,7 +488,7 @@ const TeacherNotificationsPage: React.FC = () => {
 
               {/* Message */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium text-text-secondary">Message Content</Label>
+                <Label className="text-body-strong text-text-primary">Message Content</Label>
                 <Textarea
                   placeholder="Type your announcement or instructional details..."
                   value={message}
@@ -327,11 +499,11 @@ const TeacherNotificationsPage: React.FC = () => {
               </div>
 
               {/* Priority and Type */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-text-secondary">Urgency Level</Label>
+                  <Label className="text-body-strong text-text-primary">Urgency Level</Label>
                   <Select value={priority} onValueChange={setPriority}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -343,9 +515,9 @@ const TeacherNotificationsPage: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-medium text-text-secondary">Category</Label>
+                  <Label className="text-body-strong text-text-primary">Category</Label>
                   <Select value={notificationType} onValueChange={setNotificationType}>
-                    <SelectTrigger className="h-9">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -359,211 +531,90 @@ const TeacherNotificationsPage: React.FC = () => {
               </div>
 
               {/* Send Button */}
-              <Button
-                className="w-full mt-2"
-                onClick={handleSendNotification}
-                disabled={sendNotificationMutation.isPending || !selectedClass}
-              >
-                {sendNotificationMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <Renew className="w-4 h-4 animate-spin" />
-                    Broadcasting...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5">
-                    <Send className="w-4 h-4 mr-1" />
-                    Publish Announcement
-                  </span>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Inbox Feed */}
-          <Card className="border border-border-subtle bg-surface-default shadow-card flex flex-col">
-            <CardHeader className="border-b border-border-subtle pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-text-primary">
-                    <NotificationNew className="w-4 h-4 text-action-primary" />
-                    Institutional Inbox
-                  </CardTitle>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-text-muted">
-                      Total: <strong className="text-text-primary">{Array.isArray(inbox) ? inbox.length : 0}</strong>
-                    </span>
-                    <span className="text-xs text-text-muted">•</span>
-                    <span className="text-xs text-text-muted">
-                      Unread: <strong className="text-action-primary">{Array.isArray(inbox) ? inbox.filter(n => !n.is_read).length : 0}</strong>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={onlyUnread ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setOnlyUnread(!onlyUnread)}
-                    className="text-xs h-8"
-                  >
-                    {onlyUnread ? "Show All" : "Unread Only"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => clearAllMutation.mutate()}
-                    disabled={clearAllMutation.isPending || (Array.isArray(inbox) && inbox.length === 0)}
-                    className="text-xs h-8 text-status-error hover:bg-status-error/10 hover:text-status-error"
-                  >
-                    <TrashCan className="w-3.5 h-3.5 mr-1" />
-                    Clear All
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-6 flex-1">
-              {inboxLoading ? (
-                <div className="text-center py-12 text-sm text-text-muted flex items-center justify-center gap-2">
-                  <Renew className="w-4 h-4 animate-spin text-action-primary" />
-                  <span>Loading notifications...</span>
-                </div>
-              ) : Array.isArray(inbox) && inbox.length === 0 ? (
-                <div className="text-center py-12 text-text-muted space-y-2">
-                  <Notification className="w-10 h-10 mx-auto opacity-30" />
-                  <p className="text-sm font-medium text-text-secondary">No notifications to display</p>
-                  {onlyUnread && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setOnlyUnread(false)}
-                      className="text-xs"
-                    >
-                      Show All Notifications
-                    </Button>
+              <div className="flex justify-end border-t border-border-subtle pt-4">
+                <Button
+                  onClick={handleSendNotification}
+                  disabled={sendNotificationMutation.isPending || !selectedClass}
+                >
+                  {sendNotificationMutation.isPending ? (
+                    <>
+                      <ArrowSync20Regular className="animate-spin" aria-hidden />
+                      Broadcasting...
+                    </>
+                  ) : (
+                    <>
+                      <Send20Regular aria-hidden />
+                      Publish Announcement
+                    </>
                   )}
-                </div>
-              ) : (
-                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                  {inbox.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className={`p-3.5 rounded-lg border transition-all ${
-                        n.is_read 
-                          ? 'bg-surface-canvas/60 border-border-subtle' 
-                          : 'bg-surface-default border-border-subtle border-l-4 border-l-action-primary shadow-xs'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className="flex items-center gap-2">
-                          {getTypeIcon(n.type)}
-                          <h4 className={`text-sm font-semibold ${n.is_read ? 'text-text-secondary' : 'text-text-primary'}`}>
-                            {n.title}
-                          </h4>
-                        </div>
-                        <Badge variant={getPriorityBadgeVariant(n.priority)} className="text-[10px] px-1.5 py-0.5 uppercase">
-                          {n.priority}
-                        </Badge>
-                      </div>
-
-                      <p className="text-xs text-text-secondary mb-2.5 leading-relaxed">{n.message}</p>
-
-                      <div className="flex items-center justify-between text-[11px] text-text-muted pt-2 border-t border-border-subtle">
-                        <div className="flex items-center gap-2">
-                          <span className="flex items-center gap-1">
-                            <Time className="w-3 h-3" />
-                            {new Date(n.created_at).toLocaleString()}
-                          </span>
-                          <span>•</span>
-                          <span className="capitalize">{n.scope.replace('_', ' ')}</span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          {!n.is_read && (
-                            <button
-                              className="p-1 rounded text-status-success hover:bg-status-success/10 transition-colors"
-                              onClick={() => markReadMutation.mutate(n.id)}
-                              disabled={markReadMutation.isPending}
-                              title="Mark as read"
-                            >
-                              <Checkmark className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            className="p-1 rounded text-text-muted hover:text-status-error hover:bg-status-error/10 transition-colors"
-                            onClick={() => clearOneMutation.mutate(n.id)}
-                            disabled={clearOneMutation.isPending}
-                            title="Dismiss notification"
-                          >
-                            <Close className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </Button>
+              </div>
+            </div>
+          </section>
         </div>
 
         {/* Sent Notifications History */}
-        <Card className="border border-border-subtle bg-surface-default shadow-card">
-          <CardHeader className="border-b border-border-subtle pb-4">
-            <CardTitle className="flex items-center gap-2 text-base font-semibold text-text-primary">
-              <Notification className="w-4 h-4 text-action-primary" />
+        <section className="rounded-lg bg-surface-default shadow">
+          <div className="border-b border-border-subtle px-5 py-4">
+            <h2 className="flex items-center gap-2 text-subheading text-text-primary">
+              <History20Regular className="text-brand-foreground" aria-hidden />
               Published Announcements Log
-            </CardTitle>
-            <CardDescription className="text-xs text-text-muted">
+            </h2>
+            <p className="mt-0.5 text-caption text-text-muted">
               Record of broadcasts delivered to assigned courses
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-6">
+            </p>
+          </div>
+          <div className="p-2">
             {notificationsLoading ? (
-              <div className="text-center py-8 text-xs text-text-muted">Loading broadcast history...</div>
+              <div className="py-8 text-center text-body text-text-muted">Loading broadcast history...</div>
             ) : notifications.length === 0 ? (
-              <div className="text-center py-10 text-text-muted">
-                <Notification className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                <p className="text-sm font-medium text-text-secondary">No sent notifications on record</p>
+              <div className="flex flex-col items-center py-10 text-center">
+                <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                  <Send20Regular className="h-6 w-6" aria-hidden />
+                </div>
+                <p className="text-subheading text-text-primary">No sent notifications on record</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto">
+              <ul className="max-h-[400px] divide-y divide-border-subtle overflow-y-auto">
                 {notifications.map((notification) => (
-                  <div
+                  <li
                     key={notification.id}
-                    className="p-4 bg-surface-canvas rounded-lg border border-border-subtle space-y-2"
+                    className="flex gap-3 rounded-md px-3 py-3 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {getTypeIcon(notification.type)}
-                        <h4 className="text-sm font-semibold text-text-primary">{notification.title}</h4>
+                    {getTypeIcon(notification.type)}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="text-body-strong text-text-primary">{notification.title}</p>
+                        <div className="flex items-center gap-1.5">
+                          {getPriorityIcon(notification.priority)}
+                          <Badge variant={getPriorityBadgeVariant(notification.priority)} shape="pill" className="px-2 py-0 text-overline capitalize">
+                            {notification.priority}
+                          </Badge>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {getPriorityIcon(notification.priority)}
-                        <Badge variant={getPriorityBadgeVariant(notification.priority)} className="text-[10px] px-1.5 py-0.5">
-                          {notification.priority}
-                        </Badge>
-                      </div>
-                    </div>
-                    <p className="text-xs text-text-secondary leading-relaxed">{notification.message}</p>
-                    {notification.payload && (
-                      <div className="flex items-center gap-2 text-xs text-text-muted pt-1">
-                        <Book className="w-3.5 h-3.5 text-action-primary" />
-                        <span>Course ID: {notification.payload.subject_id}</span>
-                        {notification.payload.semester && (
-                          <span>• Sem {notification.payload.semester}</span>
+                      <p className="mt-0.5 text-body text-text-secondary">{notification.message}</p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-text-muted">
+                        {notification.payload && (
+                          <span className="flex items-center gap-1">
+                            <Book16Regular className="text-brand-foreground" aria-hidden />
+                            <span>Course ID: {notification.payload.subject_id}</span>
+                            {notification.payload.semester && (
+                              <span>· Sem {notification.payload.semester}</span>
+                            )}
+                          </span>
                         )}
+                        <span className="flex items-center gap-1 tabular-nums">
+                          <Clock12Regular aria-hidden />
+                          {new Date(notification.created_at).toLocaleString()}
+                        </span>
                       </div>
-                    )}
-                    <div className="text-[11px] text-text-muted pt-1 border-t border-border-subtle flex items-center gap-1">
-                      <Time className="w-3 h-3" />
-                      {new Date(notification.created_at).toLocaleString()}
                     </div>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
     </TeacherSidebar>
   );

@@ -4,30 +4,39 @@ import { useAuth } from '@/contexts/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import TeacherSidebar from '@/components/TeacherSidebar';
+import SessionCancelDialog, { type SessionCancelMode } from '@/components/SessionCancelDialog';
+import { cn } from '@/lib/utils';
 import {
-  Book,
-  Calendar,
-  UserMultiple,
-  ChartLineData,
-  Time,
-  User,
-  Document,
-  CheckmarkFilled,
-  CloseFilled,
-  WarningAlt,
-  Stop,
-  Renew
-} from '@carbon/icons-react';
-import { api } from '@/integrations/api/client';
+  ArrowSync20Regular,
+  ArrowUndo16Regular,
+  Book20Regular,
+  CalendarCancel16Regular,
+  CalendarLtr20Regular,
+  ChevronRight20Regular,
+  ClipboardTaskListLtr20Regular,
+  Clock20Regular,
+  DataTrending20Regular,
+  ErrorCircle20Regular,
+  Location16Regular,
+  People16Regular,
+  People20Regular,
+  Person20Regular,
+} from '@fluentui/react-icons';
+import { api, parseApiError, type SessionStatus, type TermState, type TermSummary } from '@/integrations/api/client';
+import TermStateBanner from '@/components/TermStateBanner';
+import { localDateString } from '@/utils/metricsDisplay';
 
 interface ScheduleEntry {
+  /** Timetable (schedule) id — for make-up sessions this is the session id. */
   id: number;
+  schedule_id?: number | null;
+  kind?: 'regular' | 'makeup';
+  subject_id?: number;
+  subject_code?: string;
+  faculty_id?: number;
+  submitted_at?: string | null;
   subject_name: string;
   start_time: string;
   end_time: string;
@@ -35,6 +44,11 @@ interface ScheduleEntry {
   semester: number;
   is_cancelled?: boolean;
   cancellation_reason?: string | null;
+  // contract v1 additions
+  session_id?: number | null;
+  session_status?: SessionStatus | null;
+  recorded_count?: number | null;
+  roster_size?: number | null;
 }
 
 interface TeacherDashboardData {
@@ -50,6 +64,7 @@ interface TeacherDashboardData {
     total_classes: number;
     total_students: number;
     classes_today: number;
+    unrecorded_sessions?: number;
   };
   attendance_last_7_days: {
     present: number;
@@ -64,7 +79,31 @@ interface TeacherDashboardData {
     semesters: number[];
   }>;
   today_schedule: ScheduleEntry[];
+  date?: string;
+  term_state?: TermState;
+  term?: TermSummary | null;
 }
+
+/** Class "team" tile colours — Fluent categorical palette (static class names for Tailwind JIT). */
+const TILE_COLORS = [
+  'bg-chart-1',
+  'bg-chart-2',
+  'bg-chart-3',
+  'bg-chart-4',
+  'bg-chart-5',
+  'bg-chart-6',
+  'bg-chart-7',
+  'bg-chart-8',
+];
+
+const getInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || '?';
 
 const TeacherDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -73,10 +112,11 @@ const TeacherDashboard: React.FC = () => {
   const [dashboardData, setDashboardData] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelDialog, setCancelDialog] = useState<{ open: boolean; mode: SessionCancelMode }>({
+    open: false,
+    mode: 'cancel',
+  });
   const [selectedSchedule, setSelectedSchedule] = useState<ScheduleEntry | null>(null);
-  const [cancellationReason, setCancellationReason] = useState('');
-  const [notifyStudents, setNotifyStudents] = useState(true);
   const [cancelling, setCancelling] = useState(false);
   const [now, setNow] = useState(new Date());
 
@@ -97,47 +137,56 @@ const TeacherDashboard: React.FC = () => {
       setError(null);
     } catch (err: unknown) {
       console.error('Error fetching dashboard data:', err);
-      const errorObj = err as { response?: { data?: { detail?: string } } };
-      setError(errorObj.response?.data?.detail || 'Failed to load dashboard data');
+      setError(parseApiError(err).message || 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenCancelDialog = (schedule: ScheduleEntry) => {
+  const scheduleIdOf = (entry: ScheduleEntry): number | undefined =>
+    entry.schedule_id ?? (entry.kind === 'makeup' ? undefined : entry.id);
+
+  const handleOpenCancelDialog = (schedule: ScheduleEntry, mode: SessionCancelMode) => {
     setSelectedSchedule(schedule);
-    setCancellationReason('');
-    setNotifyStudents(true);
-    setCancelDialogOpen(true);
+    setCancelDialog({ open: true, mode });
   };
 
-  const handleCancelClass = async () => {
+  const handleCancelConfirm = async ({ reason, notifyStudents }: { reason: string; notifyStudents: boolean }) => {
     if (!selectedSchedule) return;
-
+    const today = localDateString();
     try {
       setCancelling(true);
-      const today = new Date().toISOString().split('T')[0];
-
-      await api.teacher.cancelClass({
-        schedule_id: selectedSchedule.id,
-        date: today,
-        reason: cancellationReason || 'Teacher unavailable',
-        notify_students: notifyStudents,
-      });
-
-      toast({
-        title: 'Class Cancelled',
-        description: `${selectedSchedule.subject_name} has been marked cancelled.`,
-      });
-
-      setCancelDialogOpen(false);
+      if (cancelDialog.mode === 'cancel') {
+        // Make-up sessions have no timetable row: always prefer session_id.
+        await api.teacher.cancelClass({
+          schedule_id: selectedSchedule.session_id ? undefined : scheduleIdOf(selectedSchedule),
+          session_id: selectedSchedule.session_id ?? undefined,
+          date: today,
+          reason,
+          notify_students: notifyStudents,
+        });
+        toast({
+          title: 'Class cancelled',
+          description: `${selectedSchedule.subject_name} has been marked cancelled.`,
+        });
+      } else {
+        await api.teacher.uncancelClass(
+          selectedSchedule.session_id
+            ? { session_id: selectedSchedule.session_id, reason }
+            : { schedule_id: scheduleIdOf(selectedSchedule), subject_id: selectedSchedule.subject_id, date: today, reason }
+        );
+        toast({
+          title: 'Class restored',
+          description: `${selectedSchedule.subject_name} is back on today's schedule.`,
+        });
+      }
+      setCancelDialog((d) => ({ ...d, open: false }));
       void fetchDashboardData();
     } catch (err: unknown) {
-      console.error('Error cancelling class:', err);
-      const errorObj = err as { response?: { data?: { detail?: string } } };
+      console.error('Error updating class session:', err);
       toast({
-        title: 'Error',
-        description: errorObj.response?.data?.detail || 'Failed to cancel class',
+        title: cancelDialog.mode === 'cancel' ? 'Could not cancel class' : 'Could not restore class',
+        description: parseApiError(err).message,
         variant: 'destructive',
       });
     } finally {
@@ -150,8 +199,8 @@ const TeacherDashboard: React.FC = () => {
       <TeacherSidebar>
         <div className="min-h-[60vh] flex items-center justify-center">
           <div className="text-center space-y-3">
-            <Renew size={28} className="animate-spin text-action-primary mx-auto" />
-            <p className="text-xs text-text-muted">Loading teacher workspace...</p>
+            <ArrowSync20Regular className="h-7 w-7 animate-spin text-brand-foreground mx-auto" aria-hidden />
+            <p className="text-caption text-text-muted">Loading teacher workspace...</p>
           </div>
         </div>
       </TeacherSidebar>
@@ -162,17 +211,17 @@ const TeacherDashboard: React.FC = () => {
     return (
       <TeacherSidebar>
         <div className="min-h-[60vh] flex items-center justify-center p-4">
-          <Card className="max-w-md border border-status-danger/30 bg-surface-default shadow-none">
-            <CardHeader>
-              <CardTitle className="text-base text-status-danger">Workspace Error</CardTitle>
-              <CardDescription className="text-xs text-text-muted">{error}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={fetchDashboardData} className="w-full">
-                Retry Loading
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="w-full max-w-md rounded-lg bg-surface-default shadow p-6 text-center">
+            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-status-error-subtle text-status-error">
+              <ErrorCircle20Regular className="h-6 w-6" aria-hidden />
+            </div>
+            <h2 className="text-subheading text-text-primary">Workspace Error</h2>
+            <p className="mt-1 text-body text-text-muted">{error}</p>
+            <Button onClick={fetchDashboardData} className="mt-5 w-full">
+              <ArrowSync20Regular aria-hidden />
+              Retry Loading
+            </Button>
+          </div>
         </div>
       </TeacherSidebar>
     );
@@ -182,7 +231,13 @@ const TeacherDashboard: React.FC = () => {
     return null;
   }
 
-  const { teacher, stats, attendance_last_7_days, subjects, today_schedule } = dashboardData;
+  const { teacher, stats, subjects } = dashboardData;
+  const today_schedule = dashboardData.today_schedule ?? [];
+  const attendance_last_7_days = {
+    present: dashboardData.attendance_last_7_days?.present ?? 0,
+    absent: dashboardData.attendance_last_7_days?.absent ?? 0,
+    late: dashboardData.attendance_last_7_days?.late ?? 0,
+  };
 
   const isPastEnd = (end: string) => {
     const [hh, mm] = end.split(':').map(Number);
@@ -191,440 +246,416 @@ const TeacherDashboard: React.FC = () => {
     return now.getTime() > endDt.getTime();
   };
 
+  // Presentation-only: whether the session's start time has passed (for "In progress" label)
+  const hasStarted = (start: string) => {
+    const [hh, mm] = start.split(':').map(Number);
+    const startDt = new Date();
+    startDt.setHours(hh, mm, 0, 0);
+    return now.getTime() >= startDt.getTime();
+  };
+
   const totalWeeklyAttendance =
-    attendance_last_7_days.present +
-    attendance_last_7_days.absent +
-    attendance_last_7_days.late || 1;
+    attendance_last_7_days.present + attendance_last_7_days.absent + attendance_last_7_days.late;
+
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const firstName = teacher.name?.split(' ')[0];
+
+  const kpis = [
+    { label: 'Assigned Courses', value: stats.total_subjects, hint: 'Active curriculum', icon: Book20Regular },
+    { label: 'Weekly Sessions', value: stats.total_classes, hint: 'Teaching slots', icon: CalendarLtr20Regular },
+    { label: 'Enrolled Students', value: stats.total_students, hint: 'Across classes', icon: People20Regular },
+    {
+      label: 'Classes Today',
+      value: stats.classes_today,
+      hint:
+        (stats.unrecorded_sessions ?? 0) > 0
+          ? `${stats.unrecorded_sessions} past session${stats.unrecorded_sessions === 1 ? '' : 's'} not recorded`
+          : 'Scheduled slots',
+      icon: Clock20Regular,
+    },
+  ];
+
+  const attendanceRows = [
+    { key: 'present', label: 'Present', value: attendance_last_7_days.present, dot: 'bg-status-success', text: 'text-status-success' },
+    { key: 'absent', label: 'Absent', value: attendance_last_7_days.absent, dot: 'bg-status-error', text: 'text-status-error' },
+    { key: 'late', label: 'Late', value: attendance_last_7_days.late, dot: 'bg-status-warning', text: 'text-status-warning' },
+  ];
+
+  const quickLinks = [
+    { label: 'Full Schedule', hint: 'Inspect weekly timetables', icon: CalendarLtr20Regular, to: '/teacher/schedule' },
+    { label: 'Mark Attendance', hint: 'Record live student check-ins', icon: ClipboardTaskListLtr20Regular, to: '/teacher/attendance' },
+    { label: 'Teacher Profile', hint: 'Contact and office details', icon: Person20Regular, to: '/teacher/profile' },
+  ];
 
   return (
     <TeacherSidebar>
-      <div className="space-y-6 max-w-7xl mx-auto py-2">
-        {/* Welcome Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-border-subtle">
+      <div className="mx-auto max-w-7xl space-y-6">
+        {/* Greeting header */}
+        <div className="page-header !mb-0">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-text-primary">
-              Welcome back, {teacher.name.split(' ')[0]}
+            <h1 className="text-page-title text-text-primary">
+              {firstName ? `${greeting}, ${firstName}` : greeting}
             </h1>
-            <p className="text-sm text-text-muted mt-0.5">
-              Faculty Instructor Portal • {teacher.department || 'Academic Department'}
+            <p className="mt-1 text-body text-text-muted">
+              {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              <span className="mx-1.5" aria-hidden>·</span>
+              {teacher.department || 'Academic Department'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="h-8 px-3 rounded-md border border-border-default bg-surface-default flex items-center gap-1.5 text-xs text-text-secondary">
-              <Calendar size={14} className="text-text-muted" />
-              <span>{new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
-            </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate('/teacher/schedule')}>
+              <CalendarLtr20Regular aria-hidden />
+              Full Schedule
+            </Button>
           </div>
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Assigned Courses</p>
-                  <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{stats.total_subjects}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Active curriculum</p>
-                </div>
-                <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <Book size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <TermStateBanner termState={dashboardData.term_state} term={dashboardData.term} />
 
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Weekly Sessions</p>
-                  <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{stats.total_classes}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Teaching slots</p>
+        {/* KPI tiles */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {kpis.map(({ label, value, hint, icon: Icon }) => (
+            <div key={label} className="rounded-lg bg-surface-default p-4 shadow">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-caption text-text-muted">{label}</p>
+                  <p className="mt-1 text-[28px] font-semibold leading-9 tabular-nums text-text-primary">{value}</p>
+                  <p className="text-caption text-text-muted">{hint}</p>
                 </div>
-                <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <Calendar size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Enrolled Students</p>
-                  <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{stats.total_students}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Across classes</p>
-                </div>
-                <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary">
-                  <UserMultiple size={20} />
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+                  <Icon aria-hidden />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Classes Today</p>
-                  <p className="text-2xl font-bold text-text-primary tabular-nums mt-1">{stats.classes_today}</p>
-                  <p className="text-xs text-text-muted mt-0.5">Scheduled slots</p>
-                </div>
-                <div className="h-10 w-10 rounded-md bg-surface-subtle flex items-center justify-center text-status-warning">
-                  <Time size={20} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          ))}
         </div>
 
-        {/* Schedule & Attendance Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Today's Schedule */}
-          <Card className="lg:col-span-2 border border-border-default bg-surface-default shadow-none">
-            <CardHeader className="py-4 border-b border-border-subtle">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-                    <Calendar size={18} className="text-action-primary" />
-                    Today's Teaching Schedule
-                  </CardTitle>
-                  <CardDescription className="text-xs text-text-muted mt-0.5">
-                    Live timetable for today's active and upcoming courses
-                  </CardDescription>
-                </div>
-                {today_schedule.length > 0 && (
-                  <Badge variant="outline" className="text-xs tabular-nums">
-                    {today_schedule.length} {today_schedule.length === 1 ? 'class' : 'classes'}
-                  </Badge>
-                )}
+        {/* Today's classes + attendance summary */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <Card className="border-0 bg-surface-default shadow lg:col-span-2">
+            <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-border-subtle px-5 py-4">
+              <div>
+                <CardTitle className="text-subheading text-text-primary">Today's classes</CardTitle>
+                <CardDescription className="mt-0.5 text-caption text-text-muted">
+                  Live timetable for today's active and upcoming courses
+                </CardDescription>
               </div>
+              {today_schedule.length > 0 && (
+                <Badge variant="secondary" shape="pill">
+                  {today_schedule.length} {today_schedule.length === 1 ? 'class' : 'classes'}
+                </Badge>
+              )}
             </CardHeader>
-            <CardContent className="p-4">
+            <CardContent className="p-3">
               {today_schedule.length === 0 ? (
-                <div className="text-center py-10 text-text-muted">
-                  <Calendar size={28} className="mx-auto mb-2 opacity-40" />
-                  <p className="text-sm font-medium text-text-primary">No classes scheduled for today</p>
-                  <p className="text-xs text-text-muted mt-0.5">Check your full weekly schedule for upcoming lectures</p>
+                <div className="flex flex-col items-center py-10 text-center">
+                  <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+                    <CalendarLtr20Regular className="h-6 w-6" aria-hidden />
+                  </div>
+                  <p className="text-subheading text-text-primary">No classes scheduled for today</p>
+                  <p className="mt-1 text-body text-text-muted">Check your full weekly schedule for upcoming lectures</p>
                 </div>
               ) : (
-                <div className="space-y-2.5">
-                  {today_schedule.map((schedule) => (
-                    <div
-                      key={schedule.id}
-                      className="p-3.5 rounded-md border border-border-default bg-surface-default hover:bg-surface-subtle transition-colors flex items-center justify-between gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h2 className="text-sm font-semibold text-text-primary truncate">
+                <ul className="space-y-1">
+                  {today_schedule.map((schedule) => {
+                    const cancelled = schedule.session_status === 'cancelled' || !!schedule.is_cancelled;
+                    const concluded = isPastEnd(schedule.end_time);
+                    const live = !cancelled && !concluded && hasStarted(schedule.start_time);
+                    const hasSessionInfo = schedule.session_status !== undefined && schedule.session_status !== null;
+                    const held = schedule.session_status === 'held';
+                    const unrecorded = !cancelled && concluded && schedule.session_status === 'scheduled';
+                    const recorded =
+                      typeof schedule.recorded_count === 'number' && typeof schedule.roster_size === 'number'
+                        ? `${schedule.recorded_count}/${schedule.roster_size} recorded`
+                        : null;
+                    const canRestore = cancelled;
+                    return (
+                      <li
+                        key={`${schedule.id}-${schedule.session_id ?? schedule.start_time}`}
+                        className="flex flex-col gap-3 rounded-md px-3 py-3 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover sm:flex-row sm:items-center"
+                      >
+                        {/* Time block */}
+                        <div className="flex items-stretch gap-3 sm:w-28 sm:shrink-0">
+                          <span
+                            className={cn(
+                              'w-1 shrink-0 rounded-full',
+                              cancelled
+                                ? 'bg-status-error'
+                                : unrecorded
+                                ? 'bg-status-warning'
+                                : concluded
+                                ? 'bg-border-default'
+                                : 'bg-brand'
+                            )}
+                            aria-hidden
+                          />
+                          <div className="tabular-nums">
+                            <p className={cn('text-body-strong', cancelled || concluded ? 'text-text-muted' : 'text-text-primary')}>
+                              {schedule.start_time}
+                            </p>
+                            <p className="text-caption text-text-muted">{schedule.end_time}</p>
+                          </div>
+                        </div>
+
+                        {/* Subject + meta */}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              'truncate text-body-strong',
+                              cancelled ? 'text-text-muted line-through' : 'text-text-primary'
+                            )}
+                          >
                             {schedule.subject_name}
-                          </h2>
-                          {!schedule.is_cancelled && !isPastEnd(schedule.end_time) && (
-                            <span className="flex h-2 w-2 relative" title="Class in session / pending">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-status-success opacity-75"></span>
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-status-success"></span>
+                          </p>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-caption text-text-muted">
+                            <span className="inline-flex items-center gap-1">
+                              <People16Regular aria-hidden />
+                              Semester {schedule.semester}
                             </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Location16Regular aria-hidden />
+                              {schedule.classroom || 'Classroom N/A'}
+                            </span>
+                            {schedule.kind === 'makeup' && (
+                              <Badge variant="brand" shape="pill" className="py-0">Make-up</Badge>
+                            )}
+                            {recorded && !cancelled && <span className="tabular-nums">{recorded}</span>}
+                            {cancelled && schedule.cancellation_reason && (
+                              <span className="truncate">Reason: {schedule.cancellation_reason}</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Status + actions */}
+                        <div className="flex shrink-0 flex-wrap items-center gap-2">
+                          {cancelled ? (
+                            <>
+                              <Badge variant="destructive" shape="pill">Cancelled</Badge>
+                              {canRestore && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenCancelDialog(schedule, 'uncancel')}
+                                  title="Restore class"
+                                >
+                                  <ArrowUndo16Regular aria-hidden />
+                                  Restore
+                                </Button>
+                              )}
+                            </>
+                          ) : concluded ? (
+                            <>
+                              {unrecorded ? (
+                                <Badge variant="warning" shape="pill">Not recorded</Badge>
+                              ) : held || !hasSessionInfo ? (
+                                <Badge variant="secondary" shape="pill">{held ? 'Held' : 'Concluded'}</Badge>
+                              ) : null}
+                              {unrecorded && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenCancelDialog(schedule, 'cancel')}
+                                  title="Mark as not held"
+                                >
+                                  <CalendarCancel16Regular aria-hidden />
+                                  Not held
+                                </Button>
+                              )}
+                              <Button
+                                size="sm"
+                                variant={unrecorded ? 'default' : 'ghost'}
+                                onClick={() => navigate('/teacher/attendance')}
+                              >
+                                <ClipboardTaskListLtr20Regular aria-hidden />
+                                {unrecorded ? 'Take attendance' : 'Review'}
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Badge variant={live ? 'success' : 'info'} shape="pill" className="gap-1.5">
+                                <span
+                                  className={cn('h-1.5 w-1.5 rounded-full', live ? 'bg-status-success' : 'bg-status-info')}
+                                  aria-hidden
+                                />
+                                {live ? 'In progress' : 'Upcoming'}
+                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleOpenCancelDialog(schedule, 'cancel')}
+                                title="Cancel class"
+                              >
+                                <CalendarCancel16Regular aria-hidden />
+                                Cancel
+                              </Button>
+                              <Button size="sm" onClick={() => navigate('/teacher/attendance')}>
+                                <ClipboardTaskListLtr20Regular aria-hidden />
+                                Take attendance
+                              </Button>
+                            </>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 text-xs text-text-muted">
-                          <span>Semester {schedule.semester}</span>
-                          <span>•</span>
-                          <span>{schedule.classroom || 'Classroom N/A'}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-xs text-text-secondary bg-surface-subtle px-2.5 py-1 rounded border border-border-subtle flex items-center gap-1">
-                          <Time size={12} className="text-text-muted" />
-                          {schedule.start_time} - {schedule.end_time}
-                        </span>
-
-                        {schedule.is_cancelled ? (
-                          <Badge variant="outline" className="text-xs text-status-danger border-status-danger/30 bg-status-danger/10">
-                            Cancelled
-                          </Badge>
-                        ) : isPastEnd(schedule.end_time) ? (
-                          <Badge variant="outline" className="text-xs text-text-muted bg-surface-subtle border-border-default">
-                            Concluded
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs px-2 text-status-danger border-border-default hover:border-status-danger hover:bg-status-danger/10"
-                            onClick={() => handleOpenCancelDialog(schedule)}
-                          >
-                            <Stop size={12} className="mr-1" />
-                            Cancel
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </CardContent>
           </Card>
 
-          {/* Attendance Summary (Last 7 Days) */}
-          <Card className="border border-border-default bg-surface-default shadow-none">
-            <CardHeader className="py-4 border-b border-border-subtle">
-              <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-                <ChartLineData size={18} className="text-action-primary" />
+          {/* Attendance summary (last 7 days) */}
+          <Card className="border-0 bg-surface-default shadow">
+            <CardHeader className="border-b border-border-subtle px-5 py-4">
+              <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+                <DataTrending20Regular className="text-brand-foreground" aria-hidden />
                 Attendance Summary
               </CardTitle>
-              <CardDescription className="text-xs text-text-muted mt-0.5">Last 7 operational days</CardDescription>
+              <CardDescription className="text-caption text-text-muted">Last 7 operational days</CardDescription>
             </CardHeader>
-            <CardContent className="p-4 space-y-4">
-              <div className="p-3 rounded-md border border-status-success/30 bg-status-success/5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckmarkFilled size={16} className="text-status-success" />
-                    <span className="text-xs font-semibold text-text-primary">Present</span>
-                  </div>
-                  <span className="text-lg font-bold text-status-success tabular-nums">
-                    {attendance_last_7_days.present}
-                  </span>
-                </div>
-                <div className="h-1.5 bg-surface-subtle rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-status-success rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (attendance_last_7_days.present / totalWeeklyAttendance) * 100)}%` }}
-                  />
-                </div>
+            <CardContent className="space-y-5 p-5">
+              {/* Stacked distribution bar */}
+              <div
+                className="flex h-2 w-full overflow-hidden rounded-full bg-surface-subtle"
+                role="img"
+                aria-label={`Present ${attendance_last_7_days.present}, absent ${attendance_last_7_days.absent}, late ${attendance_last_7_days.late}`}
+              >
+                {totalWeeklyAttendance > 0 &&
+                  attendanceRows.map((row) => (
+                    <div
+                      key={row.key}
+                      className={cn('h-full transition-all', row.dot)}
+                      style={{ width: `${Math.min(100, (row.value / totalWeeklyAttendance) * 100)}%` }}
+                    />
+                  ))}
               </div>
 
-              <div className="p-3 rounded-md border border-status-danger/30 bg-status-danger/5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CloseFilled size={16} className="text-status-danger" />
-                    <span className="text-xs font-semibold text-text-primary">Absent</span>
-                  </div>
-                  <span className="text-lg font-bold text-status-danger tabular-nums">
-                    {attendance_last_7_days.absent}
-                  </span>
-                </div>
-                <div className="h-1.5 bg-surface-subtle rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-status-danger rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (attendance_last_7_days.absent / totalWeeklyAttendance) * 100)}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 rounded-md border border-status-warning/30 bg-status-warning/5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <WarningAlt size={16} className="text-status-warning" />
-                    <span className="text-xs font-semibold text-text-primary">Late</span>
-                  </div>
-                  <span className="text-lg font-bold text-status-warning tabular-nums">
-                    {attendance_last_7_days.late}
-                  </span>
-                </div>
-                <div className="h-1.5 bg-surface-subtle rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-status-warning rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (attendance_last_7_days.late / totalWeeklyAttendance) * 100)}%` }}
-                  />
-                </div>
-              </div>
+              {totalWeeklyAttendance === 0 ? (
+                <p className="text-body text-text-muted">No attendance recorded in the last 7 days.</p>
+              ) : (
+                <ul className="divide-y divide-border-subtle">
+                  {attendanceRows.map((row) => (
+                    <li key={row.key} className="flex items-center justify-between py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <span className={cn('h-2.5 w-2.5 rounded-full', row.dot)} aria-hidden />
+                        <span className="text-body text-text-primary">{row.label}</span>
+                      </div>
+                      <span className={cn('text-subheading tabular-nums', row.text)}>{row.value}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* My Subjects */}
-        <Card className="border border-border-default bg-surface-default shadow-none">
-          <CardHeader className="py-4 border-b border-border-subtle">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-semibold text-text-primary flex items-center gap-2">
-                  <Book size={18} className="text-action-primary" />
-                  My Assigned Courses
-                </CardTitle>
-                <CardDescription className="text-xs text-text-muted mt-0.5">Curriculum subjects under your instruction</CardDescription>
-              </div>
-              <Badge variant="outline" className="text-xs tabular-nums">
-                {subjects.length} {subjects.length === 1 ? 'subject' : 'subjects'}
-              </Badge>
+        {/* Class teams (subjects) */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-section-title text-text-primary">My Assigned Courses</h2>
+              <p className="text-caption text-text-muted">Curriculum subjects under your instruction</p>
             </div>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {subjects.map((subject) => (
-                <div 
-                  key={subject.id} 
-                  className="p-4 rounded-md border border-border-default bg-surface-default hover:border-action-primary/70 transition-colors flex flex-col justify-between"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h2 className="text-sm font-semibold text-text-primary">
-                          {subject.name}
-                        </h2>
-                        <span className="font-mono text-xs text-text-muted">{subject.code}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs tabular-nums">
-                        {subject.credits} Credits
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {subject.semesters.map((sem) => (
-                        <Badge key={sem} variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Semester {sem}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
+            <Badge variant="secondary" shape="pill">
+              {subjects.length} {subjects.length === 1 ? 'subject' : 'subjects'}
+            </Badge>
+          </div>
 
-                  <div className="flex gap-2 pt-4 border-t border-border-subtle mt-3">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 h-7 text-xs flex items-center justify-center gap-1"
-                      onClick={() => navigate(`/teacher/subjects/${subject.id}/students?semester=${subject.semesters[0]}`)}
-                    >
-                      <UserMultiple size={12} />
-                      <span>Students</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 h-7 text-xs flex items-center justify-center gap-1"
-                      onClick={() => navigate(`/teacher/subjects/${subject.id}/analytics?semester=${subject.semesters[0]}`)}
-                    >
-                      <ChartLineData size={12} />
-                      <span>Analytics</span>
-                    </Button>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {subjects.map((subject, index) => (
+              <div
+                key={subject.id}
+                className="flex flex-col rounded-lg bg-surface-default p-4 shadow transition-shadow duration-150 ease-fluent-standard hover:shadow-md"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={cn(
+                      'grid h-12 w-12 shrink-0 place-items-center rounded-md text-subheading text-text-inverse',
+                      TILE_COLORS[index % TILE_COLORS.length]
+                    )}
+                    aria-hidden
+                  >
+                    {getInitials(subject.name)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-body-strong text-text-primary" title={subject.name}>
+                      {subject.name}
+                    </h3>
+                    <p className="text-caption text-text-muted">
+                      <span className="font-mono">{subject.code}</span>
+                      <span className="mx-1" aria-hidden>·</span>
+                      <span className="tabular-nums">{subject.credits} Credits</span>
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Button
-            variant="outline"
-            className="h-auto p-4 flex items-center justify-between border-border-default bg-surface-default hover:border-action-primary text-left transition-colors"
-            onClick={() => navigate('/teacher/schedule')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
-                <Calendar size={18} />
-              </div>
-              <div>
-                <span className="font-semibold text-sm text-text-primary block">Full Schedule</span>
-                <span className="text-xs text-text-muted block mt-0.5">Inspect weekly timetables</span>
-              </div>
-            </div>
-          </Button>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {subject.semesters.map((sem) => (
+                    <Badge key={sem} variant="secondary" className="px-1.5 py-0 text-overline">
+                      Semester {sem}
+                    </Badge>
+                  ))}
+                </div>
 
-          <Button
-            variant="outline"
-            className="h-auto p-4 flex items-center justify-between border-border-default bg-surface-default hover:border-action-primary text-left transition-colors"
-            onClick={() => navigate('/teacher/attendance')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-md bg-surface-subtle flex items-center justify-center text-status-success shrink-0">
-                <Document size={18} />
+                <div className="mt-4 flex gap-1 border-t border-border-subtle pt-3">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={() => navigate(`/teacher/subjects/${subject.id}/students?semester=${subject.semesters[0]}`)}
+                  >
+                    <People20Regular aria-hidden />
+                    <span>Students</span>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="flex-1"
+                    onClick={() => navigate(`/teacher/subjects/${subject.id}/analytics?semester=${subject.semesters[0]}`)}
+                  >
+                    <DataTrending20Regular aria-hidden />
+                    <span>Analytics</span>
+                  </Button>
+                </div>
               </div>
-              <div>
-                <span className="font-semibold text-sm text-text-primary block">Mark Attendance</span>
-                <span className="text-xs text-text-muted block mt-0.5">Record live student check-ins</span>
-              </div>
-            </div>
-          </Button>
+            ))}
+          </div>
+        </section>
 
-          <Button
-            variant="outline"
-            className="h-auto p-4 flex items-center justify-between border-border-default bg-surface-default hover:border-action-primary text-left transition-colors"
-            onClick={() => navigate('/teacher/profile')}
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-md bg-surface-subtle flex items-center justify-center text-action-primary shrink-0">
-                <User size={18} />
+        {/* Quick links */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {quickLinks.map(({ label, hint, icon: Icon, to }) => (
+            <button
+              key={to}
+              type="button"
+              onClick={() => navigate(to)}
+              className="group flex items-center gap-3 rounded-lg bg-surface-default p-4 text-left shadow transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+            >
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+                <Icon aria-hidden />
               </div>
-              <div>
-                <span className="font-semibold text-sm text-text-primary block">Teacher Profile</span>
-                <span className="text-xs text-text-muted block mt-0.5">Contact and office details</span>
+              <div className="min-w-0 flex-1">
+                <span className="block text-body-strong text-text-primary">{label}</span>
+                <span className="block text-caption text-text-muted">{hint}</span>
               </div>
-            </div>
-          </Button>
+              <ChevronRight20Regular className="shrink-0 text-text-muted" aria-hidden />
+            </button>
+          ))}
         </div>
 
-        {/* Cancel Class Dialog */}
-        <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-status-danger">
-                <Stop size={18} />
-                <span>Cancel Class Session</span>
-              </DialogTitle>
-              <DialogDescription>
-                {selectedSchedule && (
-                  <>
-                    Authorize cancellation for <strong className="text-text-primary">{selectedSchedule.subject_name}</strong> scheduled today at {selectedSchedule.start_time}.
-                  </>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 py-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="reason">Reason for Cancellation</Label>
-                <Textarea
-                  id="reason"
-                  placeholder="e.g., Illness, emergency conference, authorized campus closure..."
-                  value={cancellationReason}
-                  onChange={(e) => setCancellationReason(e.target.value)}
-                  rows={3}
-                />
-              </div>
-
-              <div className="flex items-center justify-between p-3 rounded-md bg-surface-subtle border border-border-subtle">
-                <div>
-                  <Label htmlFor="notify" className="text-xs font-semibold text-text-primary cursor-pointer">
-                    Notify Enrolled Students
-                  </Label>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    Broadcast cancellation notification immediately
-                  </p>
-                </div>
-                <Switch
-                  id="notify"
-                  checked={notifyStudents}
-                  onCheckedChange={setNotifyStudents}
-                />
-              </div>
-
-              <div className="p-3 rounded-md bg-surface-subtle border border-border-subtle text-xs text-text-muted">
-                <strong className="text-text-primary">Calendar update: </strong> 
-                This session will be marked as cancelled. Students will not be penalized with auto-absent entries.
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setCancelDialogOpen(false)}
-                disabled={cancelling}
-              >
-                Keep Class
-              </Button>
-              <Button
-                onClick={handleCancelClass}
-                disabled={cancelling}
-                className="bg-status-danger text-white hover:bg-status-danger/90"
-              >
-                {cancelling ? 'Cancelling...' : 'Confirm Cancellation'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Cancel / restore class dialog */}
+        <SessionCancelDialog
+          open={cancelDialog.open}
+          mode={cancelDialog.mode}
+          sessionLabel={
+            selectedSchedule
+              ? `${selectedSchedule.subject_name} · ${selectedSchedule.start_time}–${selectedSchedule.end_time}, today`
+              : ''
+          }
+          busy={cancelling}
+          onOpenChange={(open) => setCancelDialog((d) => ({ ...d, open }))}
+          onConfirm={(input) => void handleCancelConfirm(input)}
+        />
       </div>
     </TeacherSidebar>
   );

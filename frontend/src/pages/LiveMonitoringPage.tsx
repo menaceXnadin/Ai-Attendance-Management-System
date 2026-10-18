@@ -3,112 +3,110 @@ import LiveMonitoring from '@/components/LiveMonitoring';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/useAuth';
-import { User, Shield, CheckCircle } from 'lucide-react';
+import {
+  Person20Regular,
+  Shield16Regular,
+  CheckmarkCircle16Filled,
+  HeartPulse20Regular,
+  Desktop20Regular,
+  Server20Regular,
+  LockClosed20Regular,
+  ScanPerson20Regular,
+} from '@fluentui/react-icons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const LiveMonitoringPage: React.FC = () => {
   const { user } = useAuth();
 
+  const components = [
+    { name: 'Frontend (Vite)', status: 'Running', icon: Desktop20Regular },
+    { name: 'Backend (FastAPI)', status: 'Running', icon: Server20Regular },
+    { name: 'Role-based Access Control', status: 'Active', icon: LockClosed20Regular },
+    { name: 'Biometric Analytics', status: 'Operational', icon: ScanPerson20Regular },
+  ];
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-4">
       <Tabs defaultValue="monitoring" className="w-full">
-        <TabsList className="grid w-full sm:w-80 grid-cols-2 bg-surface-subtle border border-border-subtle p-1 rounded-lg">
-          <TabsTrigger 
-            value="monitoring"
-            className="text-text-secondary data-[state=active]:bg-surface-default data-[state=active]:text-text-primary data-[state=active]:shadow-xs rounded-md text-xs font-medium"
-          >
-            Live Monitoring
-          </TabsTrigger>
-          <TabsTrigger 
-            value="status"
-            className="text-text-secondary data-[state=active]:bg-surface-default data-[state=active]:text-text-primary data-[state=active]:shadow-xs rounded-md text-xs font-medium"
-          >
-            System Status
-          </TabsTrigger>
+        <TabsList>
+          <TabsTrigger value="monitoring">Live Monitoring</TabsTrigger>
+          <TabsTrigger value="status">System Status</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="monitoring" className="mt-6">
+        <TabsContent value="monitoring" className="mt-4">
           <LiveMonitoring />
         </TabsContent>
 
-        <TabsContent value="status" className="mt-6 space-y-6">
+        <TabsContent value="status" className="mt-4 space-y-4">
           {/* User Information */}
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardHeader className="pb-3 border-b border-border-subtle">
-              <CardTitle className="text-base text-text-primary flex items-center gap-2">
-                <User className="h-4 w-4 text-action-primary" />
+          <Card className="border-0 shadow overflow-hidden">
+            <CardHeader className="border-b border-border-subtle px-5 py-4">
+              <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+                <Person20Regular className="shrink-0 text-brand-foreground" aria-hidden />
                 Current User Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <label className="text-text-muted font-medium">Name</label>
-                  <p className="text-text-primary font-semibold text-sm mt-0.5">{user?.name || 'N/A'}</p>
+            <CardContent className="p-0">
+              <dl className="grid grid-cols-1 divide-y divide-border-subtle md:grid-cols-2 md:divide-y-0">
+                <div className="px-5 py-3 md:border-b md:border-border-subtle">
+                  <dt className="text-caption text-text-muted">Name</dt>
+                  <dd className="text-body-strong text-text-primary mt-0.5">{user?.name || 'N/A'}</dd>
                 </div>
-                <div>
-                  <label className="text-text-muted font-medium">Email</label>
-                  <p className="text-text-primary font-semibold text-sm mt-0.5">{user?.email || 'N/A'}</p>
+                <div className="px-5 py-3 md:border-b md:border-l md:border-border-subtle">
+                  <dt className="text-caption text-text-muted">Email</dt>
+                  <dd className="text-body-strong text-text-primary mt-0.5 break-all">{user?.email || 'N/A'}</dd>
                 </div>
-                <div>
-                  <label className="text-text-muted font-medium">Role</label>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <Badge 
+                <div className="px-5 py-3">
+                  <dt className="text-caption text-text-muted">Role</dt>
+                  <dd className="mt-1">
+                    <Badge
                       variant={user?.role === 'admin' ? 'default' : 'secondary'}
-                      className="capitalize"
+                      shape="pill"
+                      className="gap-1 capitalize"
                     >
-                      <Shield className="h-3 w-3 mr-1" />
+                      <Shield16Regular aria-hidden />
                       {user?.role || 'N/A'}
                     </Badge>
-                  </div>
+                  </dd>
                 </div>
-                <div>
-                  <label className="text-text-muted font-medium">User ID</label>
-                  <p className="text-text-primary font-mono text-xs mt-0.5">{user?.id || 'N/A'}</p>
+                <div className="px-5 py-3 md:border-l md:border-border-subtle">
+                  <dt className="text-caption text-text-muted">User ID</dt>
+                  <dd className="font-mono text-caption text-text-primary mt-1">{user?.id || 'N/A'}</dd>
                 </div>
-              </div>
+              </dl>
             </CardContent>
           </Card>
 
-          {/* System Status */}
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardHeader className="pb-3 border-b border-border-subtle">
-              <CardTitle className="text-base text-text-primary flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-status-success" />
+          {/* System Status (M365 service health list) */}
+          <Card className="border-0 shadow overflow-hidden">
+            <CardHeader className="border-b border-border-subtle px-5 py-4">
+              <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+                <HeartPulse20Regular className="shrink-0 text-status-success" aria-hidden />
                 System Components Status
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-4 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
-                  <span className="text-xs font-medium text-text-primary">Frontend (Vite)</span>
-                  <Badge variant="success" className="text-[11px]">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Running
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
-                  <span className="text-xs font-medium text-text-primary">Backend (FastAPI)</span>
-                  <Badge variant="success" className="text-[11px]">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Running
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
-                  <span className="text-xs font-medium text-text-primary">Role-based Access Control</span>
-                  <Badge variant="success" className="text-[11px]">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Active
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-surface-canvas/60 border border-border-subtle rounded-lg">
-                  <span className="text-xs font-medium text-text-primary">Biometric Analytics</span>
-                  <Badge variant="success" className="text-[11px]">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Operational
-                  </Badge>
-                </div>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] border-b border-border-subtle bg-surface-subtle px-5 py-2 text-caption-strong text-text-secondary">
+                <span>Component</span>
+                <span>Health</span>
               </div>
+              <ul className="divide-y divide-border-subtle">
+                {components.map(({ name, status, icon: Icon }) => (
+                  <li
+                    key={name}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-5 py-2.5 transition-colors duration-150 hover:bg-surface-hover"
+                  >
+                    <span className="flex min-w-0 items-center gap-3 text-body text-text-primary">
+                      <Icon className="shrink-0 text-text-muted" aria-hidden />
+                      <span className="truncate">{name}</span>
+                    </span>
+                    <Badge variant="success" shape="pill" className="gap-1">
+                      <CheckmarkCircle16Filled aria-hidden />
+                      {status}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
             </CardContent>
           </Card>
         </TabsContent>

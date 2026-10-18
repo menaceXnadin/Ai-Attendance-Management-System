@@ -1,202 +1,246 @@
-import React from "react";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
-import { Button } from "@/components/ui/button";
-import { Link } from "react-router-dom";
+import * as React from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowRight20Regular } from '@fluentui/react-icons';
+import Navbar from '@/components/Navbar';
+import Footer, { type FooterCredit } from '@/components/Footer';
+import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/useAuth';
+import ClosingCta from '@/components/landing/ClosingCta';
+import { ArrowLink, Container, Eyebrow, Photo, Section, SectionHeader } from '@/components/landing/primitives';
+import { studentDevice, teacherFront } from '@/components/landing/photos';
 
-const AboutPage = () => {
+/**
+ * Public "About" page, built from the landing-page primitives (components/landing/).
+ * Copy rules (docs/system/frontend.md §8): only true statements. No usage figures,
+ * customer names, testimonials or certifications; every product claim below is
+ * enforced by the backend (docs/system/domain-rules.md, face-verification.md).
+ */
+
+const credits: FooterCredit[] = [teacherFront, studentDevice]
+  .map((photo) => photo.credit)
+  .filter((credit): credit is FooterCredit => !!credit);
+
+interface Goal {
+  title: string;
+  body: string;
+}
+
+const GOALS: Goal[] = [
+  {
+    title: 'Accurate, not just automatic',
+    body: 'An absence is only recorded for a class that actually happened. If nobody takes attendance, the class is flagged for follow-up instead of being filled with absences.',
+  },
+  {
+    title: 'Fair to every student',
+    body: 'Percentages come from one calculation, weighted by class session, so students, teachers and administrators see the same number. No data shows “—”, never a misleading 0%.',
+  },
+  {
+    title: 'Hard to fake',
+    body: 'A check-in needs the student’s own face, a liveness check with a head turn, and the code shown in the room, which changes every 30 seconds by default.',
+  },
+  {
+    title: 'Respectful of privacy',
+    body: 'Faces are matched on the institution’s own server. Only face templates are kept, never photos, enrolment needs consent, and students can delete their data.',
+  },
+];
+
+interface Member {
+  name: string;
+  role: string;
+  image: string;
+  /** object-position that keeps the face in a head-and-shoulders crop. */
+  position: string;
+  /** Zoom into the face (1 = cover the tile). */
+  scale: number;
+}
+
+const TEAM: Member[] = [
+  { name: 'Nadin Tamang', role: 'Founder & CEO', image: '/team/ceo.jpg', position: '50% 24%', scale: 1.35 },
+  { name: 'Diwash Ghimire', role: 'CTO', image: '/team/cto.png', position: '46% 20%', scale: 1.25 },
+  { name: 'Abhishek Subedi', role: 'CMO', image: '/team/cmo.png', position: '45% 20%', scale: 1.9 },
+];
+
+const STACK: { term: string; detail: string }[] = [
+  { term: 'Web app', detail: 'React and TypeScript, styled to Microsoft’s Fluent 2 design language, in light and dark.' },
+  { term: 'Server', detail: 'FastAPI with PostgreSQL. Every attendance rule runs here, with a written spec and automated tests.' },
+  {
+    term: 'Face recognition',
+    detail: 'InsightFace on the server for matching; MediaPipe in the browser only to guide framing and the head turn.',
+  },
+  { term: 'Anti-spoofing', detail: 'A passive liveness model (MiniFASNet) that looks for printed photos and screens.' },
+  { term: 'Time', detail: 'One server clock (Asia/Kathmandu) decides check-in windows, late marks and automatic absences.' },
+];
+
+const AboutHero: React.FC = () => {
+  const { user } = useAuth();
   return (
-    <>
-      <Navbar />
-
-      <div className="min-h-screen bg-gradient-to-b from-slate-950 to-blue-950">
-        {/* Hero Section */}
-        <section className="relative px-6 lg:px-8 pt-20 pb-16">
-          <div className="mx-auto max-w-4xl text-center">
-            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-white mb-6">
-              About AttendAI
-            </h1>
-            <p className="text-lg sm:text-xl leading-relaxed text-blue-200/80 max-w-2xl mx-auto">
-              We're on a mission to modernize classroom attendance tracking with
-              AI-powered facial recognition technology. Our platform saves
-              educators time while providing accurate attendance data.
-            </p>
-            <div className="mt-10 flex items-center justify-center gap-6">
-              <Link to="/login">
-                <Button className="bg-gradient-to-r from-blue-500 to-teal-400 hover:from-blue-600 hover:to-teal-500 rounded-xl px-8 py-6 text-base font-semibold transition-all duration-300">
-                  Get Started
-                </Button>
+    <section aria-labelledby="about-title" className="bg-surface-default">
+      <Container className="grid items-center gap-y-12 pb-16 pt-10 sm:pt-14 lg:grid-cols-12 lg:gap-x-10 lg:pb-24 lg:pt-16 xl:gap-x-16">
+        <div className="lg:col-span-6 xl:col-span-5">
+          <Eyebrow>About AttendAI</Eyebrow>
+          <h1 id="about-title" className="lp-display mt-4 text-text-primary">
+            Class time belongs to teaching.
+          </h1>
+          <p className="lp-lede mt-6 max-w-[34rem] text-text-secondary">
+            AttendAI began as a final-year university project with one goal: take attendance off the teacher’s plate
+            without making the record any less trustworthy. Students check in with their face and the code shown in the
+            room; teachers and administrators get a register they can rely on.
+          </p>
+          <div className="mt-9 flex flex-col items-start gap-5 sm:flex-row sm:items-center sm:gap-7">
+            <Button asChild size="lg" className="h-11 px-5 text-[15px]">
+              <Link to={user ? '/dashboard' : '/login'}>
+                <span>{user ? 'Open your dashboard' : 'Sign in to AttendAI'}</span>
+                <ArrowRight20Regular aria-hidden />
               </Link>
-              <a
-                href="#learn-more"
-                className="text-base font-semibold text-blue-200/80 hover:text-white transition-colors flex items-center gap-2"
-              >
-                Learn more{" "}
-                <span aria-hidden="true" className="text-lg">
-                  ↓
-                </span>
-              </a>
-            </div>
+            </Button>
+            <ArrowLink to="#story">Read the story</ArrowLink>
           </div>
-        </section>
+        </div>
 
-        {/* Our Story Section */}
-        <section id="learn-more" className="py-16 px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-4xl text-center mb-12">
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
-                Our Story
-              </h2>
-              <p className="text-lg text-blue-200/70">
-                From a classroom challenge to an innovative solution.
-              </p>
-            </div>
-            <div className="mx-auto max-w-4xl bg-slate-900/60 backdrop-blur-lg p-10 sm:p-12 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)]">
-              <p className="text-blue-200/70 leading-relaxed mb-6 text-base">
-                AttendAI began with a simple observation: educators were
-                spending too much valuable teaching time on manual attendance.
-                Founded in 2023 by a team of educators and technologists, we set
-                out to solve this universal problem.
-              </p>
-              <p className="text-blue-200/70 leading-relaxed mb-6 text-base">
-                This challenge hit home for our founder, Nadin Tamang, during their time as a student at a large university. Watching 10 minutes of valuable instruction time disappear every single class due to slow, traditional roll call was inefficient and frustrating. This firsthand experience sparked the idea of using facial recognition technology to streamline attendance and give that time back to teaching.
-              </p>
-              <p className="text-blue-200/70 leading-relaxed text-base">
-                Today, AttendAI is used in hundreds of educational institutions
-                worldwide, saving educators thousands of hours and providing
-                valuable attendance insights that help identify at-risk students
-                earlier.
-              </p>
-            </div>
+        <div className="lg:col-span-6 xl:col-span-7">
+          <div className="aspect-[4/3] w-full overflow-hidden rounded-lg bg-surface-subtle">
+            <Photo photo={teacherFront} eager sizes="(min-width: 1280px) 700px, (min-width: 1024px) 46vw, 100vw" />
           </div>
-        </section>
-
-        {/* Team Section */}
-        <section className="py-16 px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-4xl text-center mb-12">
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
-                Our Team
-              </h2>
-              <p className="text-lg text-blue-200/70">
-                Meet the people behind AttendAI.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {[
-                { name: "Diwash Ghimire", role: "CTO", image: "/team/cto.png" },
-                {
-                  name: "Nadin Tamang",
-                  role: "Founder & CEO",
-                  image: "/team/ceo.jpg",
-                },
-                {
-                  name: "Abhishek Subedi",
-                  role: "CMO",
-                  image: "/team/cmo.png",
-                },
-              ].map((person) => (
-                <div
-                  key={person.name}
-                  className="group text-center bg-slate-900/60 backdrop-blur-lg p-8 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2"
-                >
-                  <div className="relative inline-block">
-                    <img
-                      className="mx-auto h-40 w-40 object-cover rounded-full border-4 border-slate-700/50 group-hover:border-blue-500/30 transition-all duration-300"
-                      src={person.image}
-                      alt={person.name}
-                    />
-                  </div>
-                  <h3 className="mt-6 text-xl font-semibold text-white">
-                    {person.name}
-                  </h3>
-                  <p className="mt-2 text-base text-blue-200/70">
-                    {person.role}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* Values Section */}
-        <section className="py-16 px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-4xl text-center mb-12">
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
-                Our Values
-              </h2>
-              <p className="text-lg text-blue-200/70">
-                The principles that guide our work.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Privacy First
-                </h3>
-                <p className="text-blue-200/70 leading-relaxed">
-                  We design our technology with privacy and security as the top
-                  priority, ensuring student data is protected at all times.
-                </p>
-              </div>
-              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Education Impact
-                </h3>
-                <p className="text-blue-200/70 leading-relaxed">
-                  Every feature we build must have a positive impact on the
-                  educational experience for both students and educators.
-                </p>
-              </div>
-              <div className="group bg-slate-900/60 backdrop-blur-lg p-10 rounded-2xl border border-slate-700/50 hover:border-blue-500/30 transition-all duration-300 hover:shadow-[0_0_30px_rgba(56,189,248,0.15)] hover:-translate-y-2">
-                <h3 className="text-xl font-semibold text-white mb-4">
-                  Continuous Improvement
-                </h3>
-                <p className="text-blue-200/70 leading-relaxed">
-                  We're committed to constantly improving our technology through
-                  research and user feedback.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* CTA Section */}
-        <section className="bg-gradient-to-r from-blue-600 to-teal-400 py-20 px-6 lg:px-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mx-auto max-w-3xl text-center">
-              <h2 className="text-4xl sm:text-5xl font-bold tracking-tight text-white mb-6">
-                Ready to transform your classroom?
-              </h2>
-              <p className="text-lg sm:text-xl leading-relaxed text-white/90">
-                Join thousands of educators who are saving time and improving
-                attendance tracking with AttendAI.
-              </p>
-              <div className="mt-10 flex items-center justify-center gap-6">
-                <Link to="/login">
-                  <Button className="bg-white text-blue-600 hover:bg-gray-100 rounded-xl px-8 py-6 text-base font-semibold transition-all duration-300">
-                    Get Started
-                  </Button>
-                </Link>
-                <Link
-                  to="/contact"
-                  className="text-base font-semibold text-white hover:text-white/80 transition-colors flex items-center gap-2"
-                >
-                  Contact us{" "}
-                  <span aria-hidden="true" className="text-lg">
-                    →
-                  </span>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <Footer />
-    </>
+        </div>
+      </Container>
+    </section>
   );
 };
+
+const Story: React.FC = () => (
+  <Section id="story" tone="tint" aria-labelledby="story-title">
+    <div className="grid gap-y-10 lg:grid-cols-12 lg:gap-x-12 xl:gap-x-16">
+      <div className="lg:sticky lg:top-24 lg:col-span-5 lg:self-start xl:col-span-4">
+        <Eyebrow>Why it exists</Eyebrow>
+        <h2 id="story-title" className="lp-h2 mt-3 text-text-primary">
+          Roll call was eating the lecture.
+        </h2>
+        <figure className="mt-10 border-t border-border-subtle pt-6">
+          <p className="lp-figure text-brand-foreground">~10 min</p>
+          <figcaption className="mt-3 max-w-[22rem] text-body text-text-muted">
+            of a class lost to calling names, in the lecture halls that started this project.
+          </figcaption>
+        </figure>
+      </div>
+
+      <div className="space-y-6 lg:col-span-7 lg:col-start-6">
+        <p className="lp-lede text-text-primary">
+          As a student at a large university, Nadin Tamang watched around ten minutes of every class disappear into a
+          slow, traditional roll call.
+        </p>
+        <p className="lp-body max-w-[40rem] text-text-secondary">
+          Calling names is slow, easy to game and hard to audit afterwards. Yet attendance decides who may sit an exam,
+          so the record has to be right. The question became whether a class could record itself, without anyone
+          reading a list, and still be accurate enough to make that decision.
+        </p>
+        <p className="lp-body max-w-[40rem] text-text-secondary">
+          AttendAI is the answer we built for our final-year project. We treated it like a system an institution would
+          actually depend on: the attendance rules are written down, tested, and enforced on the server rather than
+          hidden in the interface.
+        </p>
+      </div>
+    </div>
+  </Section>
+);
+
+const Goals: React.FC = () => (
+  <Section aria-labelledby="goals-title">
+    <SectionHeader
+      id="goals-title"
+      eyebrow="What we set out to get right"
+      title="Four things we wouldn’t compromise on"
+      action={<ArrowLink to="/#trust">See every rule AttendAI follows</ArrowLink>}
+    />
+    <ol className="mt-12 grid gap-x-10 gap-y-10 border-t border-border-subtle pt-10 sm:grid-cols-2 lg:mt-16 lg:grid-cols-4">
+      {GOALS.map((goal, i) => (
+        <li key={goal.title}>
+          <span aria-hidden className="lp-eyebrow tabular-nums text-brand-foreground">
+            {String(i + 1).padStart(2, '0')}
+          </span>
+          <h3 className="lp-h3 mt-3 text-text-primary">{goal.title}</h3>
+          <p className="lp-body mt-3 text-text-secondary">{goal.body}</p>
+        </li>
+      ))}
+    </ol>
+  </Section>
+);
+
+const Team: React.FC = () => (
+  <Section tone="tint" aria-labelledby="team-title">
+    <SectionHeader
+      id="team-title"
+      eyebrow="The team"
+      title="The people behind AttendAI"
+      lede="AttendAI was designed and built as our final-year project."
+    />
+    <ul className="mt-12 grid gap-x-8 gap-y-12 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3">
+      {TEAM.map((member) => (
+        <li key={member.name}>
+          <div className="aspect-[4/3] overflow-hidden rounded-lg bg-surface-subtle sm:aspect-[4/5]">
+            <img
+              src={member.image}
+              alt={`Portrait of ${member.name}`}
+              loading="lazy"
+              decoding="async"
+              className="h-full w-full object-cover"
+              style={{
+                objectPosition: member.position,
+                transform: `scale(${member.scale})`,
+                transformOrigin: member.position,
+              }}
+            />
+          </div>
+          <h3 className="lp-h3 mt-5 text-text-primary">{member.name}</h3>
+          <p className="mt-1 text-body text-text-muted">{member.role}</p>
+        </li>
+      ))}
+    </ul>
+  </Section>
+);
+
+const Stack: React.FC = () => (
+  <Section aria-labelledby="stack-title">
+    <div className="grid gap-y-10 lg:grid-cols-12 lg:gap-x-12 xl:gap-x-16">
+      <div className="lg:col-span-5 xl:col-span-4">
+        <Eyebrow>How it’s built</Eyebrow>
+        <h2 id="stack-title" className="lp-h2 mt-3 text-text-primary">
+          Open tools, on a server you control.
+        </h2>
+        <p className="lp-lede mt-5 max-w-[30rem] text-text-secondary">
+          Nothing is sent to a third-party AI service. The browser guides the camera; the server makes every decision.
+        </p>
+      </div>
+      <dl className="divide-y divide-border-subtle border-y border-border-subtle lg:col-span-7 lg:col-start-6">
+        {STACK.map((row) => (
+          <div key={row.term} className="grid gap-1 py-5 sm:grid-cols-[11rem_1fr] sm:gap-6">
+            <dt className="text-body-strong text-text-primary">{row.term}</dt>
+            <dd className="lp-body text-text-secondary">{row.detail}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  </Section>
+);
+
+const AboutPage: React.FC = () => (
+  <div className="lp flex min-h-screen flex-col bg-surface-default text-text-primary">
+    <a
+      href="#main"
+      className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[60] focus:rounded-md focus:bg-surface-raised focus:px-3 focus:py-2 focus:text-body-strong focus:text-text-primary focus:shadow-lg"
+    >
+      Skip to content
+    </a>
+    <Navbar />
+    <main id="main" className="flex-1">
+      <AboutHero />
+      <Story />
+      <Goals />
+      <Team />
+      <Stack />
+      <ClosingCta />
+    </main>
+    <Footer credits={credits} />
+  </div>
+);
 
 export default AboutPage;

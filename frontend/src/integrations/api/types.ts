@@ -34,7 +34,11 @@ export interface Student {
   phone_number?: string;     // Add phone number field
   emergency_contact?: string; // Add emergency contact field
   profileImage?: string | null;
-  face_encoding?: number[] | null; // Face encoding for recognition
+  /** Always null: embeddings never leave the server. Use `face_registered`. */
+  face_encoding?: number[] | null;
+  face_registered?: boolean;
+  face_registered_at?: string | null;
+  face_enrollment_status?: 'none' | 'enrolled' | 'reset' | 'deleted';
 }
 
 export interface StudentCreateData {

@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '@/config/api';
+import { getAuthToken } from '@/lib/authToken';
 
 export interface CreateNotificationRequest {
   title: string;
@@ -32,7 +33,7 @@ export interface Faculty {
 
 class NotificationService {
   private getAuthHeaders(): HeadersInit {
-  const token = localStorage.getItem('authToken');
+  const token = getAuthToken();
     return {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })

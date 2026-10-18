@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { ArrowDownload20Regular, DocumentPdf20Regular, Checkmark16Regular } from '@fluentui/react-icons';
 import { useToast } from '@/hooks/use-toast';
+import { formatPercent } from '@/components/attendance-admin/metrics';
 
 interface PDFExportProps {
   studentData: {
@@ -12,7 +13,8 @@ interface PDFExportProps {
     email: string;
   };
   attendanceData: {
-    percentage: number;
+    /** `null` when there are no countable classes (renders "—"). */
+    percentage: number | null;
     total: number;
     present: number;
     absent: number;
@@ -159,7 +161,7 @@ const PDFExportCard: React.FC<PDFExportProps> = ({
             <h2 class="section-title">Attendance Summary</h2>
             <div class="stats-grid">
               <div class="stat-card">
-                <div class="stat-value">${attendanceData.percentage.toFixed(1)}%</div>
+                <div class="stat-value">${formatPercent(attendanceData.percentage)}</div>
                 <div class="stat-label">Overall Attendance</div>
               </div>
               <div class="stat-card">
@@ -195,7 +197,7 @@ const PDFExportCard: React.FC<PDFExportProps> = ({
                     <td>${subject.subject}</td>
                     <td>${subject.marks}</td>
                     <td>${subject.totalMarks}</td>
-                    <td>${subject.percentage}%</td>
+                    <td>${formatPercent(subject.percentage)}</td>
                     <td><span class="grade grade-${subject.grade.charAt(0).toLowerCase()}">${subject.grade}</span></td>
                   </tr>
                 `).join('')}
@@ -238,46 +240,52 @@ const PDFExportCard: React.FC<PDFExportProps> = ({
   };
 
   return (
-    <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-green-800">
-          <FileText className="h-5 w-5" />
-          Export Academic Report
-        </CardTitle>
-        <CardDescription className="text-green-600">
-          Download a comprehensive PDF report of your academic performance
-        </CardDescription>
+    <Card className="border-0 bg-surface-default shadow">
+      <CardHeader className="flex-row items-start gap-3 space-y-0 px-5 py-4">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+          <DocumentPdf20Regular aria-hidden />
+        </div>
+        <div className="min-w-0">
+          <CardTitle className="text-subheading text-text-primary">
+            Export Academic Report
+          </CardTitle>
+          <CardDescription className="text-caption text-text-muted">
+            Download a comprehensive PDF report of your academic performance
+          </CardDescription>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="bg-white/60 rounded-lg p-4 space-y-2">
-          <h4 className="font-medium text-gray-900">Report includes:</h4>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Complete attendance summary</li>
-            <li>• Subject-wise marks and grades</li>
-            <li>• Performance analytics</li>
-            <li>• Official institutional header</li>
+      <CardContent className="space-y-4 px-5 pb-5">
+        <div className="space-y-2 rounded-md border border-border-subtle bg-surface-subtle p-4">
+          <h4 className="text-body-strong text-text-primary">Report includes:</h4>
+          <ul className="space-y-1.5 text-body text-text-secondary">
+            {['Complete attendance summary', 'Subject-wise marks and grades', 'Performance analytics', 'Official institutional header'].map(item => (
+              <li key={item} className="flex items-center gap-2">
+                <Checkmark16Regular className="shrink-0 text-status-success" aria-hidden />
+                {item}
+              </li>
+            ))}
           </ul>
         </div>
 
         <Button
           onClick={generatePDF}
           disabled={isExporting}
-          className="w-full bg-green-600 hover:bg-green-700"
+          className="w-full"
         >
           {isExporting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
               Generating Report...
             </>
           ) : (
             <>
-              <Download className="mr-2 h-4 w-4" />
+              <ArrowDownload20Regular aria-hidden />
               Download PDF Report
             </>
           )}
         </Button>
-        
-        <p className="text-xs text-green-600 text-center">
+
+        <p className="text-center text-caption text-text-muted">
           Report will be saved as HTML format (PDF library integration recommended for production)
         </p>
       </CardContent>

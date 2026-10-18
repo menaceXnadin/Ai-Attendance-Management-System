@@ -1,120 +1,119 @@
 import * as React from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  LogoFacebook, 
-  LogoTwitter, 
-  LogoLinkedin, 
-  Email, 
-  Phone, 
-  Location, 
-  ArrowRight 
-} from '@carbon/icons-react';
-import { Button } from '@/components/ui/button';
 import logo from '@/assets/main.png';
+import '@/components/landing/landing.css';
 
-const Footer: React.FC = () => {
-  return (
-    <footer className="bg-surface-default border-t border-border-subtle pt-16 pb-12 text-text-secondary">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Newsletter Section - Clean divided layout without card nesting */}
-        <div className="mb-14 pb-12 border-b border-border-subtle">
-          <div className="grid md:grid-cols-2 gap-6 items-center">
-            <div>
-              <h3 className="text-lg font-semibold text-text-primary mb-1">
-                Institutional Updates & Release Notes
-              </h3>
-              <p className="text-xs text-text-muted max-w-md">
-                Stay updated with platform patches, security improvements, and attendance telemetry enhancements.
-              </p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 max-w-md md:ml-auto w-full">
-              <input 
-                type="email" 
-                placeholder="department@institution.edu" 
-                className="flex-1 px-3 py-2 rounded-md bg-surface-canvas border border-border-subtle text-xs text-text-primary focus:outline-none focus:ring-1 focus:ring-action-primary"
-              />
-              <Button size="sm" className="text-xs h-9 flex items-center justify-center gap-1.5 flex-shrink-0">
-                <span>Subscribe</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
-        </div>
+export interface FooterCredit {
+  author: string;
+  source: string;
+  url: string;
+  license: string;
+}
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-          <div className="col-span-1 md:col-span-4 space-y-4">
-            <Link to="/" className="flex items-center gap-2.5">
-              <img src={logo} alt="AttendAI" className="h-7 w-7 object-contain" />
-              <span className="text-base font-bold text-text-primary tracking-tight">AttendAI</span>
-            </Link>
-            <p className="text-xs text-text-muted leading-relaxed max-w-sm">
-              Enterprise classroom attendance management engine powered by high-accuracy biometric facial verification and institutional analytics.
-            </p>
-            <div className="flex items-center space-x-3 pt-1">
-              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="Facebook">
-                <LogoFacebook className="w-4 h-4" />
-              </a>
-              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="Twitter">
-                <LogoTwitter className="w-4 h-4" />
-              </a>
-              <a href="#" className="p-1.5 rounded-md hover:bg-surface-canvas text-text-muted hover:text-text-primary transition-colors" aria-label="LinkedIn">
-                <LogoLinkedin className="w-4 h-4" />
-              </a>
-            </div>
-          </div>
-          
-          <div className="col-span-1 md:col-span-2">
-            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Platform</h3>
-            <ul className="space-y-2 text-xs">
-              <li><Link to="/app" className="text-text-muted hover:text-text-primary transition-colors">Admin Portal</Link></li>
-              <li><Link to="/teacher" className="text-text-muted hover:text-text-primary transition-colors">Teacher Portal</Link></li>
-              <li><Link to="/student" className="text-text-muted hover:text-text-primary transition-colors">Student Portal</Link></li>
-              <li><Link to="/app/calendar" className="text-text-muted hover:text-text-primary transition-colors">Academic Calendar</Link></li>
-            </ul>
-          </div>
-          
-          <div className="col-span-1 md:col-span-2">
-            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Support</h3>
-            <ul className="space-y-2 text-xs">
-              <li><Link to="/about" className="text-text-muted hover:text-text-primary transition-colors">About AttendAI</Link></li>
-              <li><Link to="/status" className="text-text-muted hover:text-text-primary transition-colors">System Telemetry</Link></li>
-              <li><Link to="/forgot-password" className="text-text-muted hover:text-text-primary transition-colors">Account Recovery</Link></li>
-              <li><Link to="/login" className="text-text-muted hover:text-text-primary transition-colors">Portal Authentication</Link></li>
-            </ul>
-          </div>
-          
-          <div className="col-span-1 md:col-span-4">
-            <h3 className="text-xs font-semibold text-text-primary uppercase tracking-wider mb-3">Institutional Contact</h3>
-            <ul className="space-y-2 text-xs text-text-muted">
-              <li className="flex items-center gap-2">
-                <Email className="w-3.5 h-3.5 text-action-primary flex-shrink-0" />
-                <span>support@attendai.edu</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-action-primary flex-shrink-0" />
-                <span>+977 (01) 554-1234</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <Location className="w-3.5 h-3.5 text-action-primary flex-shrink-0 mt-0.5" />
-                <span>Department of Computer Engineering, Lalitpur, Nepal</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-        
-        <div className="mt-12 pt-6 border-t border-border-subtle flex flex-col sm:flex-row justify-between items-center text-xs text-text-muted gap-4">
-          <p>
-            &copy; {new Date().getFullYear()} AttendAI Engineering System. All rights reserved.
+const COLUMNS: { title: string; links: { label: string; to: string }[] }[] = [
+  {
+    title: 'Product',
+    links: [
+      { label: 'The three portals', to: '/#product' },
+      { label: 'How a class is recorded', to: '/#how-it-works' },
+      { label: 'Trust and integrity', to: '/#trust' },
+    ],
+  },
+  {
+    title: 'Portals',
+    links: [
+      { label: 'Student portal', to: '/student' },
+      { label: 'Teacher portal', to: '/teacher' },
+      { label: 'Admin portal', to: '/app' },
+    ],
+  },
+  {
+    title: 'Account',
+    links: [
+      { label: 'Sign in', to: '/login' },
+      { label: 'Reset your password', to: '/forgot-password' },
+      { label: 'About AttendAI', to: '/about' },
+    ],
+  },
+];
+
+/** Groups credits by source and licence, one entry per author. */
+function groupCredits(credits: FooterCredit[]) {
+  const groups = new Map<string, { key: string; source: string; license: string; authors: FooterCredit[] }>();
+  for (const c of credits) {
+    const key = `${c.source}|${c.license}`;
+    const group = groups.get(key) ?? { key, source: c.source, license: c.license, authors: [] };
+    if (!group.authors.some((a) => a.author === c.author)) group.authors.push(c);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+const linkClass =
+  'rounded-sm text-body text-text-secondary underline-offset-4 transition-colors duration-150 hover:text-text-primary hover:underline';
+
+/** Site footer for the public pages. `credits` lists photography used on the page. */
+const Footer: React.FC<{ credits?: FooterCredit[] }> = ({ credits }) => (
+  <footer className="border-t border-border-subtle bg-surface-canvas">
+    <div className="lp-container pb-8 pt-14">
+      <div className="grid gap-10 md:grid-cols-12">
+        <div className="md:col-span-5 lg:col-span-4">
+          <Link to="/" className="inline-flex items-center gap-2 rounded-sm" aria-label="AttendAI home">
+            <img src={logo} alt="" className="h-6 w-6 object-contain" />
+            <span className="text-subheading text-text-primary">AttendAI</span>
+          </Link>
+          <p className="mt-3 max-w-xs text-body text-text-muted">
+            Class-session attendance with face check-in, teacher registers and an audit trail for every change.
           </p>
-          <div className="flex flex-wrap gap-4">
-            <Link to="/" className="hover:text-text-primary transition-colors">Institutional Privacy Policy</Link>
-            <Link to="/" className="hover:text-text-primary transition-colors">Terms of Service</Link>
-            <Link to="/" className="hover:text-text-primary transition-colors">Security Architecture</Link>
-          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 md:col-span-7 lg:col-span-7 lg:col-start-6">
+          {COLUMNS.map((col) => (
+            <div key={col.title}>
+              <h2 className="text-caption-strong text-text-primary">{col.title}</h2>
+              <ul className="mt-3 space-y-2.5">
+                {col.links.map((link) => (
+                  <li key={link.to}>
+                    <Link to={link.to} className={linkClass}>
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
-    </footer>
-  );
-};
+
+      <div className="mt-12 flex flex-col gap-3 border-t border-border-subtle pt-6 text-caption text-text-muted md:flex-row md:items-start md:justify-between md:gap-10">
+        <p className="shrink-0">&copy; {new Date().getFullYear()} AttendAI</p>
+        {credits && credits.length > 0 && (
+          <p className="md:text-right">
+            {groupCredits(credits).map((group, gi) => (
+              <React.Fragment key={group.key}>
+                {gi > 0 && ' '}
+                Photography from {group.source} ({group.license}):{' '}
+                {group.authors.map((c, i) => (
+                  <React.Fragment key={c.url}>
+                    {i > 0 && ', '}
+                    <a
+                      href={c.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="underline-offset-2 hover:text-text-primary hover:underline"
+                    >
+                      {c.author}
+                    </a>
+                  </React.Fragment>
+                ))}
+                .
+              </React.Fragment>
+            ))}
+          </p>
+        )}
+      </div>
+    </div>
+  </footer>
+);
 
 export default Footer;

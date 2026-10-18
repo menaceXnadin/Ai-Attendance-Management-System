@@ -2,11 +2,26 @@
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import AttendanceChart from '@/components/AttendanceChart';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { api } from '@/integrations/api/client';
+import { api, apiClient } from '@/integrations/api/client';
+import {
+  formatPercent,
+  isFiniteNumber,
+  resolveBand,
+  resolvePercentage,
+  toneClasses,
+  useAttendancePolicy,
+} from '@/components/attendance-admin/metrics';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2 } from 'lucide-react';
+import {
+  DataTrending20Regular,
+  CheckmarkCircle20Regular,
+  DismissCircle20Regular,
+  Clock20Regular,
+  Info20Regular,
+  Lightbulb20Regular,
+  ChartMultiple24Regular,
+} from '@fluentui/react-icons';
 
 interface AttendanceSummaryProps {
   selectedClass?: string;
@@ -19,17 +34,18 @@ const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({
   startDate, 
   endDate 
 }) => {
-  // Fetch attendance summary data from API
+  const policyView = useAttendancePolicy();
+
+  // Raw summary payload so the server's §13.12 fields (percentage/has_data/band) are kept.
   const { data: summary, isLoading } = useQuery({
     queryKey: ['attendance-summary', selectedClass, startDate, endDate],
     queryFn: async () => {
-      const filters = {
-        classId: selectedClass,
-        startDate,
-        endDate
-      };
-      
-      return await api.attendance.getSummary(filters);
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      const qs = params.toString();
+      const { data } = await apiClient.get<Record<string, unknown>>(`/attendance/summary${qs ? `?${qs}` : ''}`);
+      return (data ?? {}) as Record<string, unknown>;
     }
   });
 
@@ -71,42 +87,45 @@ const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({
     enabled: !isLoading && !!summary // Only run after summary loads
   });
 
-  const statusColor = useMemo(() => {
-    if (!summary) return 'text-gray-500';
-    const percentage = summary.percentagePresent;
-    if (percentage >= 90) return 'text-green-600';
-    if (percentage >= 75) return 'text-amber-500';
-    return 'text-red-500';
-  }, [summary]);
+  const percentagePresent = useMemo(() => resolvePercentage(summary), [summary]);
+  const band = useMemo(() => resolveBand(summary, policyView, percentagePresent), [summary, policyView, percentagePresent]);
+  const statusColor = band ? toneClasses[band.tone].text : 'text-text-muted';
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
-        <span className="ml-2">Loading attendance data...</span>
+      <div className="flex items-center justify-center gap-3 py-12 text-body text-text-muted">
+        <div
+          className="h-5 w-5 animate-spin rounded-full border-2 border-brand-subtle border-t-brand"
+          aria-hidden
+        />
+        <span>Loading attendance data...</span>
       </div>
     );
   }
 
   if (!summary) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">No attendance data available for the selected criteria.</p>
+      <div className="flex flex-col items-center justify-center rounded-lg bg-surface-default px-6 py-12 text-center shadow">
+        <div className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted">
+          <ChartMultiple24Regular aria-hidden />
+        </div>
+        <p className="text-body text-text-muted">No attendance data available for the selected criteria.</p>
       </div>
     );
   }
 
-  const totalPresent = summary.present;
-  const totalAbsent = summary.absent;
-  const totalLate = summary.late;
-  const totalExcused = summary.excused;
-  const total = summary.total;
-  const percentagePresent = summary.percentagePresent;
-
-  // Calculate percentages for the visualization
-  const absentPercentage = (totalAbsent / total) * 100;
-  const latePercentage = (totalLate / total) * 100;
-  const excusedPercentage = (totalExcused / total) * 100;
+  const count = (key: string) => (isFiniteNumber(summary[key]) ? (summary[key] as number) : 0);
+  const totalPresent = count('present');
+  const totalAbsent = count('absent');
+  const totalLate = count('late');
+  const totalExcused = count('excused');
+  const total = count('total');
+  // Share-of-records percentages are only shown when the server provides them.
+  const serverPct = (key: string): number | null => (isFiniteNumber(summary[key]) ? (summary[key] as number) : null);
+  const absentPercentage = serverPct('percentage_absent');
+  const latePercentage = serverPct('percentage_late');
+  const excusedPercentage = serverPct('percentage_excused');
+  const unrecorded = serverPct('unrecorded');
 
   // Prepare chart data for the pie chart
   const pieChartData = [
@@ -115,82 +134,124 @@ const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({
     { name: "Late", present: 0, absent: 0, late: totalLate }
   ];
 
+  const kpis = [
+    {
+      label: 'Attendance rate',
+      value: formatPercent(percentagePresent),
+      caption: percentagePresent === null ? 'No classes counted yet' : band ? band.label : `${total} total records`,
+      icon: <DataTrending20Regular aria-hidden />,
+      chip: 'bg-brand-subtle text-brand-foreground',
+      valueClass: statusColor,
+    },
+    {
+      label: 'Present',
+      value: totalPresent,
+      caption: `${total} total classes`,
+      icon: <CheckmarkCircle20Regular aria-hidden />,
+      chip: 'bg-status-success-subtle text-status-success',
+      valueClass: 'text-text-primary',
+    },
+    {
+      label: 'Absent',
+      value: totalAbsent,
+      caption: absentPercentage !== null ? `${formatPercent(absentPercentage)} of records` : 'Absences recorded',
+      icon: <DismissCircle20Regular aria-hidden />,
+      chip: 'bg-status-error-subtle text-status-error',
+      valueClass: 'text-text-primary',
+    },
+    {
+      label: 'Late',
+      value: totalLate,
+      caption: latePercentage !== null ? `${formatPercent(latePercentage)} of records` : 'Late arrivals recorded',
+      icon: <Clock20Regular aria-hidden />,
+      chip: 'bg-status-warning-subtle text-status-warning',
+      valueClass: 'text-text-primary',
+    },
+  ];
+
+  const breakdown = [
+    { label: 'Present', count: totalPresent, pct: percentagePresent, bar: '[&>div]:bg-status-success', show: true },
+    { label: 'Absent', count: totalAbsent, pct: absentPercentage, bar: '[&>div]:bg-status-error', show: true },
+    { label: 'Late', count: totalLate, pct: latePercentage, bar: '[&>div]:bg-status-warning', show: true },
+    { label: 'Excused', count: totalExcused, pct: excusedPercentage, bar: '[&>div]:bg-status-info', show: totalExcused > 0 },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Overall Attendance Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col items-center">
-              <div className={`text-5xl font-bold ${statusColor} mb-4`}>
-                {percentagePresent.toFixed(1)}%
-              </div>
-              
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Present ({totalPresent})</span>
-                  <span>{percentagePresent.toFixed(1)}%</span>
-                </div>
-                <Progress value={percentagePresent} className="h-2 bg-gray-200" />
-                
-                <div className="flex justify-between text-sm">
-                  <span>Absent ({totalAbsent})</span>
-                  <span>{absentPercentage.toFixed(1)}%</span>
-                </div>
-                <Progress value={absentPercentage} className="h-2 bg-gray-200" />
-                
-                <div className="flex justify-between text-sm">
-                  <span>Late ({totalLate})</span>
-                  <span>{latePercentage.toFixed(1)}%</span>
-                </div>
-                <Progress value={latePercentage} className="h-2 bg-gray-200" />
-                
-                {totalExcused > 0 && (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span>Excused ({totalExcused})</span>
-                      <span>{excusedPercentage.toFixed(1)}%</span>
-                    </div>
-                    <Progress value={excusedPercentage} className="h-2 bg-gray-200" />
-                  </>
-                )}
-              </div>
-              
-              <div className="mt-4 text-sm text-gray-500">
-                Total Records: {total}
-              </div>
+    <div className="space-y-4">
+      {/* KPI tiles */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="flex items-start gap-3 rounded-lg bg-surface-default p-4 shadow">
+            <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${kpi.chip}`}>
+              {kpi.icon}
             </div>
-          </CardContent>
-        </Card>
-        
-        <AttendanceChart 
-          data={pieChartData} 
+            <div className="min-w-0">
+              <p className="text-caption text-text-muted">{kpi.label}</p>
+              <p className={`text-[28px] font-semibold leading-9 tabular-nums ${kpi.valueClass}`}>{kpi.value}</p>
+              <p className="text-caption text-text-muted">{kpi.caption}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <section className="rounded-lg bg-surface-default shadow">
+          <header className="border-b border-border-subtle px-5 py-4">
+            <h3 className="text-subheading text-text-primary">Overall Attendance Rate</h3>
+          </header>
+          <div className="p-5">
+            <div className="mb-5 flex items-baseline gap-2">
+              <span className={`text-[40px] font-semibold leading-[52px] tabular-nums ${statusColor}`}>
+                {formatPercent(percentagePresent)}
+              </span>
+              <span className="text-caption text-text-muted">present</span>
+            </div>
+
+            <div className="space-y-3">
+              {breakdown.filter((row) => row.show).map((row) => (
+                <div key={row.label} className="space-y-1.5">
+                  <div className="flex justify-between text-body">
+                    <span className="text-text-secondary">{row.label} ({row.count})</span>
+                    <span className="font-semibold tabular-nums text-text-primary">{formatPercent(row.pct)}</span>
+                  </div>
+                  {row.pct !== null && <Progress value={row.pct} className={`h-1.5 bg-surface-pressed ${row.bar}`} />}
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 border-t border-border-subtle pt-3 text-caption text-text-muted">
+              Total classes: <span className="tabular-nums">{total}</span>
+              {unrecorded ? <span className="ml-2 text-status-warning">· {unrecorded} unrecorded session{unrecorded === 1 ? '' : 's'} not counted</span> : null}
+            </div>
+          </div>
+        </section>
+
+        <AttendanceChart
+          data={pieChartData}
           title="Attendance Distribution"
           description="Breakdown by attendance status"
           type="pie"
         />
       </div>
-      
+
       {attendanceData && attendanceData.length > 0 && (
-        <Tabs defaultValue="bar">
+        <Tabs defaultValue="bar" className="space-y-3">
           <TabsList>
             <TabsTrigger value="bar">Bar Chart</TabsTrigger>
             <TabsTrigger value="line">Line Chart</TabsTrigger>
           </TabsList>
-          
-          <TabsContent value="bar">
-            <AttendanceChart 
-              data={attendanceData} 
+
+          <TabsContent value="bar" className="mt-0">
+            <AttendanceChart
+              data={attendanceData}
               title="Attendance Trends"
               description="Daily attendance breakdown"
               type="bar"
             />
           </TabsContent>
-          
-          <TabsContent value="line">
-            <AttendanceChart 
+
+          <TabsContent value="line" className="mt-0">
+            <AttendanceChart
               data={attendanceData}
               title="Attendance Trends"
               description="Daily attendance patterns"
@@ -200,41 +261,49 @@ const AttendanceSummary: React.FC<AttendanceSummaryProps> = ({
         </Tabs>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Attendance Insights</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+      <section className="rounded-lg bg-surface-default shadow">
+        <header className="flex items-center gap-2 border-b border-border-subtle px-5 py-4">
+          <Lightbulb20Regular className="text-brand-foreground" aria-hidden />
+          <h3 className="text-subheading text-text-primary">Attendance Insights</h3>
+        </header>
+        <div className="space-y-2 p-5">
+          <div className="flex items-start gap-2 rounded-md border border-status-info-border bg-status-info-subtle px-3 py-2 text-body text-text-primary">
+            <Info20Regular className="mt-px shrink-0 text-status-info" aria-hidden />
             <p>
-              <strong>Overall Performance: </strong>
-              {percentagePresent >= 90
-                ? "Excellent attendance record. Keep up the good work!"
-                : percentagePresent >= 75
-                ? "Good attendance, but there's room for improvement."
-                : "Attendance needs significant improvement."}
+              <strong className="font-semibold">Overall Performance: </strong>
+              {percentagePresent === null || !band
+                ? "No classes have been counted yet."
+                : band.tone === 'destructive'
+                ? `Attendance (${formatPercent(percentagePresent)}) is in the ${band.label} band — below the ${policyView.minimum}% minimum.`
+                : band.tone === 'warning'
+                ? `Attendance is ${formatPercent(percentagePresent)} (${band.label}) — there's room for improvement.`
+                : `Attendance is ${formatPercent(percentagePresent)} (${band.label}). Keep up the good work!`}
             </p>
-            
-            {totalLate > 0 && (
-              <p>
-                <strong>Punctuality: </strong>
-                {((totalLate / total) * 100) > 10
-                  ? "Punctuality is a concern. Consider addressing late arrivals."
-                  : "Occasional tardiness, but generally punctual."}
-              </p>
-            )}
-            
-            {totalAbsent > 0 && (
-              <p>
-                <strong>Absences: </strong>
-                {((totalAbsent / total) * 100) > 20
-                  ? "High absence rate. Follow-up may be required."
-                  : "Acceptable number of absences."}
-              </p>
-            )}
           </div>
-        </CardContent>
-      </Card>
+
+          {totalLate > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-status-warning-border bg-status-warning-subtle px-3 py-2 text-body text-text-primary">
+              <Clock20Regular className="mt-px shrink-0 text-status-warning" aria-hidden />
+              <p>
+                <strong className="font-semibold">Punctuality: </strong>
+                {totalLate} late arrival{totalLate === 1 ? '' : 's'} recorded
+                {latePercentage !== null ? ` (${formatPercent(latePercentage)} of records)` : ''}.
+              </p>
+            </div>
+          )}
+
+          {totalAbsent > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-status-error-border bg-status-error-subtle px-3 py-2 text-body text-text-primary">
+              <DismissCircle20Regular className="mt-px shrink-0 text-status-error" aria-hidden />
+              <p>
+                <strong className="font-semibold">Absences: </strong>
+                {totalAbsent} absence{totalAbsent === 1 ? '' : 's'} recorded
+                {absentPercentage !== null ? ` (${formatPercent(absentPercentage)} of records)` : ''}.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };

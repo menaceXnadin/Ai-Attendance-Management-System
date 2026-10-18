@@ -1,0 +1,479 @@
+/*
+ * AttendAI calendar styles — Outlook / Teams calendar look.
+ *
+ * Everything here is driven by the theme tokens declared in src/index.css,
+ * so light and dark mode stay in sync automatically. Do not add hex colors.
+ *
+ * Sections:
+ *   1. Custom calendar primitives used by AcademicCalendar (.cal-*)
+ *   2. react-big-calendar overrides (.rbc-*)
+ */
+
+/* -------------------------------------------------------------------------- */
+/* 1. Custom calendar primitives                                               */
+/* -------------------------------------------------------------------------- */
+
+/*
+ * Event block: rounded, 3px accent bar on the left, tinted background.
+ * The accent comes from the --evt custom property (set inline per event,
+ * e.g. var(--chart-4) or a user-picked session color).
+ */
+.cal-event {
+  --evt: var(--chart-1);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  border-left: 3px solid var(--evt);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--evt) 14%, var(--surface-default));
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  padding: 2px 6px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-standard);
+}
+
+.cal-event > * {
+  min-width: 0;
+}
+
+/* Roomier block (day view sessions) */
+.cal-event.cal-event--roomy {
+  padding: 4px 10px;
+}
+
+/* Cancelled classes: muted, struck through */
+.cal-event.is-cancelled {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.cal-event:hover {
+  background-color: color-mix(in srgb, var(--evt) 24%, var(--surface-default));
+}
+
+.cal-event:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+/* Small colored square used in legends / filters */
+.cal-swatch {
+  --evt: var(--chart-1);
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background-color: var(--evt);
+}
+
+/* Tinted icon chip (event details header) */
+.cal-chip {
+  --evt: var(--chart-1);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--evt) 14%, var(--surface-raised));
+  color: var(--evt);
+}
+
+/* Soft background tint for time slots covered by an all-day/parent event */
+.cal-slot-tint {
+  --evt: var(--chart-1);
+  background-color: color-mix(in srgb, var(--evt) 8%, var(--surface-default));
+}
+
+/* -------------------------------------------------------------------------- */
+/* 2. react-big-calendar overrides (theme-aware)                               */
+/* -------------------------------------------------------------------------- */
+
+.rbc-calendar {
+  font-family: inherit;
+  color: var(--text-primary);
+  background-color: var(--surface-default);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Toolbar — Outlook style: Today (outline), prev/next (subtle), label, view switcher (segmented) */
+.rbc-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 14px;
+}
+
+.rbc-toolbar .rbc-toolbar-label {
+  flex: 1 1 auto;
+  text-align: left;
+  padding: 0 8px;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rbc-toolbar button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background-color: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  cursor: pointer;
+  box-shadow: none;
+  transition: background-color 150ms var(--ease-standard), border-color 150ms var(--ease-standard);
+}
+
+.rbc-toolbar button:hover,
+.rbc-toolbar button:focus {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+  border-color: transparent;
+}
+
+.rbc-toolbar button:active,
+.rbc-toolbar button.rbc-active {
+  background-color: var(--brand-subtle);
+  color: var(--brand-foreground);
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.rbc-toolbar button:active:hover,
+.rbc-toolbar button:active:focus,
+.rbc-toolbar button.rbc-active:hover,
+.rbc-toolbar button.rbc-active:focus {
+  background-color: var(--brand-subtle-hover);
+  color: var(--brand-foreground);
+  border-color: transparent;
+}
+
+/* First nav button ("Today") gets the outline treatment */
+.rbc-toolbar .rbc-btn-group:first-child button:first-child {
+  border-color: var(--border-default);
+  background-color: var(--surface-default);
+  font-weight: 600;
+}
+
+.rbc-toolbar .rbc-btn-group:first-child button:first-child:hover {
+  background-color: var(--surface-hover);
+}
+
+/* View switcher = segmented control */
+.rbc-toolbar .rbc-btn-group:last-child {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: 4px;
+  background-color: var(--surface-default);
+}
+
+.rbc-toolbar .rbc-btn-group:last-child button {
+  height: 28px;
+  border-radius: 2px;
+}
+
+.rbc-btn-group > button:first-child:not(:last-child),
+.rbc-btn-group > button:last-child:not(:first-child),
+.rbc-btn-group > button:not(:first-child):not(:last-child) {
+  border-radius: 4px;
+}
+
+.rbc-btn-group button + button {
+  margin-left: 2px;
+}
+
+/* Header weekday labels */
+.rbc-header {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--surface-default);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.rbc-header + .rbc-header {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.rbc-header > a,
+.rbc-header > a:active,
+.rbc-header > a:visited {
+  color: inherit;
+}
+
+/* Month view */
+.rbc-month-view {
+  border: none;
+}
+
+.rbc-month-row + .rbc-month-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rbc-day-bg {
+  background-color: var(--surface-default);
+  transition: background-color 150ms var(--ease-standard);
+}
+
+.rbc-day-bg + .rbc-day-bg {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.rbc-day-bg:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Off-range days are muted */
+.rbc-off-range-bg {
+  background-color: var(--surface-subtle);
+}
+
+.rbc-off-range {
+  color: var(--text-disabled);
+}
+
+/* Date numbers */
+.rbc-date-cell {
+  padding: 6px 8px 2px;
+  text-align: left;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.rbc-date-cell > a,
+.rbc-date-cell .rbc-button-link {
+  color: inherit;
+  font: inherit;
+}
+
+.rbc-date-cell.rbc-off-range {
+  color: var(--text-disabled);
+}
+
+/* Today — Outlook style: tinted cell + date number in a filled brand circle */
+.rbc-today {
+  background-color: var(--brand-subtle);
+}
+
+.rbc-day-bg.rbc-today:hover {
+  background-color: var(--brand-subtle-hover);
+}
+
+.rbc-date-cell.rbc-now .rbc-button-link,
+.rbc-date-cell.rbc-now > a {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 4px;
+  border-radius: 9999px;
+  background-color: var(--brand);
+  color: var(--on-brand);
+  font-weight: 600;
+}
+
+/* Events — rounded block, left accent bar, tinted background */
+.rbc-event,
+.rbc-day-slot .rbc-event,
+.rbc-day-slot .rbc-background-event {
+  --evt: var(--chart-1);
+  padding: 2px 6px;
+  margin: 1px 4px;
+  border: none;
+  border-left: 3px solid var(--evt);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--evt) 14%, var(--surface-default));
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: background-color 150ms var(--ease-standard);
+}
+
+.rbc-event:hover {
+  background-color: color-mix(in srgb, var(--evt) 24%, var(--surface-default));
+}
+
+.rbc-event.rbc-selected,
+.rbc-day-slot .rbc-selected.rbc-background-event {
+  background-color: color-mix(in srgb, var(--evt) 30%, var(--surface-default));
+}
+
+.rbc-event:focus,
+.rbc-event:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.rbc-event-label {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.rbc-event-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rbc-event.event-class { --evt: var(--chart-3); }
+.rbc-event.event-exam { --evt: var(--chart-4); }
+.rbc-event.event-holiday { --evt: var(--status-error); }
+.rbc-event.event-special { --evt: var(--chart-1); }
+.rbc-event.event-break { --evt: var(--status-info); }
+.rbc-event.event-cancelled {
+  --evt: var(--text-muted);
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+/* Time views */
+.rbc-time-view {
+  border: none;
+}
+
+.rbc-time-header {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rbc-time-header.rbc-overflowing {
+  border-right: 1px solid var(--border-subtle);
+}
+
+.rbc-time-header-content {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.rbc-time-content {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.rbc-time-content > * + * > * {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.rbc-timeslot-group {
+  min-height: 48px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.rbc-time-slot {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.rbc-day-slot .rbc-time-slot {
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 50%, transparent);
+}
+
+.rbc-time-gutter,
+.rbc-header-gutter {
+  background-color: var(--surface-default);
+}
+
+.rbc-label {
+  padding: 0 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.rbc-allday-cell {
+  background-color: var(--surface-default);
+}
+
+.rbc-current-time-indicator {
+  height: 2px;
+  background-color: var(--brand);
+}
+
+/* Agenda view */
+.rbc-agenda-view table.rbc-agenda-table {
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.rbc-agenda-view table.rbc-agenda-table thead > tr > th {
+  border-bottom: 1px solid var(--border-subtle);
+  background-color: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rbc-agenda-view table.rbc-agenda-table tbody > tr > td + td,
+.rbc-agenda-view table.rbc-agenda-table tbody > tr + tr {
+  border-color: var(--border-subtle);
+}
+
+/* "+N more" link and overflow popover */
+.rbc-show-more {
+  padding: 0 6px;
+  background: transparent;
+  color: var(--brand-foreground);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.rbc-show-more:hover,
+.rbc-show-more:focus {
+  color: var(--brand-foreground-hover);
+  text-decoration: underline;
+}
+
+.rbc-overlay {
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background-color: var(--surface-raised);
+  box-shadow: var(--shadow-16);
+  color: var(--text-primary);
+}
+
+.rbc-overlay-header {
+  margin: -8px -8px 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Selection highlight while dragging across slots */
+.rbc-slot-selection,
+.rbc-selected-cell {
+  background-color: color-mix(in srgb, var(--brand) 16%, transparent);
+  color: var(--text-primary);
+}
+
+/* Nepal: Saturday is the weekly institutional holiday */
+.rbc-date-cell.weekend,
+.rbc-date-cell[data-day="6"] {
+  color: var(--status-error);
+}

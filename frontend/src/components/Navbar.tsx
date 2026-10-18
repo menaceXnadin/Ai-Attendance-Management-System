@@ -1,176 +1,174 @@
 import * as React from 'react';
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { 
-  Menu, 
-  Close, 
-  User, 
-  Logout, 
-  Home, 
-  Information, 
-  Dashboard 
-} from '@carbon/icons-react';
+import { Navigation20Regular, Dismiss20Regular, ArrowRight16Regular } from '@fluentui/react-icons';
 import logo from '@/assets/main.png';
 import { useAuth } from '@/contexts/useAuth';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { cn } from '@/lib/utils';
+import '@/components/landing/landing.css';
+
+/**
+ * Public site navigation (home, about, sign-in pages). Section links point at
+ * anchors on the home page; HomePage scrolls to `location.hash` itself because
+ * react-router does not.
+ */
+const NAV_LINKS: { label: string; to: string; section?: boolean }[] = [
+  { label: 'Product', to: '/#product', section: true },
+  { label: 'How it works', to: '/#how-it-works', section: true },
+  { label: 'Trust', to: '/#trust', section: true },
+  { label: 'About', to: '/about' },
+];
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const { user, signOut } = useAuth();
+  const location = useLocation();
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
+    const handleScroll = () => setIsScrolled(window.scrollY > 8);
+    handleScroll();
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const toggleMenu = () => setIsMenuOpen((open) => !open);
+  // Close the mobile menu on navigation and on Escape.
+  useEffect(() => setIsMenuOpen(false), [location.pathname, location.hash]);
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setIsMenuOpen(false);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMenuOpen]);
 
-  const getDashboardLink = () => {
-    if (user?.role === 'admin') return '/app';
-    if (user?.role === 'faculty' || user?.role === 'teacher') return '/teacher';
-    return '/student';
-  };
+  const isActive = (to: string, section?: boolean) => !section && location.pathname.startsWith(to);
 
   return (
-    <nav className={`sticky top-0 z-50 transition-all duration-200 ${
-      isScrolled 
-        ? 'bg-surface-default/95 backdrop-blur-md border-b border-border-subtle shadow-xs' 
-        : 'bg-surface-default border-b border-border-subtle'
-    }`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16 items-center">
-          <div className="flex-shrink-0 flex items-center">
-            <Link to="/" className="flex items-center gap-2.5">
-              <img src={logo} alt="AttendAI" className="h-8 w-8 object-contain" />
-              <span className="text-lg font-bold text-text-primary tracking-tight">AttendAI</span>
+    <header
+      className={cn(
+        'sticky top-0 z-50 border-b bg-surface-default transition-[border-color,box-shadow] duration-150 ease-fluent-standard',
+        isScrolled || isMenuOpen ? 'border-border-subtle shadow-xs' : 'border-transparent'
+      )}
+    >
+      <nav aria-label="Main" className="lp-container">
+        <div className="flex h-14 items-center justify-between gap-4">
+          <div className="flex h-full min-w-0 items-center gap-8">
+            <Link to="/" className="flex shrink-0 items-center gap-2 rounded-sm" aria-label="AttendAI home">
+              <img src={logo} alt="" className="h-7 w-7 object-contain" />
+              <span className="text-[17px] font-semibold leading-6 tracking-[-0.01em] text-text-primary">AttendAI</span>
             </Link>
+
+            <ul className="hidden h-full items-center gap-1 md:flex">
+              {NAV_LINKS.map(({ label, to, section }) => {
+                const active = isActive(to, section);
+                return (
+                  <li key={to} className="h-full">
+                    <Link
+                      to={to}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'relative flex h-full items-center px-3 text-body transition-colors duration-150 ease-fluent-standard',
+                        'after:absolute after:inset-x-3 after:bottom-0 after:h-[2px] after:transition-colors',
+                        active
+                          ? 'text-text-primary after:bg-brand'
+                          : 'text-text-secondary after:bg-transparent hover:text-text-primary hover:after:bg-border-strong'
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
-          {/* Desktop navigation */}
-          <div className="hidden md:flex items-center space-x-1">
-            <Link 
-              to="/" 
-              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas rounded-md transition-colors flex items-center gap-1.5"
-            >
-              <Home className="w-3.5 h-3.5" />
-              <span>Home</span>
-            </Link>
-            <Link 
-              to="/about" 
-              className="px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas rounded-md transition-colors flex items-center gap-1.5"
-            >
-              <Information className="w-3.5 h-3.5" />
-              <span>About</span>
-            </Link>
-
-            <div className="h-4 w-px bg-border-subtle mx-2" />
-
-            <ThemeToggle className="mr-1" />
-
+          <div className="hidden items-center gap-2 md:flex">
+            <ThemeToggle />
+            <span className="mx-1 h-5 w-px bg-border-subtle" aria-hidden />
             {user ? (
-              <div className="flex items-center gap-2">
-                <Link to={getDashboardLink()}>
-                  <Button variant="default" size="sm" className="text-xs h-8 flex items-center gap-1.5">
-                    <Dashboard className="w-3.5 h-3.5" />
-                    <span>Dashboard</span>
-                  </Button>
-                </Link>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="text-xs h-8 flex items-center gap-1.5 text-text-muted hover:text-status-error"
-                  onClick={signOut}
-                >
-                  <Logout className="w-3.5 h-3.5" />
-                  <span>Logout</span>
+              <>
+                <Button variant="subtle" size="default" onClick={signOut}>
+                  Sign out
                 </Button>
-              </div>
+                <Button asChild size="default">
+                  <Link to="/dashboard">
+                    <span>Open dashboard</span>
+                    <ArrowRight16Regular aria-hidden />
+                  </Link>
+                </Button>
+              </>
             ) : (
-              <Link to="/login">
-                <Button size="sm" className="text-xs h-8">
-                  Sign In
-                </Button>
-              </Link>
+              <Button asChild size="default" className="px-4">
+                <Link to="/login">Sign in</Link>
+              </Button>
             )}
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden flex items-center gap-1">
-            <ThemeToggle />
-            <button
-              onClick={toggleMenu}
-              className="inline-flex items-center justify-center p-2 rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-canvas focus:outline-none transition-colors"
-              aria-label="Toggle navigation menu"
+          <div className="flex items-center gap-1 md:hidden">
+            <ThemeToggle size="icon" />
+            <Button
+              type="button"
+              variant="subtle"
+              size="icon"
+              onClick={() => setIsMenuOpen((open) => !open)}
+              aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={isMenuOpen}
+              aria-controls="site-mobile-menu"
             >
-              {isMenuOpen ? <Close className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+              {isMenuOpen ? <Dismiss20Regular aria-hidden /> : <Navigation20Regular aria-hidden />}
+            </Button>
           </div>
         </div>
-      </div>
+      </nav>
 
-      {/* Mobile menu */}
       {isMenuOpen && (
-        <div className="md:hidden bg-surface-default border-b border-border-subtle shadow-card">
-          <div className="px-4 pt-2 pb-4 space-y-1">
-            <Link
-              to="/"
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas transition-colors"
-              onClick={toggleMenu}
-            >
-              <Home className="w-4 h-4" />
-              <span>Home</span>
-            </Link>
-            <Link
-              to="/about"
-              className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-surface-canvas transition-colors"
-              onClick={toggleMenu}
-            >
-              <Information className="w-4 h-4" />
-              <span>About</span>
-            </Link>
-
-            <div className="pt-2 border-t border-border-subtle mt-2">
+        // Overlays the page instead of pushing it down, so opening and closing never shifts the layout.
+        <div
+          id="site-mobile-menu"
+          className="absolute inset-x-0 top-full max-h-[calc(100dvh-3.5rem)] overflow-y-auto border-y border-border-subtle bg-surface-default shadow-lg md:hidden"
+        >
+          <div className="lp-container pb-5 pt-2">
+            <ul>
+              {NAV_LINKS.map(({ label, to, section }) => {
+                const active = isActive(to, section);
+                return (
+                  <li key={to} className="border-b border-border-subtle">
+                    <Link
+                      to={to}
+                      aria-current={active ? 'page' : undefined}
+                      className={cn(
+                        'flex h-12 items-center text-[15px] transition-colors duration-150',
+                        active ? 'font-semibold text-text-primary' : 'text-text-secondary hover:text-text-primary'
+                      )}
+                    >
+                      {label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-5 flex flex-col gap-2">
               {user ? (
                 <>
-                  <Link
-                    to={getDashboardLink()}
-                    className="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-action-primary hover:bg-surface-canvas transition-colors"
-                    onClick={toggleMenu}
-                  >
-                    <Dashboard className="w-4 h-4" />
-                    <span>Dashboard</span>
-                  </Link>
-                  <button
-                    onClick={() => {
-                      signOut();
-                      toggleMenu();
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-status-error hover:bg-status-error/10 transition-colors"
-                  >
-                    <Logout className="w-4 h-4" />
-                    <span>Logout</span>
-                  </button>
+                  <Button asChild size="lg" className="w-full">
+                    <Link to="/dashboard">Open dashboard</Link>
+                  </Button>
+                  <Button type="button" variant="outline" size="lg" className="w-full" onClick={signOut}>
+                    Sign out
+                  </Button>
                 </>
               ) : (
-                <Link
-                  to="/login"
-                  className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium bg-action-primary text-white transition-colors"
-                  onClick={toggleMenu}
-                >
-                  <User className="w-3.5 h-3.5" />
-                  <span>Sign In</span>
-                </Link>
+                <Button asChild size="lg" className="w-full">
+                  <Link to="/login">Sign in</Link>
+                </Button>
               )}
             </div>
           </div>
         </div>
       )}
-    </nav>
+    </header>
   );
 };
 

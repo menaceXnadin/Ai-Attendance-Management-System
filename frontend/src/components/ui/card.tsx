@@ -2,6 +2,11 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Fluent 2 card: neutral surface, 8px radius, shadow-4 elevation. No visible
+ * stroke in light mode; a subtle stroke in dark mode keeps cards separated
+ * from the canvas.
+ */
 const Card = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement>
@@ -9,7 +14,10 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border border-border bg-card text-card-foreground shadow-none transition-colors",
+      // The stroke color comes from a local CSS var (transparent in light,
+      // border-subtle in dark) so any border color passed via className
+      // still wins in both themes.
+      "rounded-lg border [--card-stroke:transparent] dark:[--card-stroke:var(--border-subtle)] border-[color:var(--card-stroke)] bg-card text-text-primary shadow transition-shadow duration-150 ease-fluent-standard",
       className
     )}
     {...props}
@@ -23,7 +31,7 @@ const CardHeader = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex flex-col space-y-1 p-5", className)}
+    className={cn("flex flex-col space-y-1 p-5 pb-3", className)}
     {...props}
   />
 ))
@@ -35,10 +43,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn(
-      "text-base font-semibold leading-tight tracking-tight text-text-primary",
-      className
-    )}
+    className={cn("text-subheading text-text-primary", className)}
     {...props}
   />
 ))
@@ -50,7 +55,7 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-xs text-text-muted", className)}
+    className={cn("text-caption text-text-muted", className)}
     {...props}
   />
 ))
@@ -70,7 +75,7 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center p-5 pt-0", className)}
+    className={cn("flex items-center gap-2 p-5 pt-0", className)}
     {...props}
   />
 ))

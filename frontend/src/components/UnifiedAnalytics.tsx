@@ -1,33 +1,54 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  BarChart3, 
-  PieChart, 
-  TrendingUp,
-  TrendingDown,
-  Users,
-  Calendar,
-  Clock,
-  Target,
-  Activity,
-  AlertTriangle,
-  CheckCircle,
-  Award,
-  Download,
-  Filter,
-  Eye,
-  ChevronRight
-} from 'lucide-react';
+import {
+  DataBarVertical20Regular,
+  DataBarVertical16Regular,
+  ArrowTrending16Regular,
+  ArrowTrendingDown16Regular,
+  People20Regular,
+  CalendarLtr20Regular,
+  Clock20Regular,
+  Target16Regular,
+  Pulse20Regular,
+  Warning20Regular,
+  CheckmarkCircle20Regular,
+  CheckmarkCircle16Regular,
+  Trophy16Regular,
+  Trophy20Regular,
+  ArrowDownload16Regular,
+  Filter16Regular,
+  ChevronRight16Regular,
+} from '@fluentui/react-icons';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/integrations/api/client';
 
 interface UnifiedAnalyticsProps {
   className?: string;
 }
+
+/** Report card shell — Power BI / Teams analytics style. */
+const ReportCard: React.FC<{
+  title: string;
+  caption?: string;
+  icon?: React.ReactNode;
+  flush?: boolean;
+  children: React.ReactNode;
+}> = ({ title, caption, icon, flush = false, children }) => (
+  <Card className="overflow-hidden">
+    <div className="flex items-start gap-3 px-5 py-4">
+      {icon && <span className="mt-0.5 text-text-muted">{icon}</span>}
+      <div className="min-w-0">
+        <h3 className="text-subheading text-text-primary">{title}</h3>
+        {caption && <p className="text-caption text-text-muted mt-0.5">{caption}</p>}
+      </div>
+    </div>
+    <div className={flush ? '' : 'px-5 pb-5'}>{children}</div>
+  </Card>
+);
 
 const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) => {
   // Fetch real data from API
@@ -52,14 +73,14 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
   if (isLoading) {
     return (
       <div className={`space-y-6 ${className}`}>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
-            <Card key={i} className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardContent className="p-6">
+            <Card key={i}>
+              <CardContent className="p-4">
                 <div className="animate-pulse">
-                  <div className="h-4 bg-slate-700 rounded w-3/4 mb-2"></div>
-                  <div className="h-8 bg-slate-700 rounded w-1/2 mb-2"></div>
-                  <div className="h-3 bg-slate-700 rounded w-full"></div>
+                  <div className="h-3 bg-surface-selected rounded w-3/4 mb-3"></div>
+                  <div className="h-7 bg-surface-selected rounded w-1/2 mb-3"></div>
+                  <div className="h-3 bg-surface-selected rounded w-full"></div>
                 </div>
               </CardContent>
             </Card>
@@ -77,7 +98,7 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
     totalClasses: sidebarStats?.total_classes || 0,
   };
 
-  const weeklyTrend = attendanceSummary ? 
+  const weeklyTrend = attendanceSummary ?
     ((attendanceSummary.percentagePresent - data.attendanceRate) || 0) : 0;
 
   const absentToday = data.totalStudents - data.presentToday;
@@ -123,17 +144,17 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
   ];
 
   const getAttendanceStatus = (rate: number) => {
-    if (rate >= 90) return { status: 'Excellent', color: 'text-blue-400', bgColor: 'bg-blue-500/20' };
-    if (rate >= 85) return { status: 'Good', color: 'text-green-400', bgColor: 'bg-green-500/20' };
-    if (rate >= 75) return { status: 'Warning', color: 'text-yellow-400', bgColor: 'bg-yellow-500/20' };
-    return { status: 'Critical', color: 'text-red-400', bgColor: 'bg-red-500/20' };
+    if (rate >= 90) return { status: 'Excellent', color: 'text-status-success', bgColor: 'bg-status-success-subtle', variant: 'success' as const };
+    if (rate >= 85) return { status: 'Good', color: 'text-status-info', bgColor: 'bg-status-info-subtle', variant: 'info' as const };
+    if (rate >= 75) return { status: 'Warning', color: 'text-status-warning', bgColor: 'bg-status-warning-subtle', variant: 'warning' as const };
+    return { status: 'Critical', color: 'text-status-error', bgColor: 'bg-status-error-subtle', variant: 'destructive' as const };
   };
 
   const getTrendIcon = (trend: number) => {
     return trend >= 0 ? (
-      <TrendingUp className="h-4 w-4 text-green-400" />
+      <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />
     ) : (
-      <TrendingDown className="h-4 w-4 text-red-400" />
+      <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />
     );
   };
 
@@ -142,90 +163,82 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
   return (
     <div className={`space-y-6 ${className}`}>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Analytics Dashboard</h2>
-          <p className="text-slate-400">Comprehensive attendance insights and performance metrics</p>
+          <h2 className="text-section-title text-text-primary">Analytics Dashboard</h2>
+          <p className="text-body text-text-muted mt-1">Comprehensive attendance insights and performance metrics</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-            <Download className="h-4 w-4 mr-2" />
+          <Button variant="outline" size="sm">
+            <ArrowDownload16Regular aria-hidden />
             Export
           </Button>
-          <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-            <Filter className="h-4 w-4 mr-2" />
+          <Button variant="outline" size="sm">
+            <Filter16Regular aria-hidden />
             Filter
           </Button>
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Overview KPI tiles */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Total Students */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Total Students</p>
-                <div className="text-2xl font-bold text-blue-400">{data.totalStudents}</div>
-                <p className="text-xs text-slate-500">Enrolled students</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Total Students</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">{data.totalStudents}</div>
+                <p className="text-caption text-text-muted">Enrolled students</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                <Users className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+                <People20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Present Today */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-green-500 to-emerald-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Present Today</p>
-                <div className="text-2xl font-bold text-green-400">{data.presentToday}</div>
-                <div className="flex items-center gap-1 mt-1">
-                  <CheckCircle className="h-3 w-3 text-green-400" />
-                  <span className="text-xs text-green-400">Active</span>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Present Today</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">{data.presentToday}</div>
+                <div className="flex items-center gap-1 text-caption text-status-success">
+                  <CheckmarkCircle16Regular className="shrink-0" aria-hidden />
+                  <span>Active</span>
                 </div>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
-                <CheckCircle className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-status-success-subtle text-status-success grid place-items-center">
+                <CheckmarkCircle20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Attendance Rate */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${
-            data.attendanceRate >= 90 ? 'from-green-500 to-emerald-500' :
-            data.attendanceRate >= 75 ? 'from-blue-500 to-cyan-500' :
-            data.attendanceRate >= 60 ? 'from-yellow-500 to-orange-500' :
-            'from-red-500 to-pink-500'
-          }`}></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Attendance Rate</p>
-                <div className={`text-2xl font-bold ${attendanceStatus.color}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Attendance Rate</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">
                   {data.attendanceRate}%
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-1">
                   {getTrendIcon(weeklyTrend)}
-                  <span className={`text-xs ${weeklyTrend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <span className={`text-caption tabular-nums ${weeklyTrend >= 0 ? 'text-status-success' : 'text-status-error'}`}>
                     {Math.abs(weeklyTrend).toFixed(1)}% this week
                   </span>
                 </div>
               </div>
-              <div className={`h-12 w-12 rounded-xl ${attendanceStatus.bgColor} flex items-center justify-center`}>
-                <BarChart3 className={`h-6 w-6 ${attendanceStatus.color}`} />
+              <div className={`h-10 w-10 shrink-0 rounded-md ${attendanceStatus.bgColor} ${attendanceStatus.color} grid place-items-center`}>
+                <DataBarVertical20Regular aria-hidden />
               </div>
             </div>
             <div className="mt-3">
-              <Badge variant="outline" className={`${attendanceStatus.bgColor} ${attendanceStatus.color} border-current`}>
+              <Badge variant={attendanceStatus.variant} shape="pill">
                 {attendanceStatus.status}
               </Badge>
             </div>
@@ -233,17 +246,16 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
         </Card>
 
         {/* Absent Today */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-pink-500"></div>
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Absent Today</p>
-                <div className="text-2xl font-bold text-red-400">{absentToday}</div>
-                <p className="text-xs text-slate-500">Requires attention</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-caption text-text-muted">Absent Today</p>
+                <div className="mt-1 text-[28px] leading-9 font-semibold tabular-nums text-text-primary">{absentToday}</div>
+                <p className="text-caption text-status-error">Requires attention</p>
               </div>
-              <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center">
-                <AlertTriangle className="h-6 w-6 text-white" />
+              <div className="h-10 w-10 shrink-0 rounded-md bg-status-error-subtle text-status-error grid place-items-center">
+                <Warning20Regular aria-hidden />
               </div>
             </div>
           </CardContent>
@@ -251,159 +263,171 @@ const UnifiedAnalytics: React.FC<UnifiedAnalyticsProps> = ({ className = '' }) =
       </div>
 
       {/* Detailed Analytics Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'overview' | 'trends' | 'insights' | 'performance')} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-800/50 border border-slate-700/50">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-            <BarChart3 className="h-4 w-4 mr-2" />
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'overview' | 'trends' | 'insights' | 'performance')} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview" className="gap-1.5">
+            <DataBarVertical16Regular className="shrink-0" aria-hidden />
             Overview
           </TabsTrigger>
-          <TabsTrigger value="trends" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-            <TrendingUp className="h-4 w-4 mr-2" />
+          <TabsTrigger value="trends" className="gap-1.5">
+            <ArrowTrending16Regular className="shrink-0" aria-hidden />
             Trends
           </TabsTrigger>
-          <TabsTrigger value="performance" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-            <Award className="h-4 w-4 mr-2" />
+          <TabsTrigger value="performance" className="gap-1.5">
+            <Trophy16Regular className="shrink-0" aria-hidden />
             Performance
           </TabsTrigger>
-          <TabsTrigger value="insights" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-            <Target className="h-4 w-4 mr-2" />
+          <TabsTrigger value="insights" className="gap-1.5">
+            <Target16Regular className="shrink-0" aria-hidden />
             Insights
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* Attendance by Time Slots */}
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-blue-400" />
-                  Attendance by Time Slots
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {timeSlotData.map((slot, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium text-white">{slot.time}</div>
-                        <Badge variant="outline" className="bg-blue-500/20 text-blue-300 border-blue-400/30">
-                          {slot.students} students
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Progress value={slot.percentage} className="w-20 h-2" />
-                        <span className="text-sm text-slate-400">{slot.percentage}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <ReportCard
+              title="Attendance by Time Slots"
+              caption="Students checked in per period"
+              icon={<Clock20Regular aria-hidden />}
+              flush
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-subtle text-caption-strong text-text-secondary border-y border-border-subtle">
+                      <th className="px-4 py-2 font-semibold">Time slot</th>
+                      <th className="px-4 py-2 font-semibold">Students</th>
+                      <th className="px-4 py-2 font-semibold">Attendance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timeSlotData.map((slot, index) => (
+                      <tr key={index} className="border-b border-border-subtle last:border-0 hover:bg-surface-hover transition-colors duration-150 ease-fluent-standard">
+                        <td className="px-4 py-2.5 text-body text-text-primary tabular-nums">{slot.time}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="secondary">
+                            {slot.students} students
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-3">
+                            <Progress value={slot.percentage} className="w-24 h-1.5" />
+                            <span className="text-body text-text-secondary tabular-nums">{slot.percentage}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ReportCard>
 
             {/* Weekly Attendance Breakdown */}
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-green-400" />
-                  Weekly Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {weeklyData.map((day, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-white w-12">{day.day}</div>
-                      <div className="flex items-center gap-2 flex-1">
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                          <span className="text-xs text-green-400">{day.present}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                          <span className="text-xs text-red-400">{day.absent}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                          <span className="text-xs text-yellow-400">{day.late}</span>
-                        </div>
-                      </div>
-                      <div className="text-sm text-slate-400">
-                        {Math.round((day.present / (day.present + day.absent + day.late)) * 100)}%
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <ReportCard
+              title="Weekly Breakdown"
+              caption="Present, absent and late by weekday"
+              icon={<CalendarLtr20Regular aria-hidden />}
+              flush
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-subtle text-caption-strong text-text-secondary border-y border-border-subtle">
+                      <th className="px-4 py-2 font-semibold">Day</th>
+                      <th className="px-4 py-2 font-semibold">
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-success" aria-hidden />Present</span>
+                      </th>
+                      <th className="px-4 py-2 font-semibold">
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-error" aria-hidden />Absent</span>
+                      </th>
+                      <th className="px-4 py-2 font-semibold">
+                        <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-status-warning" aria-hidden />Late</span>
+                      </th>
+                      <th className="px-4 py-2 font-semibold text-right">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {weeklyData.map((day, index) => (
+                      <tr key={index} className="border-b border-border-subtle last:border-0 hover:bg-surface-hover transition-colors duration-150 ease-fluent-standard">
+                        <td className="px-4 py-2.5 text-body-strong text-text-primary">{day.day}</td>
+                        <td className="px-4 py-2.5 text-body text-text-primary tabular-nums">{day.present}</td>
+                        <td className="px-4 py-2.5 text-body text-text-primary tabular-nums">{day.absent}</td>
+                        <td className="px-4 py-2.5 text-body text-text-primary tabular-nums">{day.late}</td>
+                        <td className="px-4 py-2.5 text-body text-text-secondary tabular-nums text-right">
+                          {Math.round((day.present / (day.present + day.absent + day.late)) * 100)}%
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </ReportCard>
           </div>
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
-          <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <Award className="h-5 w-5 text-yellow-400" />
-                Top Performing Students
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {topPerformers.map((student, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-                    <div className="flex items-center gap-3">
-                      <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                        index === 0 ? 'bg-yellow-500/20 text-yellow-400' :
-                        index === 1 ? 'bg-gray-500/20 text-gray-400' :
-                        'bg-orange-500/20 text-orange-400'
-                      }`}>
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div className="text-white font-medium">{student.name}</div>
-                        <div className="text-sm text-slate-400">Attendance Rate</div>
-                      </div>
+          <ReportCard
+            title="Top Performing Students"
+            caption="Highest attendance rates"
+            icon={<Trophy20Regular aria-hidden />}
+          >
+            <div className="-mx-3 space-y-1">
+              {topPerformers.map((student, index) => (
+                <div key={index} className="flex items-center justify-between gap-3 px-3 py-2 rounded-md hover:bg-surface-hover transition-colors duration-150 ease-fluent-standard">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-8 w-8 shrink-0 rounded-full grid place-items-center text-caption-strong tabular-nums ${
+                      index === 0 ? 'bg-brand-subtle text-brand-foreground' :
+                      index === 1 ? 'bg-surface-selected text-text-secondary' :
+                      'bg-surface-subtle text-text-secondary'
+                    }`}>
+                      {index + 1}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-green-500/20 text-green-300">
-                        {student.rate}%
-                      </Badge>
-                      {student.trend === 'up' && <TrendingUp className="h-4 w-4 text-green-400" />}
-                      {student.trend === 'down' && <TrendingDown className="h-4 w-4 text-red-400" />}
-                      {student.trend === 'stable' && <Activity className="h-4 w-4 text-blue-400" />}
+                    <div className="min-w-0">
+                      <div className="text-body-strong text-text-primary truncate">{student.name}</div>
+                      <div className="text-caption text-text-muted">Attendance Rate</div>
                     </div>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="success" shape="pill">
+                      {student.rate}%
+                    </Badge>
+                    {student.trend === 'up' && <ArrowTrending16Regular className="shrink-0 text-status-success" aria-hidden />}
+                    {student.trend === 'down' && <ArrowTrendingDown16Regular className="shrink-0 text-status-error" aria-hidden />}
+                    {student.trend === 'stable' && <Pulse20Regular className="h-4 w-4 shrink-0 text-text-muted" aria-hidden />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ReportCard>
         </TabsContent>
 
         <TabsContent value="insights" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {insights.map((insight, index) => (
-              <Card key={index} className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${
-                      insight.type === 'positive' ? 'bg-green-500/20' :
-                      insight.type === 'warning' ? 'bg-yellow-500/20' :
-                      'bg-red-500/20'
-                    }`}>
-                      {insight.type === 'positive' && <CheckCircle className="h-6 w-6 text-green-400" />}
-                      {insight.type === 'warning' && <AlertTriangle className="h-6 w-6 text-yellow-400" />}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-white font-semibold mb-2">{insight.title}</h3>
-                      <p className="text-slate-400 text-sm mb-4">{insight.description}</p>
-                      <Button variant="outline" size="sm" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                        {insight.action}
-                        <ChevronRight className="h-4 w-4 ml-2" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <div
+                key={index}
+                className={`flex items-start gap-3 rounded-md border px-4 py-3 ${
+                  insight.type === 'positive'
+                    ? 'bg-status-success-subtle border-status-success-border'
+                    : insight.type === 'warning'
+                      ? 'bg-status-warning-subtle border-status-warning-border'
+                      : 'bg-status-error-subtle border-status-error-border'
+                }`}
+              >
+                <span className="mt-0.5 shrink-0">
+                  {insight.type === 'positive' && <CheckmarkCircle20Regular className="text-status-success" aria-hidden />}
+                  {insight.type === 'warning' && <Warning20Regular className="text-status-warning" aria-hidden />}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-body-strong text-text-primary">{insight.title}</h3>
+                  <p className="text-body text-text-secondary mt-0.5">{insight.description}</p>
+                  <Button variant="outline" size="sm" className="mt-3">
+                    {insight.action}
+                    <ChevronRight16Regular aria-hidden />
+                  </Button>
+                </div>
+              </div>
             ))}
           </div>
         </TabsContent>

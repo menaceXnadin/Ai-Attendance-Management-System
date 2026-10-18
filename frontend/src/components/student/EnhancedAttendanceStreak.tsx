@@ -5,19 +5,34 @@
 
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Trophy, Award, Medal, Star, Flame, Calendar, Target, Loader2, TrendingUp, Zap } from 'lucide-react';
+import { api, type MetricsBlock } from '@/integrations/api/client';
+import TermStateBanner from '@/components/TermStateBanner';
+import { useAttendancePolicy } from '@/hooks/useAttendancePolicy';
+import { barWidth, formatPercent, metricTone, readMetrics, TONE_FILL } from '@/utils/metricsDisplay';
+import {
+  CalendarLtr20Regular,
+  Checkmark12Filled,
+  Crown20Regular,
+  DataTrending20Regular,
+  ErrorCircle20Regular,
+  Fire20Filled,
+  Flash20Regular,
+  Ribbon20Filled,
+  Ribbon20Regular,
+  Rocket20Regular,
+  Target20Regular,
+  Trophy20Filled,
+} from '@fluentui/react-icons';
 
-interface StreakData {
+interface StreakData extends MetricsBlock {
   current_streak: number;
   longest_streak: number;
-  current_week_streak: number;
+  current_week_streak?: number;
   is_streak_active: boolean;
-  total_class_days: number;
-  total_present_days: number;
-  calculation_period_days: number;
+  total_class_days?: number;
+  total_present_days?: number;
+  calculation_period_days?: number;
 }
 
 interface BadgeData {
@@ -40,54 +55,33 @@ interface BadgesResponse {
 }
 
 const EnhancedAttendanceStreak: React.FC = () => {
-  // Fetch streak data from new robust API
+  const { data: policy } = useAttendancePolicy();
+
+  // Streaks + badges (server metrics service)
   const { data: streakData, isLoading: streakLoading, error: streakError } = useQuery<StreakData>({
     queryKey: ['my-streaks'],
-    queryFn: async () => {
-      const response = await fetch('http://127.0.0.1:8000/api/streaks-badges/my-streaks?period_days=180', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch streak data');
-      }
-      
-      return response.json();
-    },
-    staleTime: 60000, // Cache for 1 minute
-    retry: 2
+    queryFn: () => api.streaks.getMyStreaks(),
+    staleTime: 60000,
+    retry: 2,
   });
 
-  // Fetch badges from new robust API
   const { data: badgesData, isLoading: badgesLoading } = useQuery<BadgesResponse>({
     queryKey: ['my-badges'],
-    queryFn: async () => {
-      const response = await fetch('http://127.0.0.1:8000/api/streaks-badges/my-badges', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch badges');
-      }
-      
-      return response.json();
-    },
+    queryFn: () => api.streaks.getMyBadges(),
     staleTime: 60000,
-    retry: 2
+    retry: 2,
   });
 
   // Loading state
   if (streakLoading || badgesLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-400 mb-4" />
-        <p className="text-slate-300">Loading your achievements...</p>
+        <div
+          className="mb-4 h-8 w-8 animate-spin rounded-full border-[3px] border-brand-subtle border-t-brand"
+          role="progressbar"
+          aria-label="Loading"
+        />
+        <p className="text-body text-text-muted">Loading your achievements...</p>
       </div>
     );
   }
@@ -95,235 +89,258 @@ const EnhancedAttendanceStreak: React.FC = () => {
   // Error state
   if (streakError) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-red-400">Failed to load streak data. Please try again.</p>
+      <div
+        role="alert"
+        className="flex items-start gap-3 rounded-md border border-status-error-border bg-status-error-subtle px-3 py-2.5"
+      >
+        <ErrorCircle20Regular className="mt-0.5 shrink-0 text-status-error" aria-hidden />
+        <p className="text-body text-text-primary">Failed to load streak data. Please try again.</p>
       </div>
     );
   }
 
-  const attendance_rate = streakData ? 
-    Math.round((streakData.total_present_days / streakData.total_class_days) * 100) : 0;
+  // Rate comes from the server (null = no classes yet); never recomputed here.
+  const metrics = readMetrics(streakData, ['attendance_rate', 'percentage_present']);
+  const rateBarClass = TONE_FILL[metricTone(metrics, policy)];
+  const classDays = streakData?.total_class_days;
+  const presentDays = streakData?.total_present_days;
+
+  // Presentation-only helpers
+  const isActive = Boolean(streakData?.is_streak_active);
+  const weekDays = Math.max(0, streakData?.current_week_streak || 0);
+
+  const tierChip: Record<BadgeData['tier'], string> = {
+    legendary: 'bg-status-warning-subtle text-status-warning',
+    epic: 'bg-brand-subtle text-brand-foreground',
+    rare: 'bg-status-info-subtle text-status-info',
+    uncommon: 'bg-status-success-subtle text-status-success',
+    common: 'bg-surface-subtle text-text-muted',
+  };
+
+  const currentStreak = streakData?.current_streak || 0;
+  const motivation = !streakData?.is_streak_active
+    ? {
+        icon: <Target20Regular aria-hidden />,
+        chip: 'bg-brand-subtle text-brand-foreground',
+        title: 'Start Your Streak!',
+        text: 'Your next attendance will begin a new streak. Every journey starts with a single step.',
+      }
+    : currentStreak < 7
+    ? {
+        icon: <Fire20Filled aria-hidden />,
+        chip: 'bg-status-warning-subtle text-status-warning',
+        title: 'Great Start!',
+        text: 'Keep going to reach a 7-day streak and earn your Weekly Streak badge.',
+      }
+    : currentStreak < 14
+    ? {
+        icon: <Flash20Regular aria-hidden />,
+        chip: 'bg-status-warning-subtle text-status-warning',
+        title: "You're On Fire!",
+        text: `Just ${14 - currentStreak} more days to reach a Hot Streak!`,
+      }
+    : currentStreak < 30
+    ? {
+        icon: <Rocket20Regular aria-hidden />,
+        chip: 'bg-brand-subtle text-brand-foreground',
+        title: 'Amazing Consistency!',
+        text: `${30 - currentStreak} more days for a Super Streak achievement!`,
+      }
+    : {
+        icon: <Crown20Regular aria-hidden />,
+        chip: 'bg-brand-subtle text-brand-foreground',
+        title: 'Legendary Performance!',
+        text: "You're maintaining an outstanding attendance record. Keep it up, champion!",
+      };
 
   return (
-    <div className="space-y-6">
-      {/* Streak Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Current Streak */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className={`absolute top-0 left-0 right-0 h-1 ${
-            streakData?.is_streak_active ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gray-600'
-          }`}></div>
-          <CardHeader className="pb-2 pt-4">
-            <CardTitle className="text-lg text-white flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Flame className={`w-5 h-5 ${streakData?.is_streak_active ? 'text-orange-500' : 'text-gray-500'}`} />
-                Current Streak
-              </span>
-              {streakData?.is_streak_active && (
-                <Badge className="bg-green-500/20 text-green-300 border-green-400/30">
-                  Active
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-4xl font-bold mb-1 ${
-              streakData?.is_streak_active ? 'text-orange-500' : 'text-gray-500'
-            }`}>
-              {streakData?.current_streak || 0}
+    <div className="space-y-4">
+      <TermStateBanner termState={streakData?.term_state} term={streakData?.term} />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {/* Current Streak — Fluent achievement card */}
+        <section aria-label="Current streak" className="rounded-lg bg-surface-default p-5 shadow lg:col-span-2">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div
+                className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${
+                  isActive ? 'bg-status-warning-subtle text-status-warning' : 'bg-surface-subtle text-text-muted'
+                }`}
+              >
+                <Fire20Filled aria-hidden />
+              </div>
+              <div>
+                <p className="text-caption text-text-muted">Current Streak</p>
+                <p className="flex items-baseline gap-2">
+                  <span className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
+                    {streakData?.current_streak || 0}
+                  </span>
+                  <span className="text-body text-text-muted">consecutive days</span>
+                </p>
+              </div>
             </div>
-            <p className="text-sm text-slate-300">
-              consecutive days
-            </p>
-          </CardContent>
-        </Card>
+            {streakData?.is_streak_active && (
+              <Badge variant="success" shape="pill" className="gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-status-success" aria-hidden />
+                Active
+              </Badge>
+            )}
+          </div>
+
+          {/* This week — dots row */}
+          <div className="mt-5 border-t border-border-subtle pt-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-caption-strong text-text-secondary">This Week</p>
+              <p className="text-caption text-text-muted">
+                <span className="tabular-nums text-text-primary">{streakData?.current_week_streak || 0}</span> Days present this week
+              </p>
+            </div>
+            <div
+              className="mt-3 flex items-center gap-2"
+              role="img"
+              aria-label={`${weekDays} days present this week`}
+            >
+              {Array.from({ length: Math.max(7, weekDays) }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`grid h-7 w-7 place-items-center rounded-full border ${
+                    i < weekDays
+                      ? 'border-status-success-border bg-status-success-subtle text-status-success'
+                      : 'border-dashed border-border-default bg-surface-default text-text-disabled'
+                  }`}
+                >
+                  {i < weekDays && <Checkmark12Filled aria-hidden />}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
 
         {/* Best Streak */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-yellow-500 to-amber-500"></div>
-          <CardHeader className="pb-2 pt-4">
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Trophy className="w-5 h-5 text-yellow-500" />
-              Best Streak
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-yellow-500 mb-1">
-              {streakData?.longest_streak || 0}
+        <section aria-label="Best streak" className="flex flex-col rounded-lg bg-surface-default p-5 shadow">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <Trophy20Filled aria-hidden />
             </div>
-            <p className="text-sm text-slate-300">
-              longest streak
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Overall Rate */}
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50 overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-cyan-500"></div>
-          <CardHeader className="pb-2 pt-4">
-            <CardTitle className="text-lg text-white flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-500" />
-              Overall Rate
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-4xl font-bold mb-1 ${
-              attendance_rate >= 90 ? 'text-green-500' :
-              attendance_rate >= 75 ? 'text-yellow-500' : 'text-red-500'
-            }`}>
-              {attendance_rate}%
+            <div>
+              <p className="text-caption text-text-muted">Best Streak</p>
+              <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
+                {streakData?.longest_streak || 0}
+              </p>
+              <p className="text-caption text-text-muted">longest streak</p>
             </div>
-            <p className="text-sm text-slate-300">
-              {streakData?.total_present_days || 0}/{streakData?.total_class_days || 0} classes
-            </p>
-            <Progress value={attendance_rate} className="h-2 mt-2" />
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       </div>
 
       {/* Additional Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-white flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-green-400" />
-              This Week
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-400">
-              {streakData?.current_week_streak || 0}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {/* Overall Rate */}
+        <section aria-label="Overall rate" className="rounded-lg bg-surface-default p-5 shadow">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-caption text-text-muted">Overall Rate</p>
+              <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
+                {formatPercent(metrics.percentage)}
+              </p>
+              <p className="text-caption text-text-muted">
+                {!metrics.hasData
+                  ? 'No classes yet'
+                  : typeof presentDays === 'number' && typeof classDays === 'number'
+                    ? `${presentDays}/${classDays} class days fully attended`
+                    : metrics.considered !== null && metrics.attended !== null
+                      ? `${metrics.attended}/${metrics.considered} classes attended`
+                      : 'This term'}
+              </p>
             </div>
-            <p className="text-xs text-slate-400">Days present this week</p>
-          </CardContent>
-        </Card>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+              <CalendarLtr20Regular aria-hidden />
+            </div>
+          </div>
+          <div
+            className="mt-3 h-1 w-full overflow-hidden rounded-full bg-border-subtle"
+            role="progressbar"
+            aria-valuenow={metrics.percentage ?? undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className={`h-full rounded-full transition-[width] duration-500 ease-fluent-decelerate ${rateBarClass}`}
+              style={{ width: `${barWidth(metrics.percentage)}%` }}
+            />
+          </div>
+        </section>
 
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-purple-400" />
-              Calculation Period
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-400">
-              {streakData?.calculation_period_days || 0}
+        {/* Calculation Period */}
+        <section aria-label="Calculation period" className="rounded-lg bg-surface-default p-5 shadow">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-caption text-text-muted">Calculation Period</p>
+              <p className="text-[28px] font-semibold leading-9 tabular-nums text-text-primary">
+                {streakData?.term?.name ?? (typeof streakData?.calculation_period_days === 'number' ? streakData.calculation_period_days : '—')}
+              </p>
+              <p className="text-caption text-text-muted">
+                {streakData?.term ? 'Reporting term' : 'Days analyzed'}
+              </p>
             </div>
-            <p className="text-xs text-slate-400">Days analyzed</p>
-          </CardContent>
-        </Card>
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-surface-subtle text-text-secondary">
+              <DataTrending20Regular aria-hidden />
+            </div>
+          </div>
+        </section>
       </div>
 
       {/* Achievement Badges */}
-      {badgesData && badgesData.badges.length > 0 && (
-        <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-purple-500" />
-                Achievements
-              </span>
-              <Badge className="bg-purple-500/20 text-purple-300 border-purple-400/30">
-                {badgesData.total_earned} Earned
-              </Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {badgesData.badges.map((badge, index) => {
-                const tierColors = {
-                  legendary: 'border-yellow-500/50 bg-yellow-500/10',
-                  epic: 'border-purple-500/50 bg-purple-500/10',
-                  rare: 'border-blue-500/50 bg-blue-500/10',
-                  uncommon: 'border-green-500/50 bg-green-500/10',
-                  common: 'border-gray-500/50 bg-gray-500/10'
-                };
-                
-                const tierTextColors = {
-                  legendary: 'text-yellow-400',
-                  epic: 'text-purple-400',
-                  rare: 'text-blue-400',
-                  uncommon: 'text-green-400',
-                  common: 'text-gray-400'
-                };
-
-                return (
-                  <div
-                    key={index}
-                    className={`p-4 rounded-lg border-2 ${tierColors[badge.tier]} transition-all hover:scale-105 hover:shadow-lg`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className={`text-3xl`}>
-                        {badge.icon}
-                      </div>
-                      <div className="flex-1">
-                        <h4 className={`font-semibold ${tierTextColors[badge.tier]} mb-1`}>
-                          {badge.name}
-                        </h4>
-                        <p className="text-xs text-slate-300 mb-2">
-                          {badge.description}
-                        </p>
-                        <Badge className="text-xs" variant="outline">
-                          {badge.tier}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+      {badgesData && Array.isArray(badgesData.badges) && badgesData.badges.length > 0 && (
+        <section aria-label="Achievements" className="rounded-lg bg-surface-default shadow">
+          <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-5 py-4">
+            <h3 className="flex items-center gap-2 text-subheading text-text-primary">
+              <Ribbon20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+              Achievements
+            </h3>
+            <Badge
+              variant="outline"
+              shape="pill"
+              className="border-transparent bg-brand-subtle text-brand-foreground"
+            >
+              {badgesData.total_earned} Earned
+            </Badge>
+          </header>
+          <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-2 lg:grid-cols-3">
+            {badgesData.badges.map((badge, index) => (
+              <div
+                key={index}
+                className="flex items-start gap-3 rounded-md border border-border-subtle bg-surface-default p-3 transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover"
+              >
+                <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-md ${tierChip[badge.tier] ?? tierChip.common}`}>
+                  {badge.tier === 'legendary' ? <Trophy20Filled aria-hidden /> : <Ribbon20Filled aria-hidden />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-body-strong text-text-primary">
+                    {badge.name}
+                  </h4>
+                  <p className="mt-0.5 text-caption text-text-muted">
+                    {badge.description}
+                  </p>
+                  <Badge variant="secondary" shape="pill" className="mt-2 capitalize">
+                    {badge.tier}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Motivation Messages */}
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardContent className="pt-6">
-          <div className="text-center">
-            {!streakData?.is_streak_active ? (
-              <div>
-                <div className="text-4xl mb-3">🎯</div>
-                <h3 className="text-xl font-semibold text-white mb-2">Start Your Streak!</h3>
-                <p className="text-slate-300">
-                  Your next attendance will begin a new streak. Every journey starts with a single step.
-                </p>
-              </div>
-            ) : (streakData?.current_streak || 0) < 7 ? (
-              <div>
-                <div className="text-4xl mb-3">🔥</div>
-                <h3 className="text-xl font-semibold text-white mb-2">Great Start!</h3>
-                <p className="text-slate-300">
-                  Keep going to reach a 7-day streak and earn your Weekly Streak badge.
-                </p>
-              </div>
-            ) : (streakData?.current_streak || 0) < 14 ? (
-              <div>
-                <div className="text-4xl mb-3">⚡</div>
-                <h3 className="text-xl font-semibold text-white mb-2">You're On Fire!</h3>
-                <p className="text-slate-300">
-                  Just {14 - (streakData?.current_streak || 0)} more days to reach a Hot Streak!
-                </p>
-              </div>
-            ) : (streakData?.current_streak || 0) < 30 ? (
-              <div>
-                <div className="text-4xl mb-3">🚀</div>
-                <h3 className="text-xl font-semibold text-white mb-2">Amazing Consistency!</h3>
-                <p className="text-slate-300">
-                  {30 - (streakData?.current_streak || 0)} more days for a Super Streak achievement!
-                </p>
-              </div>
-            ) : (
-              <div>
-                <div className="text-4xl mb-3">👑</div>
-                <h3 className="text-xl font-semibold text-white mb-2">Legendary Performance!</h3>
-                <p className="text-slate-300">
-                  You're maintaining an outstanding attendance record. Keep it up, champion!
-                </p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <section aria-label="Motivation" className="flex items-start gap-4 rounded-lg bg-surface-default p-5 shadow">
+        <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${motivation.chip}`}>
+          {motivation.icon}
+        </div>
+        <div className="min-w-0">
+          <h3 className="text-subheading text-text-primary">{motivation.title}</h3>
+          <p className="mt-1 text-body text-text-secondary">{motivation.text}</p>
+        </div>
+      </section>
     </div>
   );
 };

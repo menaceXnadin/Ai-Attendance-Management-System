@@ -9,7 +9,16 @@ import { api } from '@/integrations/api/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ChevronLeft, ChevronRight, Calendar, Eye } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  CalendarLtr20Regular,
+  CheckmarkCircle12Filled,
+  ChevronLeft20Regular,
+  ChevronRight20Regular,
+  DismissCircle12Filled,
+  Eye20Regular,
+  Warning12Filled
+} from '@fluentui/react-icons';
 
 interface AttendanceDay {
   date: string;
@@ -155,19 +164,28 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'present': return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'absent': return 'bg-red-500/20 text-red-400 border-red-500/30';
-      case 'late': return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
-      default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+      case 'present': return 'bg-status-success-subtle text-status-success border-status-success-border';
+      case 'absent': return 'bg-status-error-subtle text-status-error border-status-error-border';
+      case 'late': return 'bg-status-warning-subtle text-status-warning border-status-warning-border';
+      default: return 'bg-surface-subtle text-text-muted border-border-subtle';
+    }
+  };
+
+  const getStatusBadgeVariant = (status: string): 'success' | 'destructive' | 'warning' | 'secondary' => {
+    switch (status) {
+      case 'present': return 'success';
+      case 'absent': return 'destructive';
+      case 'late': return 'warning';
+      default: return 'secondary';
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'present': return '✓';
-      case 'absent': return '✗';
-      case 'late': return '⚠';
-      default: return '';
+      case 'present': return <CheckmarkCircle12Filled aria-label="Present" />;
+      case 'absent': return <DismissCircle12Filled aria-label="Absent" />;
+      case 'late': return <Warning12Filled aria-label="Late" />;
+      default: return null;
     }
   };
 
@@ -185,15 +203,22 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+  const legendItems = [
+    { label: 'Present', className: 'bg-status-success-subtle border-status-success-border' },
+    { label: 'Absent', className: 'bg-status-error-subtle border-status-error-border' },
+    { label: 'Late', className: 'bg-status-warning-subtle border-status-warning-border' },
+    { label: 'No Class', className: 'bg-surface-subtle border-border-subtle' },
+  ];
+
   if (isLoading) {
     return (
-      <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-        <CardContent className="p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-slate-700 rounded w-48"></div>
-            <div className="grid grid-cols-7 gap-2">
+      <Card className="border-0 bg-surface-default shadow">
+        <CardContent className="p-5">
+          <div className="space-y-4">
+            <Skeleton className="h-7 w-48" />
+            <div className="grid grid-cols-7 gap-1.5">
               {[...Array(35)].map((_, i) => (
-                <div key={i} className="h-12 bg-slate-700 rounded"></div>
+                <Skeleton key={i} className="h-12" />
               ))}
             </div>
           </div>
@@ -203,79 +228,85 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
   }
 
   return (
-    <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-white flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-blue-400" />
-            Attendance Calendar
-          </CardTitle>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateMonth('prev')}
-              className="border-slate-600 text-slate-300 hover:bg-slate-800"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-white font-medium min-w-[140px] text-center">
-              {monthNames[currentMonth]} {currentYear}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigateMonth('next')}
-              className="border-slate-600 text-slate-300 hover:bg-slate-800"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+    <Card className="overflow-hidden border-0 bg-surface-default shadow">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 border-b border-border-subtle px-5 py-3">
+        <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+          <CalendarLtr20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+          Attendance Calendar
+        </CardTitle>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigateMonth('prev')}
+            className="h-8 w-8 text-text-secondary"
+            aria-label="Previous month"
+          >
+            <ChevronLeft20Regular aria-hidden />
+          </Button>
+          <span className="min-w-[132px] text-center text-body-strong text-text-primary">
+            {monthNames[currentMonth]} {currentYear}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigateMonth('next')}
+            className="h-8 w-8 text-text-secondary"
+            aria-label="Next month"
+          >
+            <ChevronRight20Regular aria-hidden />
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="p-6">
+      <CardContent className="p-5">
         {/* Calendar Grid */}
-        <div className="space-y-4">
+        <div className="space-y-1.5">
           {/* Day Headers */}
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1.5">
             {dayNames.map(day => (
-              <div key={day} className="text-center text-slate-400 text-sm font-medium py-2">
+              <div key={day} className="py-1 text-center text-caption text-text-muted">
                 {day}
               </div>
             ))}
           </div>
 
           {/* Calendar Days */}
-          <div className="grid grid-cols-7 gap-2">
+          <div className="grid grid-cols-7 gap-1.5">
             {calendarGrid.map(({ date, dateStr, isCurrentMonth, isToday, attendanceDay }) => {
               const presentCount = attendanceDay?.subjects.filter(s => s.status === 'present').length || 0;
+              const isSelected = selectedDate === dateStr;
               return (
                 <button
                   key={dateStr}
+                  type="button"
                   onClick={() => handleDateClick(dateStr, attendanceDay)}
-                  className={`
-                    relative h-12 rounded-lg border transition-all duration-200
-                    ${isCurrentMonth ? 'text-white' : 'text-slate-600'}
-                    ${isToday ? 'ring-2 ring-blue-400' : ''}
-                    ${selectedDate === dateStr ? 'ring-2 ring-white' : ''}
-                    ${attendanceDay ? getStatusColor(attendanceDay.status) : 'bg-slate-800/50 border-slate-700 hover:bg-slate-700/50'}
-                    ${!attendanceDay && isCurrentMonth ? 'hover:bg-slate-700/50' : ''}
-                  `}
+                  aria-pressed={isSelected}
+                  className={`relative h-12 rounded-md border transition-colors duration-150 ease-fluent-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-text-primary ${
+                    attendanceDay
+                      ? getStatusColor(attendanceDay.status)
+                      : `border-transparent ${isCurrentMonth ? 'text-text-primary hover:bg-surface-hover' : 'text-text-disabled'}`
+                  } ${!isCurrentMonth && attendanceDay ? 'opacity-60' : ''} ${
+                    isSelected ? 'ring-2 ring-brand ring-offset-1 ring-offset-surface-default' : ''
+                  }`}
                 >
-                  <div className="flex flex-col items-center justify-center h-full">
-                    <span className="text-sm font-medium">
+                  <div className="flex h-full flex-col items-center justify-center gap-0.5">
+                    <span
+                      className={`grid h-6 min-w-[24px] place-items-center px-1 text-caption-strong tabular-nums ${
+                        isToday ? 'rounded-full bg-brand text-brand-on' : ''
+                      }`}
+                    >
                       {date.getDate()}
                     </span>
                     {attendanceDay && attendanceDay.subjects.length > 0 && (
-                      <span className="text-xs">
+                      <span className="leading-none">
                         {getStatusIcon(attendanceDay.status)}
                       </span>
                     )}
                   </div>
-                  
-                  {/* Show present count for days with attendance */}
+
+                  {/* Present count for days with attendance */}
                   {presentCount > 0 && (
-                    <div className="absolute top-1 right-1 text-[9px] font-bold bg-green-500/80 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                    <div className="absolute right-1 top-1 grid h-4 min-w-[16px] place-items-center rounded-full bg-status-success px-1 text-[10px] font-semibold leading-none tabular-nums text-text-inverse">
                       {presentCount}
                     </div>
                   )}
@@ -286,31 +317,25 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
         </div>
 
         {/* Legend */}
-        <div className="mt-6 flex flex-wrap gap-4 justify-center">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-green-500/20 border border-green-500/30"></div>
-            <span className="text-slate-400 text-sm">Present</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500/30"></div>
-            <span className="text-slate-400 text-sm">Absent</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-yellow-500/20 border border-yellow-500/30"></div>
-            <span className="text-slate-400 text-sm">Late</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-slate-500/20 border border-slate-500/30"></div>
-            <span className="text-slate-400 text-sm">No Class</span>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-border-subtle pt-4">
+          {legendItems.map(item => (
+            <div key={item.label} className="flex items-center gap-1.5">
+              <span className={`h-3 w-3 rounded-sm border ${item.className}`} aria-hidden />
+              <span className="text-caption text-text-secondary">{item.label}</span>
+            </div>
+          ))}
+          <div className="flex items-center gap-1.5">
+            <span className="h-3 w-3 rounded-full bg-brand" aria-hidden />
+            <span className="text-caption text-text-secondary">Today</span>
           </div>
         </div>
 
         {/* Selected Date Details */}
         {selectedDate && calendarData[selectedDate] && (
-          <div className="mt-6 p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
-            <div className="flex items-center gap-2 mb-3">
-              <Eye className="h-4 w-4 text-blue-400" />
-              <span className="text-white font-medium">
+          <div className="mt-5 rounded-lg border border-border-subtle bg-surface-subtle p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Eye20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+              <span className="text-body-strong text-text-primary">
                 {new Date(selectedDate).toLocaleDateString('en-US', {
                   weekday: 'long',
                   year: 'numeric',
@@ -319,24 +344,27 @@ const AttendanceCalendar: React.FC<AttendanceCalendarProps> = ({
                 })}
               </span>
             </div>
-            
-            <div className="space-y-2">
+
+            <ul className="space-y-1.5">
               {calendarData[selectedDate].subjects.map((subject, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-slate-700/50 rounded">
-                  <span className="text-slate-300">{subject.name}</span>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(subject.status)}>
+                <li
+                  key={index}
+                  className="flex items-center justify-between gap-3 rounded-md bg-surface-default px-3 py-2"
+                >
+                  <span className="truncate text-body text-text-primary">{subject.name}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge variant={getStatusBadgeVariant(subject.status)} shape="pill" className="capitalize">
                       {subject.status}
                     </Badge>
                     {subject.confidence && (
-                      <span className="text-xs text-slate-500">
+                      <span className="text-caption tabular-nums text-text-muted">
                         {Math.round(subject.confidence * 100)}%
                       </span>
                     )}
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         )}
       </CardContent>

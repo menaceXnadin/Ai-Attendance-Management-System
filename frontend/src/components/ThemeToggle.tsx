@@ -1,18 +1,18 @@
 import * as React from 'react';
-import { Sun, Moon } from '@carbon/icons-react';
+import { WeatherMoon20Regular, WeatherSunny20Regular } from '@fluentui/react-icons';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 
 export interface ThemeToggleProps {
   className?: string;
-  variant?: 'ghost' | 'outline' | 'secondary';
+  variant?: 'ghost' | 'outline' | 'secondary' | 'subtle';
   size?: 'default' | 'sm' | 'lg' | 'icon' | 'icon-sm';
 }
 
 export const ThemeToggle: React.FC<ThemeToggleProps> = ({
   className,
-  variant = 'ghost',
+  variant = 'subtle',
   size = 'icon-sm',
 }) => {
   const { resolvedTheme, setTheme } = useTheme();
@@ -29,17 +29,14 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({
       variant={variant}
       size={size}
       onClick={toggleTheme}
-      className={cn(
-        "relative rounded-md text-text-secondary hover:text-text-primary hover:bg-surface-subtle transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-action-primary",
-        className
-      )}
+      className={cn("relative", className)}
       aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
       title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
     >
       {isDark ? (
-        <Sun size={18} className="transition-transform duration-200" aria-hidden="true" />
+        <WeatherSunny20Regular className="size-5" aria-hidden="true" />
       ) : (
-        <Moon size={18} className="transition-transform duration-200" aria-hidden="true" />
+        <WeatherMoon20Regular className="size-5" aria-hidden="true" />
       )}
       <span className="sr-only">Toggle theme</span>
     </Button>

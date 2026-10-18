@@ -7,7 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { User, Mail, Phone, MapPin, Calendar, Edit, Loader2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Call20Regular,
+  ContactCard20Regular,
+  Edit16Regular,
+  HatGraduation20Regular,
+  Location20Regular,
+  Mail20Regular,
+  Person20Regular,
+} from '@fluentui/react-icons';
 import { useAuth } from '@/contexts/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/integrations/api/client';
@@ -98,144 +107,178 @@ const StudentProfile = () => {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center p-12">
-        <Loader2 className="h-12 w-12 animate-spin text-brand-500 mb-4" />
-        <p className="text-muted-foreground">Loading profile...</p>
+        <div
+          className="mb-4 h-8 w-8 animate-spin rounded-full border-[3px] border-brand-subtle border-t-brand"
+          role="progressbar"
+          aria-label="Loading"
+        />
+        <p className="text-body text-text-muted">Loading profile...</p>
       </div>
     );
   }
 
+  const labelClass = 'text-body-strong text-text-primary';
+
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Profile Information
-          </CardTitle>
-          <CardDescription>
-            View and manage your personal information
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col md:flex-row gap-6">
-            <div className="flex flex-col items-center space-y-4">
-              <Avatar className="h-24 w-24">
-                <AvatarImage src={studentData?.profileImage || '/placeholder.svg'} alt={formData.name} />
-                <AvatarFallback className="text-lg">
-                  {formData.name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <Button variant="outline" size="sm" className="flex items-center gap-2">
-                <Edit className="h-4 w-4" />
-                Change Photo
-              </Button>
-            </div>
-            
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="studentId">Student ID</Label>
-                <Input id="studentId" value={studentData?.studentId || 'N/A'} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="rollNumber">Roll Number</Label>
-                <Input id="rollNumber" value={studentData?.rollNo || 'N/A'} disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input 
-                  id="fullName" 
-                  value={formData.name} 
-                  onChange={(e) => { handleInputChange('name', e.target.value); }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="class">Class</Label>
-                <Input id="class" value="Computer Science" disabled />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input 
-                  id="email" 
-                  value={formData.email} 
-                  type="email" 
-                  onChange={(e) => { handleInputChange('email', e.target.value); }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input 
-                  id="phone" 
-                  value={formData.phone} 
-                  onChange={(e) => { handleInputChange('phone', e.target.value); }}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="address">Address</Label>
-                <Input 
-                  id="address" 
-                  value={formData.address} 
-                  onChange={(e) => { handleInputChange('address', e.target.value); }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dob">Date of Birth</Label>
-                <Input id="dob" value="" type="date" placeholder="Not available" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="enrollment">Enrollment Date</Label>
-                <Input id="enrollment" value="" type="date" disabled placeholder="Not available" />
-              </div>
-            </div>
+      {/* Teams profile card */}
+      <Card className="border-0 bg-surface-default shadow">
+        <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center">
+          <div className="relative shrink-0 self-start sm:self-center">
+            <Avatar className="h-20 w-20">
+              <AvatarImage src={studentData?.profileImage || '/placeholder.svg'} alt={formData.name} />
+              <AvatarFallback className="bg-brand-subtle text-section-title text-brand-foreground">
+                {formData.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span
+              className="absolute bottom-1 right-1 h-4 w-4 rounded-full bg-presence-available ring-2 ring-[var(--surface-default)]"
+              aria-label="Available"
+              role="img"
+            />
           </div>
-          
-          <div className="mt-6 flex justify-end space-x-3">
-            <Button variant="outline">Cancel</Button>
-            <Button 
-              onClick={handleSaveChanges} 
-              disabled={updateProfileMutation.isPending}
-            >
-              {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
-            </Button>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-section-title text-text-primary">{formData.name || 'Student'}</h2>
+              <Badge variant="success" shape="pill">Active Student</Badge>
+            </div>
+            <p className="mt-1 text-body text-text-secondary">Computer Science</p>
+            <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-caption text-text-muted">
+              <span>Student ID {studentData?.studentId || 'N/A'}</span>
+              <span>Roll No. {studentData?.rollNo || 'N/A'}</span>
+              {formData.email && <span className="truncate">{formData.email}</span>}
+            </p>
           </div>
+          <Button variant="outline" size="sm" className="gap-2 self-start sm:self-center">
+            <Edit16Regular aria-hidden />
+            Change Photo
+          </Button>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
-            Academic Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="flex items-center space-x-3">
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Email</p>
-                <p className="text-sm text-muted-foreground">{formData.email}</p>
+      <Tabs defaultValue="profile" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="profile">Profile Information</TabsTrigger>
+          <TabsTrigger value="academic">Academic Information</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="profile">
+          <Card className="border-0 bg-surface-default shadow">
+            <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+              <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+                <Person20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+                Profile Information
+              </CardTitle>
+              <CardDescription className="mt-0.5 text-caption text-text-muted">
+                View and manage your personal information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="studentId" className={labelClass}>Student ID</Label>
+                  <Input id="studentId" value={studentData?.studentId || 'N/A'} disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rollNumber" className={labelClass}>Roll Number</Label>
+                  <Input id="rollNumber" value={studentData?.rollNo || 'N/A'} disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="fullName" className={labelClass}>Full Name</Label>
+                  <Input
+                    id="fullName"
+                    value={formData.name}
+                    onChange={(e) => { handleInputChange('name', e.target.value); }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="class" className={labelClass}>Class</Label>
+                  <Input id="class" value="Computer Science" disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email" className={labelClass}>Email Address</Label>
+                  <Input
+                    id="email"
+                    value={formData.email}
+                    type="email"
+                    onChange={(e) => { handleInputChange('email', e.target.value); }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="phone" className={labelClass}>Phone Number</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) => { handleInputChange('phone', e.target.value); }}
+                  />
+                </div>
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label htmlFor="address" className={labelClass}>Address</Label>
+                  <Input
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) => { handleInputChange('address', e.target.value); }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="dob" className={labelClass}>Date of Birth</Label>
+                  <Input id="dob" value="" type="date" placeholder="Not available" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="enrollment" className={labelClass}>Enrollment Date</Label>
+                  <Input id="enrollment" value="" type="date" disabled placeholder="Not available" />
+                </div>
               </div>
+            </CardContent>
+            <div className="flex justify-end gap-2 border-t border-border-subtle px-5 py-4">
+              <Button variant="outline">Cancel</Button>
+              <Button
+                onClick={handleSaveChanges}
+                disabled={updateProfileMutation.isPending}
+              >
+                {updateProfileMutation.isPending ? 'Saving...' : 'Save Changes'}
+              </Button>
             </div>
-            <div className="flex items-center space-x-3">
-              <Phone className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Phone</p>
-                <p className="text-sm text-muted-foreground">{formData.phone || 'Not provided'}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <MapPin className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Location</p>
-                <p className="text-sm text-muted-foreground">Education City</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              <Badge variant="secondary">Active Student</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="academic">
+          <Card className="border-0 bg-surface-default shadow">
+            <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+              <CardTitle className="flex items-center gap-2 text-subheading text-text-primary">
+                <HatGraduation20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+                Academic Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <dl className="divide-y divide-border-subtle">
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <Mail20Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <dt className="w-28 shrink-0 text-body text-text-muted">Email</dt>
+                  <dd className="min-w-0 truncate text-body text-text-primary">{formData.email}</dd>
+                </div>
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <Call20Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <dt className="w-28 shrink-0 text-body text-text-muted">Phone</dt>
+                  <dd className="min-w-0 truncate text-body text-text-primary">{formData.phone || 'Not provided'}</dd>
+                </div>
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <Location20Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <dt className="w-28 shrink-0 text-body text-text-muted">Location</dt>
+                  <dd className="min-w-0 truncate text-body text-text-primary">Education City</dd>
+                </div>
+                <div className="flex items-center gap-3 px-5 py-3">
+                  <ContactCard20Regular className="shrink-0 text-text-muted" aria-hidden />
+                  <dt className="w-28 shrink-0 text-body text-text-muted">Status</dt>
+                  <dd>
+                    <Badge variant="success" shape="pill">Active Student</Badge>
+                  </dd>
+                </div>
+              </dl>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

@@ -218,7 +218,7 @@ const ClassesPage = () => {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Classes Management</h1>
+        <h1 className="text-page-title text-text-primary">Classes Management</h1>
         <Dialog open={isDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogTrigger asChild>
             <Button className="flex gap-2 items-center">
@@ -244,7 +244,7 @@ const ClassesPage = () => {
                   placeholder="e.g., Mathematics 101"
                   {...register('name', { required: "Class name is required" })}
                 />
-                {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
+                {errors.name && <p className="text-caption text-status-error">{errors.name.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -262,7 +262,7 @@ const ClassesPage = () => {
                 <select
                   id="faculty_id"
                   {...register('faculty_id', { required: "Faculty is required", valueAsNumber: true })}
-                  className="border rounded px-3 py-2 min-w-[200px] bg-slate-900 text-white"
+                  className="h-9 rounded-md border border-border-default border-b-border-strong px-3 py-1.5 min-w-[200px] bg-surface-default text-body text-text-primary focus-visible:outline-none focus-visible:border-b-brand"
                   disabled={facultiesLoading}
                 >
                   <option value="">-- Select Faculty --</option>
@@ -270,7 +270,7 @@ const ClassesPage = () => {
                     <option key={faculty.id} value={faculty.id}>{faculty.name}</option>
                   ))}
                 </select>
-                {errors.faculty_id && <p className="text-sm text-red-500">{errors.faculty_id.message}</p>}
+                {errors.faculty_id && <p className="text-caption text-status-error">{errors.faculty_id.message}</p>}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -306,14 +306,14 @@ const ClassesPage = () => {
         <CardContent>
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
-              <Loader2 className="animate-spin h-8 w-8 mr-2" />
-              <span>Loading classes...</span>
+              <Loader2 className="animate-spin h-5 w-5 mr-2 text-brand-foreground" />
+              <span className="text-body text-text-muted">Loading classes...</span>
             </div>
           ) : classes.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Book className="mx-auto h-12 w-12 opacity-30 mb-2" />
-              <p className="text-lg">No classes found</p>
-              <p className="text-sm">Create your first class to get started</p>
+            <div className="flex flex-col items-center text-center py-10 text-text-muted">
+              <span className="mb-3 grid h-12 w-12 place-items-center rounded-full bg-surface-subtle text-text-muted"><Book className="h-6 w-6" aria-hidden /></span>
+              <p className="text-subheading text-text-primary">No classes found</p>
+              <p className="text-body text-text-muted mt-1">Create your first class to get started</p>
               <Button 
                 onClick={() => setIsDialogOpen(true)}
                 variant="outline"
@@ -349,7 +349,7 @@ const ClassesPage = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-red-500 hover:text-red-600"
+                        className="text-status-error hover:text-status-error hover:bg-status-error-subtle hover:border-status-error-border"
                         onClick={() => handleDeleteClass(cls.id)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />

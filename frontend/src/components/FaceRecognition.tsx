@@ -1,648 +1,838 @@
-
+/**
+ * Student face check-in (docs/system/face-verification.md §6, §7, §10).
+ *
+ * 1. Load the public policy; on start create a single-use `checkin` challenge.
+ * 2. Mirrored live preview: "Look at the camera" (MediaPipe waits for one centred face),
+ *    then "Turn your head to your LEFT/RIGHT" with an arrow.
+ * 3. Capture a burst of UNMIRRORED JPEG frames (≤ 640 px): ~2 frontal frames, then the
+ *    most-turned frames from the head turn.
+ * 4. ONE `mark-attendance` call with frames + challenge + presence code. The server decides
+ *    identity, liveness, the session and present/late. No scores are ever shown.
+ */
 import * as React from 'react';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Camera, CheckCircle, X, Shield } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { mediapipeLocateFile } from '@/lib/mediapipe';
-import { FaceDetection } from '@mediapipe/face_detection';
-import { Camera as MPCamera } from '@mediapipe/camera_utils';
-import { useTimeRestrictions } from '@/hooks/useTimeRestrictions';
-import { getPreferredCamera, createCameraConstraints, testCameraWithFallback } from '@/utils/cameraSelector';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  ArrowClockwise20Regular,
+  Dismiss20Regular,
+  ScanPerson24Regular,
+  ShieldLock20Regular,
+  Video20Regular,
+} from '@fluentui/react-icons';
+import {
+  api,
+  getErrorDetailField,
+  parseApiError,
+  type FaceChallenge,
+  type FaceCheckinResult,
+} from '@/integrations/api/client';
+import {
+  checkinRejectionMessage,
+  faceQualityHints,
+  formatRetryCountdown,
+  isRetryableCheckinCode,
+} from '@/utils/timeRestrictions';
+import { isFreshObservation, useRealFaceDetection, type FaceTrackingStatus } from '@/hooks/useRealFaceDetection';
+import { GUIDE, prefetchFaceDetector, type FaceObservation } from '@/services/mediaPipeService';
+import CameraStage, { StageBusy, type StageChip, type StageGuide, type StagePrompt } from '@/components/face/CameraStage';
+import FaceMessage from '@/components/face/FaceMessage';
+import PresenceCodeInput from '@/components/face/PresenceCodeInput';
+import { isCompletePresenceCode, normalizePresenceCode } from '@/components/face/presenceCode';
+import { captureFrame, sleep, type CapturedFrame } from '@/components/face/capture';
+import { useCameraStream, waitForVideo } from '@/components/face/useCameraStream';
+import { useFacePolicy } from '@/components/face/faceQueries';
+import { cn } from '@/lib/utils';
 
 interface FaceRecognitionProps {
-  onCapture: (dataUrl: string, recognized: boolean) => void;
-  onCancel?: () => void;
+  /** Class being checked in to (the server still picks the open session). */
+  subjectId?: string | number | null;
+  sessionId?: number | null;
+  scheduleId?: number | null;
+  /** Small label next to the title, e.g. the class time. */
+  contextLabel?: string;
+  /** Presence code from the QR link (`?code=`). */
+  initialPresenceCode?: string | null;
   disabled?: boolean;
-  subjectId?: string; // optional, used when marking attendance
+  /** Move focus into the component once it's ready (e.g. when opened inline from a list). */
+  autoFocus?: boolean;
+  /** Every server answer (success or rejection), e.g. to refresh today's classes. */
+  onResult?: (result: FaceCheckinResult) => void;
+  /** "Done" after a successful check-in (falls back to `onCancel`). */
+  onDone?: () => void;
+  onCancel?: () => void;
 }
 
-const FaceRecognition = ({ onCapture, onCancel, disabled, subjectId }: FaceRecognitionProps) => {
-  const [isActive, setIsActive] = useState(false);
-  const [isCapturing, setIsCapturing] = useState(false);
-  const [isRecognized, setIsRecognized] = useState(false);
-  const [faceBox, setFaceBox] = useState<{x: number, y: number, width: number, height: number} | null>(null);
-  const [boxColor, setBoxColor] = useState<'idle' | 'detected'>('idle');
-  const [feedback, setFeedback] = useState<string>('');
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const mpCameraRef = useRef<MPCamera | null>(null);
-  const faceDetectionRef = useRef<FaceDetection | null>(null);
-  const faceBoxRef = useRef<typeof faceBox>(null);
-  const { toast } = useToast();
+type Phase = 'intro' | 'starting' | 'align' | 'front' | 'turn' | 'verifying' | 'result';
+
+interface Outcome {
+  kind: 'success' | 'rejected' | 'error';
+  code: string | null;
+  title: string;
+  message: string;
+  hints: string[];
+  retryable: boolean;
+}
+
+const TERMINAL_TITLES: Record<string, string> = {
+  already_recorded: 'Already recorded',
+  too_many_attempts: 'Check-in paused',
+  window_closed: 'Check-in closed',
+  session_cancelled: 'Class cancelled',
+  no_registered_face: 'Face not registered',
+  liveness_unavailable: 'Face check-in unavailable',
+};
+
+const ALIGN_HOLD_MS = 600;
+const TIMED_ALIGN_MS = 2000;
+const FRONT_GAP_MS = 260;
+const TURN_SAMPLE_MS = 180;
+const TURN_GUIDED_MAX_MS = 4500;
+const TURN_TIMED_MS = 2600;
+const TURN_HOLD_AFTER_DETECT_MS = 450;
+const MAX_TURN_SAMPLES = 24;
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+const isAligned = (o: FaceObservation) =>
+  o.faceCount === 1 && o.size === 'ok' && o.centered && (o.yaw === null || Math.abs(o.yaw) <= GUIDE.frontalMaxYaw);
+
+const alignmentHint = (o: FaceObservation | null, status: FaceTrackingStatus): string => {
+  if (status === 'unavailable') return 'Keep your face inside the oval.';
+  if (status !== 'ready') return 'Getting the camera ready…';
+  if (!o || o.faceCount === 0) return "We can't see your face yet — centre it in the oval.";
+  if (o.faceCount > 1) return 'Make sure only you are in the frame.';
+  if (o.size === 'small') return 'Move a little closer.';
+  if (o.size === 'large') return 'Move back a little.';
+  if (!o.centered) return 'Centre your face in the oval.';
+  if (o.yaw !== null && Math.abs(o.yaw) > GUIDE.frontalMaxYaw) return 'Look straight at the camera.';
+  return 'Perfect — hold still…';
+};
+
+/** Most-turned frames (in the requested direction), in capture order. */
+const pickTurnFrames = (samples: CapturedFrame[], sign: number, count: number): CapturedFrame[] => {
+  if (samples.length <= count) return samples;
+  if (!samples.some((s) => s.yaw !== null)) {
+    // No guidance: evenly spaced frames after the reaction time.
+    const pool = samples.slice(Math.floor(samples.length * 0.35));
+    if (pool.length <= count) return pool;
+    return Array.from({ length: count }, (_, i) => pool[Math.floor(((i + 1) * pool.length) / (count + 1))]);
+  }
+  return samples
+    .map((f, i) => ({ f, i, s: f.yaw === null ? -Infinity : f.yaw * sign }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, count)
+    .sort((a, b) => a.i - b.i)
+    .map((x) => x.f);
+};
+
+const FaceRecognition = ({
+  subjectId,
+  sessionId,
+  scheduleId,
+  contextLabel,
+  initialPresenceCode,
+  disabled,
+  autoFocus,
+  onResult,
+  onDone,
+  onCancel,
+}: FaceRecognitionProps) => {
+  const policyQuery = useFacePolicy();
+  const policy = policyQuery.data;
+  const requireTurn = policy?.require_head_turn ?? true;
+  const requireCode = policy?.require_presence_code ?? false;
+
+  const camera = useCameraStream();
+  const [phase, setPhase] = useState<Phase>('intro');
+  const [code, setCode] = useState(() => normalizePresenceCode(initialPresenceCode));
+  const [codeFromLink, setCodeFromLink] = useState(() => isCompletePresenceCode(normalizePresenceCode(initialPresenceCode)));
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [action, setAction] = useState<FaceChallenge['action'] | null>(null);
+  const [captured, setCaptured] = useState(0);
+  const [toCapture, setToCapture] = useState(0);
+  const [flash, setFlash] = useState(0);
+  const [still, setStill] = useState<string | null>(null);
+  const [turnFeedback, setTurnFeedback] = useState<'waiting' | 'more' | 'done'>('waiting');
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const [retryLeft, setRetryLeft] = useState(0);
+
+  const runRef = useRef(0);
+  const challengeRef = useRef<{ challenge: FaceChallenge; receivedAt: number } | null>(null);
+  const codeInputRef = useRef<HTMLInputElement>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
+  const resultTitleRef = useRef<HTMLParagraphElement>(null);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const autoFocusedRef = useRef(false);
+
+  const tracking = useRealFaceDetection({
+    videoRef: camera.videoEl,
+    active: phase === 'starting' || phase === 'align' || phase === 'front' || phase === 'turn',
+  });
+  const trackingStatusRef = useRef<FaceTrackingStatus>(tracking.status);
+  useEffect(() => {
+    trackingStatusRef.current = tracking.status;
+  }, [tracking.status]);
+
+  // Download the detector while the student reads the instructions.
+  useEffect(() => {
+    prefetchFaceDetector();
+  }, []);
+
+  // A new QR link (e.g. the page's ?code= changed) replaces the code.
+  useEffect(() => {
+    const next = normalizePresenceCode(initialPresenceCode);
+    if (isCompletePresenceCode(next)) {
+      setCode(next);
+      setCodeFromLink(true);
+      setCodeError(null);
+    }
+  }, [initialPresenceCode]);
+
+  // Stop async loops on unmount (the camera hook releases the stream).
+  useEffect(
+    () => () => {
+      runRef.current += 1;
+    },
+    []
+  );
 
   useEffect(() => {
-    faceBoxRef.current = faceBox;
-  }, [faceBox]);
+    if (phase === 'result') resultTitleRef.current?.focus();
+    if (phase === 'intro' && codeError) codeInputRef.current?.focus();
+  }, [phase, codeError]);
 
-  // Time restriction management
-  const {
-    isAllowed: canVerify,
-    reason: restrictionReason,
-    currentPeriod,
-    timeUntilNext
-  } = useTimeRestrictions();
-
-  // Time restrictions enabled - use actual time-based access control
-  const finalCanVerify = canVerify;
-  const finalRestrictionReason = restrictionReason;
-
-  // Start/stop the webcam stream with MediaPipe face detection only
   useEffect(() => {
-    if (!isActive) {
-      // Cleanup
-      if (mpCameraRef.current) {
-        mpCameraRef.current.stop();
-        mpCameraRef.current = null;
-      }
-      setFaceBox(null);
-      setFeedback('');
-      return;
-    }
-    
-    let destroyed = false;
+    if (!autoFocus || autoFocusedRef.current || !policy || phase !== 'intro') return;
+    autoFocusedRef.current = true;
+    if (policy.require_presence_code && !isCompletePresenceCode(code)) codeInputRef.current?.focus();
+    else startButtonRef.current?.focus();
+  }, [autoFocus, policy, phase, code]);
 
-    const setup = async () => {
-      // Setup MediaPipe Face Detection
-      const faceDetection = new FaceDetection({
-        locateFile: (file: string) => mediapipeLocateFile(file)
-      });
-
-      faceDetection.setOptions({
-        model: 'short',
-        minDetectionConfidence: 0.6
-      });
-
-      faceDetection.onResults((results: {detections?: Array<{boundingBox: {xCenter: number, yCenter: number, width: number, height: number}}>}) => {
-        try {
-          if (destroyed) return;
-          if (results.detections && results.detections.length > 0) {
-            const det = results.detections[0];
-            const box = det.boundingBox;
-            setFaceBox({
-              x: box.xCenter - box.width / 2,
-              y: box.yCenter - box.height / 2,
-              width: box.width,
-              height: box.height
-            });
-            setBoxColor('detected');
-            setFeedback('Face detected. Ready to capture!');
-          } else {
-            setFaceBox(null);
-            setBoxColor('idle');
-            setFeedback('No face detected.');
-          }
-        } catch (error) {
-          console.error('Face detection error:', error);
-          setFeedback('Face detection error. Please try again.');
-        }
-      });
-
-      // Explicitly initialize the solution before first send
-      try {
-        const maybeInit = faceDetection as unknown as { initialize?: () => Promise<void> };
-        if (typeof maybeInit.initialize === 'function') {
-          await maybeInit.initialize();
-        }
-      } catch (e) {
-        console.warn('FaceDetection.initialize() failed or unavailable, continuing:', e);
-      }
-
-      if (destroyed) return;
-      faceDetectionRef.current = faceDetection;
-
-      // Setup camera with smart camera selection
-      if (!videoRef.current) return;
-
-      try {
-        setFeedback('Initializing camera...');
-        const stream = await testCameraWithFallback();
-        if (destroyed) return;
-        if (!stream) {
-          setFeedback('Failed to access camera. Please check permissions and ensure a camera is available.');
-          return;
-        }
-
-        // Set up video element with the stream
-        videoRef.current.srcObject = stream;
-
-        const safeSendFrame = () => {
-          const v = videoRef.current;
-          const fd = faceDetectionRef.current;
-          if (!v || !fd || destroyed || !isActive) return;
-          const w = v.videoWidth | 0;
-          const h = v.videoHeight | 0;
-          if (w <= 0 || h <= 0 || w > 4000 || h > 4000) {
-            // Skip unreasonable sizes to avoid WASM memory OOB
-            return;
-          }
-          try {
-            fd.send({ image: v });
-          } catch (err) {
-            // Prevent spamming if WASM errors once
-            console.warn('FaceDetection.send error (skipping frame):', err);
-          }
-        };
-
-        // Create a custom frame capture loop instead of MediaPipe Camera
-        const captureLoop = () => {
-          safeSendFrame();
-          if (!destroyed && isActive) {
-            requestAnimationFrame(captureLoop);
-          }
-        };
-
-        // Wait for video to be ready, then start the detection loop
-        videoRef.current.onloadedmetadata = () => {
-          if (destroyed) return;
-          setFeedback('Camera ready. Position your face in the frame.');
-          requestAnimationFrame(captureLoop);
-        };
-
-        // Store the stream for cleanup
-        mpCameraRef.current = { 
-          stop: () => {
-            stream.getTracks().forEach(track => track.stop());
-          }
-        } as MPCamera;
-
-      } catch (error) {
-        console.error('Camera initialization error:', error);
-        setFeedback('Failed to access camera. Please ensure camera permissions are granted and no other application is using the camera.');
-      }
-    };
-
-    setup();
-
-    return () => {
-      destroyed = true;
-      if (mpCameraRef.current) {
-        mpCameraRef.current.stop();
-        mpCameraRef.current = null;
-      }
-      if (faceDetectionRef.current) {
-        try { 
-          faceDetectionRef.current.close(); 
-        } catch { 
-          // Ignore close error during teardown
-        }
-        faceDetectionRef.current = null;
-      }
-      setFaceBox(null);
-      setFeedback('');
-    };
-  }, [isActive]);
-
-  // Draw bounding box overlay on canvas
   useEffect(() => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Draw bounding box if detected
-    if (faceBox) {
-      ctx.save();
-      let startColor = '#38bdf8';
-      let endColor = '#06b6d4';
-      if (boxColor === 'recognized') {
-        startColor = '#34d399';
-        endColor = '#22c55e';
-      } else if (boxColor === 'warning') {
-        startColor = '#facc15';
-        endColor = '#f97316';
-      }
-      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      grad.addColorStop(0, startColor);
-      grad.addColorStop(1, endColor);
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 3;
-      ctx.shadowColor = '#06b6d4AA';
-      ctx.shadowBlur = 8;
-      ctx.beginPath();
-      // Mirror X for bounding box
-      const x = (1 - faceBox.x - faceBox.width) * canvas.width;
-      const y = faceBox.y * canvas.height;
-      const w = faceBox.width * canvas.width;
-      const h = faceBox.height * canvas.height;
-      if (ctx.roundRect) {
-        ctx.roundRect(x, y, w, h, 18);
-      } else {
-        ctx.rect(x, y, w, h);
-      }
-      ctx.stroke();
-      ctx.restore();
-    }
-  }, [faceBox, boxColor]);
+    if (retryLeft <= 0) return;
+    const t = setTimeout(() => setRetryLeft((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [retryLeft]);
 
-  // Real capture: use backend verification
-  const captureImage = async () => {
-    if (!canvasRef.current || !videoRef.current) return;
-    
-    // Check if video is ready
-    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
-      toast({
-        title: 'Video Not Ready',
-        description: 'Please wait for the camera to initialize.',
-        variant: 'destructive',
+  const fetchChallenge = useCallback(
+    () =>
+      api.faceRecognition.createChallenge({
+        purpose: 'checkin',
+        sessionId: sessionId ?? null,
+        subjectId: subjectId ?? null,
+        scheduleId: scheduleId ?? null,
+      }),
+    [sessionId, subjectId, scheduleId]
+  );
+
+  const showOutcome = useCallback(
+    (next: Outcome, retryAfter?: number | null) => {
+      runRef.current += 1;
+      camera.stop();
+      setOutcome(next);
+      setRetryLeft(next.code === 'too_many_attempts' ? Math.max(1, Math.ceil(retryAfter ?? 60)) : 0);
+      setPhase('result');
+    },
+    [camera]
+  );
+
+  const backToCode = useCallback(
+    (message: string) => {
+      runRef.current += 1;
+      camera.stop();
+      setStill(null);
+      setCode('');
+      setCodeFromLink(false);
+      setCodeError(message);
+      setOutcome(null);
+      setPhase('intro');
+    },
+    [camera]
+  );
+
+  const rejection = useCallback(
+    (codeValue: string | null, serverMessage?: string | null, extra: Partial<Outcome> = {}): Outcome => ({
+      kind: 'rejected',
+      code: codeValue,
+      title: (codeValue && TERMINAL_TITLES[codeValue]) || "We couldn't check you in",
+      message: checkinRejectionMessage(codeValue, serverMessage),
+      hints: [],
+      retryable: isRetryableCheckinCode(codeValue),
+      ...extra,
+    }),
+    []
+  );
+
+  const failFromError = useCallback(
+    (err: unknown) => {
+      const info = parseApiError(err);
+      if (info.code === 'presence_code_invalid' || info.code === 'presence_code_required') {
+        backToCode(checkinRejectionMessage(info.code));
+        return;
+      }
+      if (info.code) {
+        showOutcome(rejection(info.code, info.message), getErrorDetailField<number>(info, 'retry_after_seconds'));
+        return;
+      }
+      showOutcome({
+        kind: 'error',
+        code: null,
+        title: "We couldn't check you in",
+        message:
+          info.status && info.message && info.message !== 'Request failed'
+            ? info.message
+            : "Couldn't reach the server. Check your connection and try again.",
+        hints: [],
+        retryable: true,
       });
-      return;
-    }
-    
-    if (!faceBox) {
-      toast({
-        title: 'No Face Detected',
-        description: 'Please ensure your face is visible in the frame.',
-        variant: 'destructive',
-      });
-      return;
-    }
+    },
+    [backToCode, rejection, showOutcome]
+  );
 
-    setIsCapturing(true);
-    setFeedback('Processing image...');
-    
-    // Stop face detection during processing to save resources
-    if (faceDetectionRef.current) {
-      try {
-        // Pause the detection loop by clearing the face detection
-        faceDetectionRef.current.close();
-        faceDetectionRef.current = null;
-      } catch (error) {
-        console.warn('Error pausing face detection:', error);
-      }
-    }
-    
-    // Stop camera stream to freeze the video
-    if (mpCameraRef.current) {
-      try {
-        mpCameraRef.current.stop();
-        mpCameraRef.current = null;
-      } catch (error) {
-        console.warn('Error stopping camera:', error);
-      }
-    }
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-    
-    let dataUrl = '';
-    
-    try {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      
-      // Mirror the canvas to match the mirrored video display
-      context.save();
-      context.scale(-1, 1);
-      context.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-      context.restore();
-      
-      dataUrl = canvas.toDataURL('image/jpeg');
-      const base64 = dataUrl.replace(/^data:image\/jpeg;base64,/, '');
-    
-      // 1) Verify identity against the logged-in user's saved embedding
-      const token = localStorage.getItem('authToken');
-      const commonHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
-
-      const idRes = await fetch('/api/face-recognition/verify-identity', {
-        method: 'POST',
-        headers: commonHeaders,
-        body: JSON.stringify({ image_data: base64 })
-      });
-      const idData = await idRes.json();
-
-      const matched = !!idData.matched;
-      setIsRecognized(matched);
-
-      if (!matched) {
-        onCapture(dataUrl, false);
-        toast({
-          title: 'Identity Mismatch',
-          description: idData.message || 'Face does not match the current user.',
-          variant: 'destructive',
+  const handleResult = useCallback(
+    (result: FaceCheckinResult) => {
+      if (result.success) {
+        const late = result.status === 'late';
+        showOutcome({
+          kind: 'success',
+          code: null,
+          title: late ? "You're checked in (late)" : "You're checked in",
+          message: late ? 'Your attendance was recorded as late.' : 'Your attendance was recorded as present.',
+          hints: [],
+          retryable: false,
         });
         return;
       }
-
-      // 2) Optionally mark attendance if subjectId is provided
-      if (subjectId) {
-        console.log('[DEBUG] Marking attendance for subject:', subjectId);
-        console.log('[DEBUG] Image data length:', base64?.length || 0);
-        
-        const attendancePayload = { 
-          image_data: base64, 
-          subject_id: Number(subjectId) 
-        };
-        console.log('[DEBUG] Attendance payload:', attendancePayload);
-        
-        const attendRes = await fetch('/api/face-recognition/mark-attendance', {
-          method: 'POST',
-          headers: commonHeaders,
-          body: JSON.stringify(attendancePayload)
-        });
-        
-        console.log('[DEBUG] Attendance response status:', attendRes.status);
-        const attendData = await attendRes.json();
-        console.log('[DEBUG] Attendance response data:', attendData);
-
-        const ok = attendData.success && attendData.attendance_marked;
-        onCapture(dataUrl, ok);
-        toast({
-          title: ok ? 'Attendance Marked' : 'Attendance Not Marked',
-          description: attendData.message || (ok ? 'Attendance marked successfully.' : 'Could not mark attendance.'),
-          variant: ok ? 'default' : 'destructive',
-        });
-      } else {
-        // If no subjectId, just report successful identity match
-        onCapture(dataUrl, true);
-        toast({
-          title: 'Identity Verified',
-          description: 'Face matches your registered profile.',
-        });
+      const c = result.code ?? null;
+      if (c === 'presence_code_invalid' || c === 'presence_code_required') {
+        backToCode(checkinRejectionMessage(c));
+        return;
       }
-    } catch (e) {
-      console.error('Face capture error:', e);
-      setIsRecognized(false);
-      onCapture(dataUrl || '', false);
-      toast({
-        title: 'Verification Error',
-        description: 'Error verifying identity. Please try again.',
-        variant: 'destructive',
+      showOutcome(
+        rejection(c, result.message, {
+          message: checkinRejectionMessage(c, result.message, result.current_status),
+          hints: faceQualityHints(result.quality_issues),
+        }),
+        result.retry_after_seconds
+      );
+    },
+    [backToCode, rejection, showOutcome]
+  );
+
+  /** Burst capture → submit. Runs once the face is aligned (or after the timed fallback). */
+  const runCapture = async (run: number) => {
+    if (!policy) return;
+    const video = () => camera.videoEl.current;
+    const alive = () => run === runRef.current;
+
+    let ch = challengeRef.current;
+    if (requireTurn) {
+      const ttlMs = (ch?.challenge.ttl_seconds ?? 0) * 1000;
+      if (!ch || performance.now() - ch.receivedAt > ttlMs - 15000) {
+        try {
+          const fresh = await fetchChallenge();
+          ch = { challenge: fresh, receivedAt: performance.now() };
+          challengeRef.current = ch;
+          setAction(fresh.action);
+        } catch (err) {
+          if (alive()) failFromError(err);
+          return;
+        }
+        if (!alive()) return;
+      }
+    }
+
+    const framesMin = ch?.challenge.frames_min ?? policy.frames_min;
+    const framesMax = Math.max(1, ch?.challenge.frames_max ?? policy.frames_max);
+    const frontTarget = requireTurn
+      ? clamp(Math.min(2, framesMax - 1), 1, framesMax)
+      : clamp(Math.max(2, framesMin), 1, framesMax);
+    const turnBudget = framesMax - frontTarget;
+    const turnTarget = requireTurn ? clamp(Math.max(framesMin - frontTarget, Math.min(4, turnBudget)), 1, Math.max(1, turnBudget)) : 0;
+    setToCapture(frontTarget + turnTarget);
+    setCaptured(0);
+    setPhase('front');
+
+    const front: CapturedFrame[] = [];
+    for (let i = 0; i < frontTarget; i++) {
+      const obs = tracking.observationRef.current;
+      const frame = captureFrame(video(), isFreshObservation(obs) ? obs.yaw : null);
+      if (frame) {
+        front.push(frame);
+        setCaptured((n) => n + 1);
+        setFlash((n) => n + 1);
+      }
+      await sleep(FRONT_GAP_MS);
+      if (!alive()) return;
+    }
+    if (front.length === 0) {
+      showOutcome({
+        kind: 'error',
+        code: null,
+        title: "We couldn't check you in",
+        message: 'The camera stopped sending video. Please try again.',
+        hints: [],
+        retryable: true,
       });
-    } finally {
-      setIsCapturing(false);
-      setIsActive(false); // Close the camera interface
-      setFeedback('');
+      return;
+    }
+
+    let turnFrames: CapturedFrame[] = [];
+    if (requireTurn && ch) {
+      const sign = ch.challenge.action === 'turn_right' ? -1 : 1;
+      const guided = trackingStatusRef.current === 'ready';
+      setTurnFeedback('waiting');
+      setPhase('turn');
+      const samples: CapturedFrame[] = [];
+      const t0 = performance.now();
+      let detectedAt: number | null = null;
+      let best = -Infinity;
+      while (alive()) {
+        const obs = tracking.observationRef.current;
+        const yaw = isFreshObservation(obs) ? obs.yaw : null;
+        const frame = captureFrame(video(), yaw);
+        if (frame) {
+          samples.push(frame);
+          if (samples.length > MAX_TURN_SAMPLES) {
+            // Drop the least-turned sample to bound memory.
+            const score = (f: CapturedFrame) => (f.yaw === null ? -Infinity : f.yaw * sign);
+            let worst = 0;
+            samples.forEach((f, i) => {
+              if (score(f) < score(samples[worst])) worst = i;
+            });
+            samples.splice(worst, 1);
+          }
+        }
+        if (yaw !== null) {
+          const s = yaw * sign;
+          best = Math.max(best, s);
+          if (s >= GUIDE.turnMinYaw && detectedAt === null) {
+            detectedAt = performance.now();
+            setTurnFeedback('done');
+          } else if (s >= GUIDE.noTurnYaw && detectedAt === null) {
+            setTurnFeedback('more');
+          }
+        }
+        const now = performance.now();
+        if (detectedAt !== null && now - detectedAt >= TURN_HOLD_AFTER_DETECT_MS) break;
+        if (now - t0 >= (guided ? TURN_GUIDED_MAX_MS : TURN_TIMED_MS)) break;
+        await sleep(TURN_SAMPLE_MS);
+      }
+      if (!alive()) return;
+      if (guided && best > -Infinity && best < GUIDE.noTurnYaw) {
+        // Clearly no head turn: don't spend a server attempt on it.
+        const dir = sign > 0 ? 'left' : 'right';
+        showOutcome({
+          kind: 'rejected',
+          code: null,
+          title: "We didn't see your head turn",
+          message: `When the arrow appears, turn your head to your ${dir} and hold it for a moment.`,
+          hints: [],
+          retryable: true,
+        });
+        return;
+      }
+      turnFrames = pickTurnFrames(samples, sign, turnTarget);
+      setCaptured(front.length + turnFrames.length);
+    }
+
+    setStill(front[0].dataUrl);
+    camera.stop();
+    setPhase('verifying');
+    try {
+      const result = await api.faceRecognition.markAttendance(
+        [...front, ...turnFrames].map((f) => f.base64),
+        {
+          subjectId: subjectId ?? undefined,
+          sessionId: sessionId ?? null,
+          scheduleId: scheduleId ?? null,
+          challengeId: ch?.challenge.challenge_id ?? null,
+          presenceCode: requireCode ? code : null,
+        }
+      );
+      if (!alive()) return;
+      challengeRef.current = null; // single use
+      onResult?.(result);
+      handleResult(result);
+    } catch (err) {
+      if (!alive()) return;
+      challengeRef.current = null;
+      failFromError(err);
     }
   };
+  // The align loop always calls the latest closure (current code, policy, class).
+  const runCaptureRef = useRef(runCapture);
+  useEffect(() => {
+    runCaptureRef.current = runCapture;
+  });
 
-  const handleCancel = () => {
-    console.log('Cancel button clicked');
+  // Step 1: wait for one centred, frontal face (or a short timed fallback without guidance).
+  useEffect(() => {
+    if (phase !== 'align') return;
+    const run = runRef.current;
+    const t0 = performance.now();
+    let alignedSince: number | null = null;
+    const timer = setInterval(() => {
+      if (run !== runRef.current) return;
+      const now = performance.now();
+      const status = trackingStatusRef.current;
+      const timed = status === 'unavailable' || (status === 'loading' && now - t0 > 8000);
+      if (status === 'ready') {
+        const obs = tracking.observationRef.current;
+        if (isFreshObservation(obs) && isAligned(obs)) {
+          alignedSince = alignedSince ?? now;
+          if (now - alignedSince >= ALIGN_HOLD_MS) {
+            clearInterval(timer);
+            void runCaptureRef.current(run);
+          }
+        } else {
+          alignedSince = null;
+        }
+      } else if (timed && now - t0 >= TIMED_ALIGN_MS) {
+        clearInterval(timer);
+        void runCaptureRef.current(run);
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [phase, tracking.observationRef]);
 
-    // Stop camera if running
-    if (mpCameraRef.current) {
-      try {
-        mpCameraRef.current.stop();
-        console.log('Camera stopped successfully');
-      } catch (error) {
-        console.error('Error stopping camera:', error);
-      }
-      mpCameraRef.current = null;
+  const begin = async () => {
+    if (!policy || disabled) return;
+    if (requireCode && !isCompletePresenceCode(code)) {
+      setCodeError('Enter the 6-digit code shown in class.');
+      codeInputRef.current?.focus();
+      return;
     }
-    
-    // Clean up face detection
-    if (faceDetectionRef.current) {
-      try {
-        faceDetectionRef.current.close();
-        console.log('Face detection closed successfully');
-      } catch (error) {
-        console.error('Error closing face detection:', error);
-      }
-      faceDetectionRef.current = null;
+    const run = ++runRef.current;
+    setCodeError(null);
+    setOutcome(null);
+    setStill(null);
+    setCaptured(0);
+    setToCapture(0);
+    setAction(null);
+    setTurnFeedback('waiting');
+    challengeRef.current = null;
+    setPhase('starting');
+
+    const challengePromise = requireTurn
+      ? fetchChallenge().then(
+          (c) => ({ ok: true as const, c }),
+          (e: unknown) => ({ ok: false as const, e })
+        )
+      : Promise.resolve(null);
+    const cam = await camera.start();
+    const ch = await challengePromise;
+    if (run !== runRef.current) return;
+    if (!cam.ok) {
+      showOutcome({
+        kind: 'error',
+        code: null,
+        title: "The camera didn't start",
+        message: cam.error ?? "Couldn't start the camera.",
+        hints: [],
+        retryable: true,
+      });
+      return;
     }
-    
-    // Reset all states
-    setIsActive(false);
-    setIsCapturing(false);
-    setIsRecognized(false);
-    setFeedback('');
-    setFaceBox(null);
-    
-    // Call the parent's onCancel callback
-    if (onCancel) {
-      console.log('Calling parent onCancel callback');
-      onCancel();
-    } else {
-      console.log('No onCancel callback provided');
+    if (ch && !ch.ok) {
+      failFromError(ch.e);
+      return;
     }
+    if (ch?.ok) {
+      challengeRef.current = { challenge: ch.c, receivedAt: performance.now() };
+      setAction(ch.c.action);
+    }
+    const ready = await waitForVideo(() => camera.videoEl.current);
+    if (run !== runRef.current) return;
+    if (!ready) {
+      showOutcome({
+        kind: 'error',
+        code: null,
+        title: "The camera didn't start",
+        message: "The camera didn't send any video. Close other apps using it and try again.",
+        hints: [],
+        retryable: true,
+      });
+      return;
+    }
+    setPhase('align');
+    promptRef.current?.focus();
   };
+
+  const cancelCamera = () => {
+    runRef.current += 1;
+    camera.stop();
+    setStill(null);
+    setPhase('intro');
+    onCancel?.();
+  };
+
+  // ---------------------------------------------------------------- render helpers
+  const obs = tracking.observation;
+  const dirWord = action === 'turn_right' ? 'RIGHT' : 'LEFT';
+  const inCamera = phase === 'starting' || phase === 'align' || phase === 'front' || phase === 'turn' || phase === 'verifying';
+
+  let prompt: StagePrompt | null = null;
+  let guide: StageGuide = 'idle';
+  let chip: StageChip | null = null;
+  let overlay: React.ReactNode = null;
+  if (phase === 'starting') {
+    overlay = <StageBusy title="Starting camera…" detail="Allow camera access if your browser asks." />;
+  } else if (phase === 'align') {
+    const aligned = !!obs && isAligned(obs);
+    prompt = { title: 'Look at the camera', detail: alignmentHint(obs, tracking.status) };
+    guide = tracking.status !== 'ready' ? 'searching' : aligned ? 'aligned' : obs && obs.faceCount > 0 ? 'problem' : 'searching';
+    chip =
+      tracking.status === 'loading'
+        ? { label: 'Loading face guide', tone: 'away', pulse: true }
+        : tracking.status === 'unavailable'
+          ? { label: 'Camera on', tone: 'available' }
+          : obs && obs.faceCount > 0
+            ? { label: obs.faceCount > 1 ? 'Several faces' : 'Face found', tone: obs.faceCount > 1 ? 'busy' : 'available' }
+            : { label: 'No face yet', tone: 'offline' };
+  } else if (phase === 'front') {
+    prompt = { title: 'Hold still', detail: 'Taking photos…' };
+    guide = 'active';
+    chip = { label: 'Capturing', tone: 'busy', pulse: true };
+  } else if (phase === 'turn') {
+    prompt = {
+      title: `Turn your head to your ${dirWord}`,
+      detail:
+        turnFeedback === 'done'
+          ? 'Great — hold it there'
+          : turnFeedback === 'more'
+            ? 'A little more…'
+            : 'Follow the arrow, keep your face in view',
+      arrow: action === 'turn_right' ? 'right' : 'left',
+    };
+    guide = turnFeedback === 'done' ? 'aligned' : 'active';
+    chip = { label: 'Capturing', tone: 'busy', pulse: true };
+  } else if (phase === 'verifying') {
+    overlay = <StageBusy title="Checking…" detail="Verifying it's you and recording your attendance." />;
+  }
+
+  const progress =
+    (phase === 'front' || phase === 'turn') && toCapture > 0
+      ? { done: Math.min(captured, toCapture), total: toCapture, label: `${Math.min(captured, toCapture)} of ${toCapture} photos taken` }
+      : null;
+
+  const stepIndex = phase === 'turn' ? 1 : 0;
+  const steps = requireTurn ? ['Look at the camera', 'Turn your head'] : ['Look at the camera'];
 
   return (
-    <Card className="overflow-hidden bg-slate-800/95 backdrop-blur-sm border border-slate-700/50 shadow-2xl">
-      <CardHeader className="bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700/50 p-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-3 text-white">
-            <div className="p-2 bg-blue-500/20 rounded-lg">
-              <Camera className="h-5 w-5 text-blue-400" />
-            </div>
-            Face Recognition
-            {currentPeriod && (
-              <span className="text-sm font-normal text-slate-400 bg-slate-700/50 px-2 py-1 rounded-md">
-                {currentPeriod.name}
-              </span>
-            )}
-          </CardTitle>
-        </div>
-        <CardDescription className="text-slate-300">
-          Position your face in the frame and capture to verify your identity for attendance.
-        </CardDescription>
-        
-        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 mt-3">
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 bg-green-500/20 rounded-lg">
-              <Shield className="h-4 w-4 text-green-400" />
-            </div>
-            <div>
-              <span className="text-sm font-semibold text-green-300">
-                Face Verification Active
-              </span>
-              <p className="text-xs text-green-400/80 mt-1">
-                Advanced AI facial recognition ready for secure attendance marking
-              </p>
-            </div>
+    <Card className="overflow-hidden border-border-subtle bg-surface-default shadow">
+      <CardHeader className="space-y-0 border-b border-border-subtle px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-brand-subtle text-brand-foreground">
+            <ScanPerson24Regular aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <CardTitle className="flex flex-wrap items-center gap-2 text-subheading text-text-primary">
+              Face check-in
+              {contextLabel && (
+                <span className="rounded-md border border-border-subtle bg-surface-subtle px-2 py-0.5 text-caption text-text-secondary">
+                  {contextLabel}
+                </span>
+              )}
+            </CardTitle>
+            <CardDescription className="mt-0.5 text-caption text-text-muted">
+              {requireTurn
+                ? 'Look at the camera, then turn your head when the arrow appears.'
+                : 'Look at the camera while a few photos are taken.'}
+            </CardDescription>
           </div>
         </div>
       </CardHeader>
-      
-      <CardContent className="flex flex-col items-center justify-center p-4 bg-slate-900/50">
-        {isActive ? (
-          <div
-            className="relative w-full mx-auto"
-            style={{ maxWidth: 'min(360px, 75vw)', maxHeight: '50vh' }}
-          >
-            <div
-              className="relative overflow-hidden rounded-lg border-2 border-slate-600/50 shadow-2xl"
-              style={{ aspectRatio: '3/4' }}
-            >
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline
-                className="w-full h-full object-cover bg-slate-800"
-                style={{ transform: 'scaleX(-1)' }}
-                width={480}
-                height={640}
-              />
-              <canvas
-                ref={canvasRef}
-                width={480}
-                height={640}
-                style={{
-                  position: 'absolute',
-                  left: 0,
-                  top: 0,
-                  width: '100%',
-                  height: '100%',
-                  zIndex: 20,
-                  pointerEvents: 'none',
-                  background: 'none',
-                }}
-              />
 
-              {/* Modern scanning overlay */}
-              <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-blue-400 rounded-tl-lg"></div>
-                <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-blue-400 rounded-tr-lg"></div>
-                <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-blue-400 rounded-bl-lg"></div>
-                <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-blue-400 rounded-br-lg"></div>
-              </div>
-              
-              {isCapturing && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md rounded-xl z-30">
-                  <div className="flex flex-col items-center gap-4 text-white">
-                    <div className="relative">
-                      <div className="w-16 h-16 border-4 border-blue-500/30 rounded-full"></div>
-                      <div className="absolute inset-0 w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
-                    </div>
-                    <div className="text-center space-y-2">
-                      <span className="text-xl font-semibold block">Verifying Identity</span>
-                      <span className="text-sm text-slate-300 block">Please wait while we process your image...</span>
-                    </div>
-                    <div className="flex flex-col gap-2 text-xs text-slate-400 mt-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></div>
-                        <span>Analyzing facial features</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-                        <span>Matching with database</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-                        <span>Validating identity</span>
-                      </div>
-                    </div>
+      <CardContent className="space-y-4 p-4 sm:p-5">
+        {policyQuery.isLoading ? (
+          <div className="flex items-center justify-center gap-3 py-10 text-body text-text-secondary" role="status">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand-subtle border-t-brand" aria-hidden />
+            Loading check-in settings…
+          </div>
+        ) : policyQuery.isError || !policy ? (
+          <FaceMessage
+            tone="error"
+            title="Couldn't load check-in settings"
+            actions={
+              <Button size="sm" variant="outline" onClick={() => void policyQuery.refetch()}>
+                <ArrowClockwise20Regular aria-hidden />
+                Retry
+              </Button>
+            }
+          >
+            Face check-in stays closed until the settings load.
+          </FaceMessage>
+        ) : phase === 'intro' ? (
+          <div className="space-y-5">
+            {requireCode && (
+              <PresenceCodeInput
+                ref={codeInputRef}
+                value={code}
+                onChange={(v) => {
+                  setCode(v);
+                  setCodeFromLink(false);
+                  if (codeError && isCompletePresenceCode(v)) setCodeError(null);
+                }}
+                error={codeError}
+                periodSeconds={policy.presence_code_period_seconds}
+                fromLink={codeFromLink}
+                disabled={disabled}
+                onSubmit={() => void begin()}
+              />
+            )}
+            {!requireCode && codeError && <FaceMessage tone="error">{codeError}</FaceMessage>}
+
+            <ol className="space-y-3" aria-label="How face check-in works">
+              {[
+                { t: 'Find good light', d: 'Face a light source and remove sunglasses, masks or hats.' },
+                { t: 'Look at the camera', d: 'Keep your face inside the oval while the first photos are taken.' },
+                ...(requireTurn
+                  ? [{ t: 'Turn your head when asked', d: 'An arrow shows which way. Turn, then hold for a moment.' }]
+                  : []),
+              ].map((s, i) => (
+                <li key={s.t} className="flex items-start gap-3">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-subtle text-caption-strong tabular-nums text-brand-foreground">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-body-strong text-text-primary">{s.t}</p>
+                    <p className="text-caption text-text-muted">{s.d}</p>
                   </div>
-                </div>
+                </li>
+              ))}
+            </ol>
+
+            <p className="flex items-start gap-2 text-caption text-text-muted">
+              <ShieldLock20Regular className="shrink-0 text-text-muted" aria-hidden />
+              The photos are only used to confirm it's you and are not stored.
+            </p>
+
+            <div className="flex flex-col-reverse gap-2 border-t border-border-subtle pt-4 sm:flex-row sm:justify-end">
+              {onCancel && (
+                <Button variant="ghost" onClick={onCancel} className="text-text-secondary">
+                  <Dismiss20Regular aria-hidden />
+                  Cancel
+                </Button>
               )}
-              
-              {/* Live feedback with modern design - positioned at bottom of camera frame */}
-              {!isCapturing && (
-                <div className="absolute bottom-4 left-0 right-0 flex justify-center px-4 z-20">
-                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${
-                    feedback.includes('Ready')
-                      ? 'bg-sky-500/20 text-sky-200 border border-sky-500/30'
-                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  }`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${
-                      feedback.includes('Ready')
-                        ? 'bg-sky-400'
-                        : 'bg-amber-400'
-                    } animate-pulse`}></div>
-                    {feedback || 'Initializing camera...'}
-                  </div>
-                </div>
+              <Button ref={startButtonRef} onClick={() => void begin()} disabled={disabled} className="sm:min-w-[160px]">
+                <Video20Regular aria-hidden />
+                Start camera
+              </Button>
+            </div>
+          </div>
+        ) : inCamera ? (
+          <div className="space-y-4">
+            <CameraStage
+              videoRef={camera.videoRef}
+              still={phase === 'verifying' ? still : null}
+              guide={guide}
+              prompt={prompt}
+              chip={chip}
+              progress={progress}
+              overlay={overlay}
+              flash={flash}
+              promptRef={promptRef}
+            />
+            {phase !== 'starting' && phase !== 'verifying' && (
+              <ol className="flex flex-wrap items-center justify-center gap-x-5 gap-y-1" aria-label="Check-in steps">
+                {steps.map((label, i) => {
+                  const state = i < stepIndex ? 'done' : i === stepIndex ? 'current' : 'upcoming';
+                  return (
+                    <li key={label} className="flex items-center gap-2" aria-current={state === 'current' ? 'step' : undefined}>
+                      <span
+                        className={cn(
+                          'grid h-5 w-5 place-items-center rounded-full text-caption-strong tabular-nums',
+                          state === 'current' && 'bg-brand text-brand-on',
+                          state === 'done' && 'bg-status-success-subtle text-status-success',
+                          state === 'upcoming' && 'border border-border-default text-text-muted'
+                        )}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className={cn('text-caption', state === 'current' ? 'text-text-primary' : 'text-text-muted')}>{label}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            )}
+            {phase !== 'verifying' && (
+              <div className="flex justify-center">
+                <Button variant="outline" onClick={cancelCamera}>
+                  <Dismiss20Regular aria-hidden />
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : outcome ? (
+          <div className="space-y-4">
+            <FaceMessage
+              tone={
+                outcome.kind === 'success'
+                  ? 'success'
+                  : outcome.code === 'already_recorded'
+                    ? 'info'
+                    : outcome.retryable || outcome.code === 'too_many_attempts'
+                      ? 'warning'
+                      : 'error'
+              }
+              role={outcome.kind === 'success' || outcome.code === 'already_recorded' ? 'status' : 'alert'}
+              title={outcome.title}
+              titleRef={resultTitleRef}
+            >
+              <p>{outcome.message}</p>
+              {outcome.hints.length > 0 && (
+                <ul className="mt-1.5 list-disc space-y-0.5 pl-5 marker:text-text-muted">
+                  {outcome.hints.map((h) => (
+                    <li key={h}>{h}</li>
+                  ))}
+                </ul>
+              )}
+              {outcome.code === 'too_many_attempts' && (
+                <p className="mt-1 tabular-nums">
+                  {retryLeft > 0 ? (
+                    <>
+                      You can try again in <span aria-hidden>{formatRetryCountdown(retryLeft)}</span>
+                      <span className="sr-only">a few minutes</span>.
+                    </>
+                  ) : (
+                    'You can try again now.'
+                  )}
+                </p>
+              )}
+              {outcome.code === 'no_registered_face' && (
+                <p className="mt-1">
+                  <Link to="/face-registration" className="text-brand-foreground underline-offset-2 hover:underline">
+                    Register your face
+                  </Link>
+                </p>
+              )}
+            </FaceMessage>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              {outcome.kind === 'success' ? (
+                (onDone || onCancel) && <Button onClick={onDone ?? onCancel}>Done</Button>
+              ) : (
+                <>
+                  {onCancel && (
+                    <Button variant="ghost" onClick={onCancel} className="text-text-secondary">
+                      Close
+                    </Button>
+                  )}
+                  {(outcome.retryable || outcome.code === 'too_many_attempts') && (
+                    <Button onClick={() => void begin()} disabled={disabled || (outcome.code === 'too_many_attempts' && retryLeft > 0)}>
+                      <ArrowClockwise20Regular aria-hidden />
+                      Try again
+                    </Button>
+                  )}
+                </>
               )}
             </div>
           </div>
-        ) : (
-          <div
-            className="border-2 border-dashed border-slate-600 rounded-lg w-full mx-auto bg-slate-800/50 backdrop-blur-sm"
-            style={{ maxWidth: 'min(360px, 75vw)', aspectRatio: '3/4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            {isRecognized ? (
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-green-500/20 rounded-full">
-                  <CheckCircle className="w-full h-full text-green-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-green-300 mb-2">Face Successfully Recognized!</h3>
-                <p className="text-slate-400">Identity verified and attendance marked</p>
-              </div>
-            ) : (
-              <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 p-3 bg-slate-700/50 rounded-full">
-                  <Camera className="w-full h-full text-slate-400" />
-                </div>
-                <h3 className="text-lg font-semibold text-slate-300 mb-2">Ready for Face Recognition</h3>
-                <p className="text-slate-400">Click "Start Camera" to begin secure identity verification</p>
-              </div>
-            )}
-          </div>
-        )}
+        ) : null}
       </CardContent>
-      
-      <CardFooter className="flex justify-center space-x-3 p-3 bg-slate-800/50 border-t border-slate-700/50">
-        {!isActive ? (
-          <div className="flex space-x-2">
-            <Button 
-              onClick={() => setIsActive(true)} 
-              disabled={disabled || isCapturing}
-              className="relative group overflow-hidden bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white px-6 py-2 text-sm font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-cyan-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-              <Camera className="mr-2 h-4 w-4 relative z-10" /> 
-              <span className="relative z-10">Start Camera</span>
-            </Button>
-            {onCancel && (
-              <Button 
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handleCancel();
-                }}
-                variant="outline"
-                className="px-6 py-2 text-sm font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
-              >
-                <X className="mr-2 h-4 w-4" /> Cancel
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="flex space-x-2">
-            <Button 
-              onClick={captureImage} 
-              disabled={isCapturing}
-              className={`relative group overflow-hidden px-6 py-2 text-sm font-semibold shadow-lg transition-all duration-300 hover:scale-105 hover:shadow-xl border-0 ${
-                isCapturing 
-                  ? 'bg-slate-600 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
-              }`}
-            >
-              {isCapturing ? (
-                <>
-                  <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <div className="absolute inset-0 bg-gradient-to-r from-green-600 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <Camera className="mr-2 h-4 w-4 relative z-10" />
-                  <span className="relative z-10">Capture & Verify</span>
-                </>
-              )}
-            </Button>
-            <Button 
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                handleCancel();
-              }}
-              disabled={isCapturing}
-              variant="outline"
-              className="px-6 py-2 text-sm font-semibold bg-slate-700/50 border-slate-600 text-slate-300 hover:bg-slate-600 hover:text-white transition-all duration-300"
-            >
-              <X className="mr-2 h-4 w-4" /> Cancel
-            </Button>
-          </div>
-        )}
-      </CardFooter>
     </Card>
   );
 };

@@ -1,32 +1,28 @@
 import React, { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import * as TabsPrimitive from '@radix-ui/react-tabs';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Settings as SettingsIcon,
-  User,
-  Shield,
-  Camera,
-  Bell,
-  Database,
-  Server,
-  Eye,
-  Lock,
-  Globe,
-  Palette,
-  Monitor,
-  Save,
-  RefreshCw,
-  AlertCircle,
-  CheckCircle,
-  Download,
-  Upload,
-  Trash2,
-  Edit
-} from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
+import {
+  Settings20Regular,
+  Shield20Regular,
+  Eye20Regular,
+  Alert20Regular,
+  Database20Regular,
+  Server20Regular,
+  Globe20Regular,
+  Save20Regular,
+  ArrowReset20Regular,
+  Warning16Regular,
+  ArrowDownload20Regular,
+  ArrowUpload20Regular,
+  Delete20Regular,
+} from '@fluentui/react-icons';
 
 interface SettingsState {
   general: {
@@ -69,6 +65,54 @@ interface SettingsState {
     logLevel: string;
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* Presentational helpers (Teams settings pattern)                     */
+/* ------------------------------------------------------------------ */
+
+const selectClass =
+  'h-9 w-full rounded-md border border-border-default border-b-border-strong bg-surface-default px-3 text-body text-text-primary transition-colors duration-150 ease-fluent-standard hover:border-border-strong focus-visible:outline-none focus-visible:border-b-2 focus-visible:border-b-brand';
+
+const SettingsCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({
+  title,
+  icon,
+  children,
+}) => (
+  <Card className="border-0 shadow overflow-hidden">
+    <div className="flex items-center gap-3 px-5 py-4 border-b border-border-subtle">
+      <div className="h-8 w-8 shrink-0 rounded-md bg-brand-subtle text-brand-foreground grid place-items-center">
+        {icon}
+      </div>
+      <h2 className="text-subheading text-text-primary">{title}</h2>
+    </div>
+    <div className="divide-y divide-border-subtle">{children}</div>
+  </Card>
+);
+
+const SettingRow: React.FC<{
+  label: React.ReactNode;
+  description?: React.ReactNode;
+  children: React.ReactNode;
+  controlClassName?: string;
+}> = ({ label, description, children, controlClassName }) => (
+  <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="min-w-0">
+      <div className="text-body-strong text-text-primary">{label}</div>
+      {description && <p className="text-caption text-text-muted mt-0.5">{description}</p>}
+    </div>
+    <div className={cn('shrink-0', controlClassName)}>{children}</div>
+  </div>
+);
+
+const SliderControl: React.FC<{ display: React.ReactNode; children: React.ReactNode }> = ({ display, children }) => (
+  <div className="flex w-full items-center gap-3 sm:w-72">
+    <div className="flex-1">{children}</div>
+    <span className="w-14 text-right text-body-strong tabular-nums text-text-primary">{display}</span>
+  </div>
+);
+
+const navTriggerClass =
+  'group relative flex h-9 shrink-0 items-center gap-3 rounded-md px-3 text-body text-text-secondary whitespace-nowrap transition-colors duration-150 ease-fluent-standard hover:bg-surface-hover hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=active]:bg-surface-selected data-[state=active]:font-semibold data-[state=active]:text-text-primary';
 
 const SystemSettings: React.FC = () => {
   const [settings, setSettings] = useState<SettingsState>({
@@ -138,105 +182,70 @@ const SystemSettings: React.FC = () => {
     setHasUnsavedChanges(true);
   };
 
+  const categories = [
+    { value: 'general', label: 'General', icon: Globe20Regular },
+    { value: 'security', label: 'Security', icon: Shield20Regular },
+    { value: 'face-recognition', label: 'Face Recognition', icon: Eye20Regular },
+    { value: 'notifications', label: 'Notifications', icon: Alert20Regular },
+    { value: 'database', label: 'Database', icon: Database20Regular },
+    { value: 'performance', label: 'Performance', icon: Server20Regular },
+  ];
+
   return (
     <div className="w-full">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center">
-                <SettingsIcon className="h-6 w-6 text-white" />
+        <Tabs defaultValue="general" orientation="vertical" className="flex flex-col gap-6 md:flex-row">
+          {/* Left: settings category list */}
+          <aside className="md:w-60 md:shrink-0">
+            <div className="mb-3 flex items-start gap-3 px-1 md:px-3">
+              <div className="min-w-0">
+                <h1 className="flex items-center gap-2 text-section-title text-text-primary">
+                  <Settings20Regular className="shrink-0 text-brand-foreground" aria-hidden />
+                  System Settings
+                </h1>
+                <p className="text-caption text-text-muted mt-0.5">Configure your attendance management system</p>
               </div>
-              System Settings
-            </h1>
-            <p className="text-slate-400 mt-2">Configure your attendance management system</p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {hasUnsavedChanges && (
-              <Badge variant="outline" className="bg-amber-500/20 text-amber-300 border-amber-400/30">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved Changes
-              </Badge>
-            )}
-            
-            <Button
-              variant="outline"
-              onClick={resetToDefaults}
-              className="border-slate-600 text-slate-300 hover:bg-slate-800"
+            </div>
+            <TabsPrimitive.List
+              aria-label="System settings categories"
+              className="flex gap-1 overflow-x-auto pb-1 md:flex-col md:gap-0.5 md:overflow-visible md:pb-0"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Reset
-            </Button>
-            
-            <Button
-              onClick={saveSettings}
-              disabled={!hasUnsavedChanges}
-              className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white border-0"
-            >
-              <Save className="h-4 w-4 mr-2" />
-              Save Changes
-            </Button>
-          </div>
-        </div>
+              {categories.map(({ value, label, icon: Icon }) => (
+                <TabsPrimitive.Trigger key={value} value={value} className={navTriggerClass}>
+                  <span
+                    aria-hidden
+                    className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-full bg-brand opacity-0 transition-opacity duration-150 group-data-[state=active]:opacity-100"
+                  />
+                  <Icon className="shrink-0 text-text-muted group-data-[state=active]:text-brand-foreground" aria-hidden />
+                  {label}
+                </TabsPrimitive.Trigger>
+              ))}
+            </TabsPrimitive.List>
+          </aside>
 
-        {/* Settings Tabs */}
-        <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-6 bg-slate-800/50 border border-slate-700/50">
-            <TabsTrigger value="general" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Globe className="h-4 w-4 mr-2" />
-              General
-            </TabsTrigger>
-            <TabsTrigger value="security" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Shield className="h-4 w-4 mr-2" />
-              Security
-            </TabsTrigger>
-            <TabsTrigger value="face-recognition" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Eye className="h-4 w-4 mr-2" />
-              Face Recognition
-            </TabsTrigger>
-            <TabsTrigger value="notifications" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Bell className="h-4 w-4 mr-2" />
-              Notifications
-            </TabsTrigger>
-            <TabsTrigger value="database" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Database className="h-4 w-4 mr-2" />
-              Database
-            </TabsTrigger>
-            <TabsTrigger value="performance" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500">
-              <Server className="h-4 w-4 mr-2" />
-              Performance
-            </TabsTrigger>
-          </TabsList>
-
-          {/* General Settings */}
-          <TabsContent value="general" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Globe className="h-5 w-5 text-blue-400" />
-                  General Configuration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">System Name</label>
-                    <input
+          {/* Right: content */}
+          <div className="min-w-0 flex-1 space-y-4">
+            {/* General Settings */}
+            <TabsContent value="general" className="mt-0 space-y-4">
+              <SettingsCard title="General Configuration" icon={<Globe20Regular />}>
+                <div className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <label htmlFor="sys-name" className="text-body-strong text-text-primary">System Name</label>
+                    <Input
+                      id="sys-name"
                       type="text"
                       value={settings.general.systemName}
                       onChange={(e) => updateSetting('general', 'systemName', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                     />
                   </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Timezone</label>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="sys-timezone" className="text-body-strong text-text-primary">Timezone</label>
                     <select
+                      id="sys-timezone"
                       value={settings.general.timezone}
                       onChange={(e) => updateSetting('general', 'timezone', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={selectClass}
                     >
                       <option value="UTC+05:45">Nepal (UTC+05:45)</option>
                       <option value="UTC+05:30">India (UTC+05:30)</option>
@@ -244,26 +253,28 @@ const SystemSettings: React.FC = () => {
                       <option value="UTC+08:00">Singapore (UTC+08:00)</option>
                     </select>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Language</label>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="sys-language" className="text-body-strong text-text-primary">Language</label>
                     <select
+                      id="sys-language"
                       value={settings.general.language}
                       onChange={(e) => updateSetting('general', 'language', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={selectClass}
                     >
                       <option value="English">English</option>
                       <option value="Nepali">नेपाली</option>
                       <option value="Hindi">हिन्दी</option>
                     </select>
                   </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Theme</label>
+
+                  <div className="space-y-1.5">
+                    <label htmlFor="sys-theme" className="text-body-strong text-text-primary">Theme</label>
                     <select
+                      id="sys-theme"
                       value={settings.general.theme}
                       onChange={(e) => updateSetting('general', 'theme', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                      className={selectClass}
                     >
                       <option value="dark">Dark</option>
                       <option value="light">Light</option>
@@ -271,49 +282,28 @@ const SystemSettings: React.FC = () => {
                     </select>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              </SettingsCard>
+            </TabsContent>
 
-          {/* Security Settings */}
-          <TabsContent value="security" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-green-400" />
-                  Security Configuration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Two-Factor Authentication</div>
-                      <div className="text-sm text-slate-400">Add an extra layer of security</div>
-                    </div>
-                    <Switch
-                      checked={settings.security.twoFactorAuth}
-                      onCheckedChange={(checked) => updateSetting('security', 'twoFactorAuth', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Password Complexity</div>
-                      <div className="text-sm text-slate-400">Enforce strong passwords</div>
-                    </div>
-                    <Switch
-                      checked={settings.security.passwordComplexity}
-                      onCheckedChange={(checked) => updateSetting('security', 'passwordComplexity', checked)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Session Timeout (minutes): {settings.security.sessionTimeout}
-                    </label>
+            {/* Security Settings */}
+            <TabsContent value="security" className="mt-0 space-y-4">
+              <SettingsCard title="Security Configuration" icon={<Shield20Regular />}>
+                <SettingRow label="Two-Factor Authentication" description="Add an extra layer of security">
+                  <Switch
+                    checked={settings.security.twoFactorAuth}
+                    onCheckedChange={(checked) => updateSetting('security', 'twoFactorAuth', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Password Complexity" description="Enforce strong passwords">
+                  <Switch
+                    checked={settings.security.passwordComplexity}
+                    onCheckedChange={(checked) => updateSetting('security', 'passwordComplexity', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Session Timeout (minutes)" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={settings.security.sessionTimeout}>
                     <Slider
                       value={[settings.security.sessionTimeout]}
                       onValueChange={(value) => updateSetting('security', 'sessionTimeout', value[0])}
@@ -322,12 +312,11 @@ const SystemSettings: React.FC = () => {
                       step={5}
                       className="w-full"
                     />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Max Login Attempts: {settings.security.loginAttempts}
-                    </label>
+                  </SliderControl>
+                </SettingRow>
+
+                <SettingRow label="Max Login Attempts" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={settings.security.loginAttempts}>
                     <Slider
                       value={[settings.security.loginAttempts]}
                       onValueChange={(value) => updateSetting('security', 'loginAttempts', value[0])}
@@ -336,73 +325,44 @@ const SystemSettings: React.FC = () => {
                       step={1}
                       className="w-full"
                     />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  </SliderControl>
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
 
-          {/* Face Recognition Settings */}
-          <TabsContent value="face-recognition" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Eye className="h-5 w-5 text-purple-400" />
-                  Face Recognition Configuration
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Face Recognition Enabled</div>
-                      <div className="text-sm text-slate-400">Enable face-based attendance</div>
-                    </div>
-                    <Switch
-                      checked={settings.faceRecognition.enabled}
-                      onCheckedChange={(checked) => updateSetting('faceRecognition', 'enabled', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Anti-Spoofing</div>
-                      <div className="text-sm text-slate-400">Detect fake faces and photos</div>
-                    </div>
-                    <Switch
-                      checked={settings.faceRecognition.antiSpoofing}
-                      onCheckedChange={(checked) => updateSetting('faceRecognition', 'antiSpoofing', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Multiple Angles</div>
-                      <div className="text-sm text-slate-400">Support various face angles</div>
-                    </div>
-                    <Switch
-                      checked={settings.faceRecognition.multipleAngles}
-                      onCheckedChange={(checked) => updateSetting('faceRecognition', 'multipleAngles', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Real-time Processing</div>
-                      <div className="text-sm text-slate-400">Process faces in real-time</div>
-                    </div>
-                    <Switch
-                      checked={settings.faceRecognition.realTimeProcessing}
-                      onCheckedChange={(checked) => updateSetting('faceRecognition', 'realTimeProcessing', checked)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Accuracy Threshold: {settings.faceRecognition.accuracy}%
-                    </label>
+            {/* Face Recognition Settings */}
+            <TabsContent value="face-recognition" className="mt-0 space-y-4">
+              <SettingsCard title="Face Recognition Configuration" icon={<Eye20Regular />}>
+                <SettingRow label="Face Recognition Enabled" description="Enable face-based attendance">
+                  <Switch
+                    checked={settings.faceRecognition.enabled}
+                    onCheckedChange={(checked) => updateSetting('faceRecognition', 'enabled', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Anti-Spoofing" description="Detect fake faces and photos">
+                  <Switch
+                    checked={settings.faceRecognition.antiSpoofing}
+                    onCheckedChange={(checked) => updateSetting('faceRecognition', 'antiSpoofing', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Multiple Angles" description="Support various face angles">
+                  <Switch
+                    checked={settings.faceRecognition.multipleAngles}
+                    onCheckedChange={(checked) => updateSetting('faceRecognition', 'multipleAngles', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Real-time Processing" description="Process faces in real-time">
+                  <Switch
+                    checked={settings.faceRecognition.realTimeProcessing}
+                    onCheckedChange={(checked) => updateSetting('faceRecognition', 'realTimeProcessing', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Accuracy Threshold" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={`${settings.faceRecognition.accuracy}%`}>
                     <Slider
                       value={[settings.faceRecognition.accuracy]}
                       onValueChange={(value) => updateSetting('faceRecognition', 'accuracy', value[0])}
@@ -411,12 +371,11 @@ const SystemSettings: React.FC = () => {
                       step={1}
                       className="w-full"
                     />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Confidence Threshold: {settings.faceRecognition.confidenceThreshold}%
-                    </label>
+                  </SliderControl>
+                </SettingRow>
+
+                <SettingRow label="Confidence Threshold" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={`${settings.faceRecognition.confidenceThreshold}%`}>
                     <Slider
                       value={[settings.faceRecognition.confidenceThreshold]}
                       onValueChange={(value) => updateSetting('faceRecognition', 'confidenceThreshold', value[0])}
@@ -425,135 +384,84 @@ const SystemSettings: React.FC = () => {
                       step={5}
                       className="w-full"
                     />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  </SliderControl>
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
 
-          {/* Notifications Settings */}
-          <TabsContent value="notifications" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-amber-400" />
-                  Notification Preferences
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Email Notifications</div>
-                      <div className="text-sm text-slate-400">Receive updates via email</div>
-                    </div>
-                    <Switch
-                      checked={settings.notifications.emailNotifications}
-                      onCheckedChange={(checked) => updateSetting('notifications', 'emailNotifications', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Push Notifications</div>
-                      <div className="text-sm text-slate-400">Browser push notifications</div>
-                    </div>
-                    <Switch
-                      checked={settings.notifications.pushNotifications}
-                      onCheckedChange={(checked) => updateSetting('notifications', 'pushNotifications', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">SMS Alerts</div>
-                      <div className="text-sm text-slate-400">Critical alerts via SMS</div>
-                    </div>
-                    <Switch
-                      checked={settings.notifications.smsAlerts}
-                      onCheckedChange={(checked) => updateSetting('notifications', 'smsAlerts', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">System Alerts</div>
-                      <div className="text-sm text-slate-400">System status notifications</div>
-                    </div>
-                    <Switch
-                      checked={settings.notifications.systemAlerts}
-                      onCheckedChange={(checked) => updateSetting('notifications', 'systemAlerts', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Attendance Reminders</div>
-                      <div className="text-sm text-slate-400">Daily attendance reminders</div>
-                    </div>
-                    <Switch
-                      checked={settings.notifications.attendanceReminders}
-                      onCheckedChange={(checked) => updateSetting('notifications', 'attendanceReminders', checked)}
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+            {/* Notifications Settings */}
+            <TabsContent value="notifications" className="mt-0 space-y-4">
+              <SettingsCard title="Notification Preferences" icon={<Alert20Regular />}>
+                <SettingRow label="Email Notifications" description="Receive updates via email">
+                  <Switch
+                    checked={settings.notifications.emailNotifications}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'emailNotifications', checked)}
+                  />
+                </SettingRow>
 
-          {/* Database Settings */}
-          <TabsContent value="database" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Database className="h-5 w-5 text-cyan-400" />
-                  Database Management
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Auto Backup</div>
-                      <div className="text-sm text-slate-400">Automatic database backups</div>
-                    </div>
-                    <Switch
-                      checked={settings.database.autoBackup}
-                      onCheckedChange={(checked) => updateSetting('database', 'autoBackup', checked)}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                    <div>
-                      <div className="font-medium text-white">Compression</div>
-                      <div className="text-sm text-slate-400">Compress backup files</div>
-                    </div>
-                    <Switch
-                      checked={settings.database.compressionEnabled}
-                      onCheckedChange={(checked) => updateSetting('database', 'compressionEnabled', checked)}
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">Backup Frequency</label>
-                    <select
-                      value={settings.database.backupFrequency}
-                      onChange={(e) => updateSetting('database', 'backupFrequency', e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                    >
-                      <option value="hourly">Hourly</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Data Retention (days): {settings.database.dataRetention}
-                    </label>
+                <SettingRow label="Push Notifications" description="Browser push notifications">
+                  <Switch
+                    checked={settings.notifications.pushNotifications}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'pushNotifications', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="SMS Alerts" description="Critical alerts via SMS">
+                  <Switch
+                    checked={settings.notifications.smsAlerts}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'smsAlerts', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="System Alerts" description="System status notifications">
+                  <Switch
+                    checked={settings.notifications.systemAlerts}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'systemAlerts', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Attendance Reminders" description="Daily attendance reminders">
+                  <Switch
+                    checked={settings.notifications.attendanceReminders}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'attendanceReminders', checked)}
+                  />
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
+
+            {/* Database Settings */}
+            <TabsContent value="database" className="mt-0 space-y-4">
+              <SettingsCard title="Database Management" icon={<Database20Regular />}>
+                <SettingRow label="Auto Backup" description="Automatic database backups">
+                  <Switch
+                    checked={settings.database.autoBackup}
+                    onCheckedChange={(checked) => updateSetting('database', 'autoBackup', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Compression" description="Compress backup files">
+                  <Switch
+                    checked={settings.database.compressionEnabled}
+                    onCheckedChange={(checked) => updateSetting('database', 'compressionEnabled', checked)}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Backup Frequency" controlClassName="w-full sm:w-72">
+                  <select
+                    aria-label="Backup Frequency"
+                    value={settings.database.backupFrequency}
+                    onChange={(e) => updateSetting('database', 'backupFrequency', e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="hourly">Hourly</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </SettingRow>
+
+                <SettingRow label="Data Retention (days)" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={settings.database.dataRetention}>
                     <Slider
                       value={[settings.database.dataRetention]}
                       onValueChange={(value) => updateSetting('database', 'dataRetention', value[0])}
@@ -562,53 +470,41 @@ const SystemSettings: React.FC = () => {
                       step={30}
                       className="w-full"
                     />
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                    <Download className="h-4 w-4 mr-2" />
+                  </SliderControl>
+                </SettingRow>
+
+                <div className="flex flex-wrap gap-2 px-5 py-4">
+                  <Button variant="outline">
+                    <ArrowDownload20Regular aria-hidden />
                     Export Data
                   </Button>
-                  <Button variant="outline" className="border-slate-600 text-slate-300 hover:bg-slate-800">
-                    <Upload className="h-4 w-4 mr-2" />
+                  <Button variant="outline">
+                    <ArrowUpload20Regular aria-hidden />
                     Import Data
                   </Button>
-                  <Button variant="outline" className="border-red-600 text-red-300 hover:bg-red-800/20">
-                    <Trash2 className="h-4 w-4 mr-2" />
+                  <Button
+                    variant="outline"
+                    className="border-status-error-border text-status-error hover:bg-status-error-subtle"
+                  >
+                    <Delete20Regular aria-hidden />
                     Clean Old Data
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+              </SettingsCard>
+            </TabsContent>
 
-          {/* Performance Settings */}
-          <TabsContent value="performance" className="space-y-6">
-            <Card className="bg-slate-900/60 backdrop-blur-md border-slate-700/50">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Server className="h-5 w-5 text-orange-400" />
-                  Performance Optimization
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-lg">
-                  <div>
-                    <div className="font-medium text-white">Cache Enabled</div>
-                    <div className="text-sm text-slate-400">Enable system-wide caching</div>
-                  </div>
+            {/* Performance Settings */}
+            <TabsContent value="performance" className="mt-0 space-y-4">
+              <SettingsCard title="Performance Optimization" icon={<Server20Regular />}>
+                <SettingRow label="Cache Enabled" description="Enable system-wide caching">
                   <Switch
                     checked={settings.performance.cacheEnabled}
                     onCheckedChange={(checked) => updateSetting('performance', 'cacheEnabled', checked)}
                   />
-                </div>
-                
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Max Database Connections: {settings.performance.maxConnections}
-                    </label>
+                </SettingRow>
+
+                <SettingRow label="Max Database Connections" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={settings.performance.maxConnections}>
                     <Slider
                       value={[settings.performance.maxConnections]}
                       onValueChange={(value) => updateSetting('performance', 'maxConnections', value[0])}
@@ -617,12 +513,11 @@ const SystemSettings: React.FC = () => {
                       step={10}
                       className="w-full"
                     />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-300">
-                      Query Timeout (seconds): {settings.performance.queryTimeout}
-                    </label>
+                  </SliderControl>
+                </SettingRow>
+
+                <SettingRow label="Query Timeout (seconds)" controlClassName="w-full sm:w-auto">
+                  <SliderControl display={settings.performance.queryTimeout}>
                     <Slider
                       value={[settings.performance.queryTimeout]}
                       onValueChange={(value) => updateSetting('performance', 'queryTimeout', value[0])}
@@ -631,25 +526,45 @@ const SystemSettings: React.FC = () => {
                       step={5}
                       className="w-full"
                     />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-300">Log Level</label>
+                  </SliderControl>
+                </SettingRow>
+
+                <SettingRow label="Log Level" controlClassName="w-full sm:w-72">
                   <select
+                    aria-label="Log Level"
                     value={settings.performance.logLevel}
                     onChange={(e) => updateSetting('performance', 'logLevel', e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    className={selectClass}
                   >
                     <option value="debug">Debug</option>
                     <option value="info">Info</option>
                     <option value="warning">Warning</option>
                     <option value="error">Error</option>
                   </select>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                </SettingRow>
+              </SettingsCard>
+            </TabsContent>
+
+            {/* Sticky save bar */}
+            <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border-t border-border-subtle bg-surface-default px-5 py-3 shadow-md">
+              {hasUnsavedChanges && (
+                <Badge variant="warning" shape="pill" className="gap-1">
+                  <Warning16Regular aria-hidden />
+                  Unsaved Changes
+                </Badge>
+              )}
+              <div className="ml-auto flex items-center gap-2">
+                <Button variant="outline" onClick={resetToDefaults}>
+                  <ArrowReset20Regular aria-hidden />
+                  Reset
+                </Button>
+                <Button onClick={saveSettings} disabled={!hasUnsavedChanges}>
+                  <Save20Regular aria-hidden />
+                  Save Changes
+                </Button>
+              </div>
+            </div>
+          </div>
         </Tabs>
       </div>
     </div>

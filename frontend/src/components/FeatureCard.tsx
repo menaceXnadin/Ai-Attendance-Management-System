@@ -9,17 +9,29 @@ interface FeatureCardProps {
   className?: string;
 }
 
+/**
+ * Fluent 2 feature card: flat neutral surface with shadow-4 elevation,
+ * brand-tinted icon chip, subheading title and body description.
+ */
 const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, className }) => {
   return (
-    <Card className={cn("border border-border-subtle bg-surface-default hover:border-border-default transition-colors shadow-2xs", className)}>
-      <CardHeader className="space-y-0 pb-3">
-        <div className="h-10 w-10 rounded-md bg-surface-canvas border border-border-subtle text-action-primary flex items-center justify-center mb-3">
+    <Card
+      className={cn(
+        'h-full rounded-lg border-transparent bg-surface-default shadow transition-shadow duration-150 ease-fluent-standard hover:shadow-md',
+        className
+      )}
+    >
+      <CardHeader className="space-y-0 p-5 pb-2">
+        <div
+          className="mb-4 grid h-10 w-10 place-items-center rounded-md bg-brand-subtle text-brand-foreground [&_svg]:h-5 [&_svg]:w-5"
+          aria-hidden
+        >
           {icon}
         </div>
-        <CardTitle className="text-base font-semibold text-text-primary">{title}</CardTitle>
+        <CardTitle className="text-subheading text-text-primary">{title}</CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="text-xs text-text-secondary leading-relaxed">{description}</p>
+      <CardContent className="p-5 pt-0">
+        <p className="text-body text-text-secondary">{description}</p>
       </CardContent>
     </Card>
   );

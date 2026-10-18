@@ -1,8 +1,14 @@
 import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { AlertCircle, RefreshCw, Home } from 'lucide-react';
+import {
+  ArrowClockwise16Regular,
+  ErrorCircle24Regular,
+  Home16Regular,
+  LockClosed24Regular,
+  PlugDisconnected24Regular,
+} from '@fluentui/react-icons';
 import { useNavigate } from 'react-router-dom';
+import { clearAuthToken } from '@/lib/authToken';
 
 interface ApiErrorBoundaryProps {
   children: React.ReactNode;
@@ -79,67 +85,66 @@ const DefaultErrorFallback: React.FC<DefaultErrorFallbackProps> = ({
   };
 
   const handleAuthRedirect = () => {
-    localStorage.removeItem('authToken');
+    clearAuthToken();
     navigate('/login');
   };
 
+  const ErrorIcon = isAuthError ? LockClosed24Regular : isNetworkError ? PlugDisconnected24Regular : ErrorCircle24Regular;
+
   return (
-    <div className="flex items-center justify-center min-h-[400px] p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-            <AlertCircle className="h-6 w-6 text-red-600" />
-          </div>
-          <CardTitle className="text-xl">{getErrorTitle()}</CardTitle>
-          <CardDescription className="text-center">
-            {getErrorDescription()}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col space-y-2">
-            {isAuthError ? (
+    <div className="flex min-h-[400px] items-center justify-center p-4">
+      <div role="alert" className="w-full max-w-md rounded-lg bg-surface-default p-6 text-center shadow">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-status-error-subtle text-status-error">
+          <ErrorIcon className="h-6 w-6" aria-hidden="true" />
+        </div>
+        <h2 className="text-subheading text-text-primary">{getErrorTitle()}</h2>
+        <p className="mt-1 break-words text-body text-text-muted">
+          {getErrorDescription()}
+        </p>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-center">
+          {isAuthError ? (
+            <Button 
+              onClick={handleAuthRedirect}
+              className="w-full sm:w-auto"
+            >
+              Go to Login
+            </Button>
+          ) : (
+            <>
               <Button 
-                onClick={handleAuthRedirect}
-                className="w-full"
+                onClick={() => navigate('/app/dashboard')}
+                variant="outline"
+                className="w-full sm:w-auto"
               >
-                Go to Login
+                <Home16Regular aria-hidden="true" />
+                Go to Dashboard
               </Button>
-            ) : (
-              <>
-                {showRetry && onRetry && (
-                  <Button 
-                    onClick={onRetry}
-                    variant="default"
-                    className="w-full"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Try Again
-                  </Button>
-                )}
+              {showRetry && onRetry && (
                 <Button 
-                  onClick={() => navigate('/app/dashboard')}
-                  variant="outline"
-                  className="w-full"
+                  onClick={onRetry}
+                  variant="default"
+                  className="w-full sm:w-auto"
                 >
-                  <Home className="mr-2 h-4 w-4" />
-                  Go to Dashboard
+                  <ArrowClockwise16Regular aria-hidden="true" />
+                  Try Again
                 </Button>
-              </>
-            )}
-          </div>
-          
-          {process.env.NODE_ENV === 'development' && error && (
-            <details className="mt-4">
-              <summary className="cursor-pointer text-sm text-muted-foreground">
-                Error Details (Development)
-              </summary>
-              <pre className="mt-2 overflow-auto rounded-md bg-muted p-2 text-xs">
-                {error.stack || error.message}
-              </pre>
-            </details>
+              )}
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+          
+        {process.env.NODE_ENV === 'development' && error && (
+          <details className="mt-6 text-left">
+            <summary className="cursor-pointer text-caption text-text-muted hover:text-text-secondary">
+              Error Details (Development)
+            </summary>
+            <pre className="mt-2 max-h-60 overflow-auto rounded-md border border-border-subtle bg-surface-subtle p-3 font-mono text-caption text-text-secondary">
+              {error.stack || error.message}
+            </pre>
+          </details>
+        )}
+      </div>
     </div>
   );
 };

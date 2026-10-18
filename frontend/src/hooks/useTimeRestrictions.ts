@@ -1,184 +1,79 @@
-import { useState, useEffect, useCallback } from 'react';
-import React from 'react';
-import {
-  isFaceVerificationAllowed,
-  getCurrentActivePeriod,
-  generatePeriodKey,
-  hasVerifiedForPeriod,
-  DEFAULT_TIME_CONFIG,
-  type TimeRestrictionConfig,
-  type ClassPeriod
-} from '@/utils/timeRestrictions';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '@/integrations/api/client';
+import { api, type StudentTodaySchedule } from '@/integrations/api/client';
+import { evaluateCheckin, type CheckinAvailability, type ClassPeriod } from '@/utils/timeRestrictions';
+import { isDevelopmentOverrideEnabled } from '@/utils/developmentOverride';
 
-const VERIFICATION_HISTORY_KEY = 'face_verification_history';
+/** Shared query key so the dashboard, schedule card and check-in hook share one request. */
+export const STUDENT_TODAY_QUERY_KEY = ['student-today-schedule'] as const;
 
-interface UseTimeRestrictionsReturn {
+export interface UseTimeRestrictionsReturn {
   isAllowed: boolean;
   reason: string;
   currentPeriod: ClassPeriod | null;
   nextPeriod?: ClassPeriod;
   timeUntilNext?: string;
+  availability: CheckinAvailability;
+  /** Today's classes + term/day state as reported by the server. */
+  schedule: StudentTodaySchedule | undefined;
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void;
+  /** Re-reads the server state after a check-in (replaces the old localStorage history). */
   markVerificationComplete: () => void;
-  clearTodayHistory: () => void;
-  verificationHistory: string[];
+  /** UI-only developer preview flag; it never opens check-in (the server decides). */
+  devPreview: boolean;
 }
 
 /**
- * Hook to manage time-based face verification restrictions
- * Dynamically fetches real schedule data instead of using hardcoded periods
+ * Student check-in availability, derived only from `GET /schedules/student/today`.
+ * Fails closed when the schedule is missing or the request fails.
  */
-export const useTimeRestrictions = (): UseTimeRestrictionsReturn => {
-  const [verificationHistory, setVerificationHistory] = useState<string[]>([]);
-  const [currentCheck, setCurrentCheck] = useState<{
-    isAllowed: boolean;
-    reason: string;
-    currentPeriod: ClassPeriod | null;
-    nextPeriod?: ClassPeriod;
-    timeUntilNext?: string;
-  }>({
-    isAllowed: false,
-    reason: "Loading...",
-    currentPeriod: null,
+export const useTimeRestrictions = (options: { enabled?: boolean } = {}): UseTimeRestrictionsReturn => {
+  const enabled = options.enabled !== false;
+  const [now, setNow] = useState(() => Date.now());
+
+  const query = useQuery({
+    queryKey: STUDENT_TODAY_QUERY_KEY,
+    queryFn: () => api.schedules.getStudentTodayContext(),
+    enabled,
+    // Window states are computed server-side at request time; refresh often so
+    // "not_open" → "open" → "closed" transitions show up promptly.
+    refetchInterval: 30 * 1000,
+    staleTime: 15 * 1000,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
 
-  // Fetch today's actual schedule to create dynamic time periods
-  const { data: todaySchedule = [] } = useQuery({
-    queryKey: ['today-schedule-for-restrictions'],
-    queryFn: async () => {
-      try {
-        console.log('[DEBUG] Fetching schedule for time restrictions...');
-        const schedule = await api.schedules.getStudentToday();
-        console.log('[DEBUG] Schedule fetched for restrictions:', schedule);
-        return schedule;
-      } catch (error) {
-        console.error('Error fetching schedule for time restrictions:', error);
-        return [];
-      }
-    },
-    refetchInterval: 5 * 60 * 1000, // Refetch every 5 minutes
-    staleTime: 60 * 1000, // Consider data stale after 1 minute
-  });
-
-  // Convert real schedule to time config dynamically
-  const timeConfig: TimeRestrictionConfig = React.useMemo(() => {
-    if (todaySchedule.length === 0) {
-      console.log('[DEBUG] No schedule data, using default config');
-      return DEFAULT_TIME_CONFIG;
-    }
-
-    // Convert database schedules to ClassPeriod format
-    const classPeriods: ClassPeriod[] = todaySchedule.map((schedule) => ({
-      id: `period-${schedule.subject_id}`,
-      name: schedule.subject_name,
-      startTime: schedule.start_time,
-      endTime: schedule.end_time,
-    }));
-
-    // Determine school hours from first and last classes
-    const startTimes = todaySchedule.map(s => s.start_time).sort();
-    const endTimes = todaySchedule.map(s => s.end_time).sort();
-
-    const dynamicConfig = {
-      schoolHours: {
-        startTime: startTimes[0] || "08:00",
-        endTime: endTimes[endTimes.length - 1] || "16:00"
-      },
-      classPeriods
-    };
-
-    console.log('[DEBUG] Dynamic time config created:', dynamicConfig);
-    return dynamicConfig;
-  }, [todaySchedule]);
-
-  // Load verification history from localStorage
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(VERIFICATION_HISTORY_KEY);
-      if (stored) {
-        const history = JSON.parse(stored);
-        // Filter out old entries (keep only today's)
-        const today = new Date().toISOString().split('T')[0];
-        const todayHistory = history.filter((key: string) => key.startsWith(today));
-        setVerificationHistory(todayHistory);
-        
-        // Update localStorage with filtered history
-        localStorage.setItem(VERIFICATION_HISTORY_KEY, JSON.stringify(todayHistory));
-      }
-    } catch (error) {
-      console.error('Error loading verification history:', error);
-      setVerificationHistory([]);
-    }
+    const t = setInterval(() => setNow(Date.now()), 30 * 1000);
+    return () => clearInterval(t);
   }, []);
 
-  // Check current time restrictions
-  const checkRestrictions = useCallback(() => {
-    const activePeriod = getCurrentActivePeriod(timeConfig);
-    const hasVerified = activePeriod 
-      ? hasVerifiedForPeriod(generatePeriodKey(activePeriod), verificationHistory)
-      : false;
+  const availability = useMemo(
+    () =>
+      evaluateCheckin(query.data, {
+        loading: query.isLoading,
+        loadFailed: query.isError && !query.data,
+        now,
+      }),
+    [query.data, query.isLoading, query.isError, now]
+  );
 
-    const result = isFaceVerificationAllowed(timeConfig, hasVerified);
-    
-    setCurrentCheck({
-      isAllowed: result.allowed,
-      reason: result.reason,
-      currentPeriod: activePeriod,
-      nextPeriod: result.nextPeriod,
-      timeUntilNext: result.timeUntilNext,
-    });
-  }, [timeConfig, verificationHistory]);
-
-  // Update restrictions every minute
-  useEffect(() => {
-    checkRestrictions();
-    const interval = setInterval(checkRestrictions, 60000); // Check every minute
-    return () => clearInterval(interval);
-  }, [checkRestrictions]);
-
-  // Mark verification as complete for current period
-  const markVerificationComplete = useCallback(() => {
-    const activePeriod = getCurrentActivePeriod(timeConfig);
-    if (!activePeriod) {
-      console.warn('No active period to mark verification for');
-      return;
-    }
-
-    const periodKey = generatePeriodKey(activePeriod);
-    const newHistory = [...verificationHistory, periodKey];
-    
-    setVerificationHistory(newHistory);
-    
-    try {
-      localStorage.setItem(VERIFICATION_HISTORY_KEY, JSON.stringify(newHistory));
-    } catch (error) {
-      console.error('Error saving verification history:', error);
-    }
-
-    // Immediately recheck restrictions
-    checkRestrictions();
-  }, [timeConfig, verificationHistory, checkRestrictions]);
-
-  // Clear today's verification history (for testing/admin purposes)
-  const clearTodayHistory = useCallback(() => {
-    setVerificationHistory([]);
-    try {
-      localStorage.removeItem(VERIFICATION_HISTORY_KEY);
-    } catch (error) {
-      console.error('Error clearing verification history:', error);
-    }
-    checkRestrictions();
-  }, [checkRestrictions]);
+  const { refetch } = query;
 
   return {
-    isAllowed: currentCheck.isAllowed,
-    reason: currentCheck.reason,
-    currentPeriod: currentCheck.currentPeriod,
-    nextPeriod: currentCheck.nextPeriod,
-    timeUntilNext: currentCheck.timeUntilNext,
-    markVerificationComplete,
-    clearTodayHistory,
-    verificationHistory,
+    isAllowed: availability.allowed,
+    reason: availability.reason,
+    currentPeriod: availability.currentPeriod,
+    nextPeriod: availability.nextPeriod,
+    timeUntilNext: availability.timeUntilNext,
+    availability,
+    schedule: query.data,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    refetch: () => void refetch(),
+    markVerificationComplete: () => void refetch(),
+    devPreview: isDevelopmentOverrideEnabled(),
   };
 };

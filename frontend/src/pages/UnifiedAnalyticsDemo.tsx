@@ -1,6 +1,7 @@
 import React from 'react';
 import AttendanceAnalytics from '@/components/AttendanceAnalytics';
 import AdvancedAnalytics from '@/components/AdvancedAnalytics';
+import ThemeToggle from '@/components/ThemeToggle';
 
 const demoData = {
   totalStudents: 120,
@@ -15,14 +16,26 @@ const demoData = {
 
 const GlobalAnalyticsDemo: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-indigo-950 flex flex-col items-center justify-center p-8 gap-12">
-      <div className="w-full max-w-5xl">
-        <h2 className="text-2xl font-bold text-white mb-6 text-center">Global Analytics Demo</h2>
-        <div>
-          <h3 className="text-xl font-semibold text-green-200 mb-4 text-center">Advanced Analytics</h3>
-          <AdvancedAnalytics data={demoData} />
+    <div className="min-h-screen bg-surface-canvas text-text-primary">
+      <header className="sticky top-0 z-10 flex h-12 items-center justify-between gap-3 border-b border-border-subtle bg-titlebar px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="text-body-strong text-text-primary">AttendAI</span>
+          <span className="h-4 w-px bg-border-default" aria-hidden />
+          <span className="truncate text-body-strong text-text-secondary">Global Analytics Demo</span>
         </div>
-      </div>
+        <ThemeToggle />
+      </header>
+      <main className="mx-auto max-w-[1400px] p-6">
+        <div className="page-header">
+          <div>
+            <h1 className="text-page-title text-text-primary">Global Analytics Demo</h1>
+          </div>
+        </div>
+        <section>
+          <h2 className="text-section-title text-text-primary mb-4">Advanced Analytics</h2>
+          <AdvancedAnalytics data={demoData} />
+        </section>
+      </main>
     </div>
   );
 };

@@ -1,243 +1,212 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/useAuth';
-import { api } from '@/integrations/api/client';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import StudentSidebar from '@/components/StudentSidebar';
 import FaceRegistration from '@/components/FaceRegistration';
-import FaceRecognition from '@/components/FaceRecognition';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import FaceMessage from '@/components/face/FaceMessage';
+import { invalidateStudentFaceViews, useFaceEnrollment } from '@/components/face/faceQueries';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CheckCircle, AlertTriangle, Loader2, Scan, Shield } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  ArrowClockwise20Regular,
+  CheckmarkCircle24Filled,
+  Delete20Regular,
+  LockClosed24Regular,
+  ScanPerson20Regular,
+} from '@fluentui/react-icons';
+import { api, parseApiError } from '@/integrations/api/client';
 import { useToast } from '@/hooks/use-toast';
 
+const formatDate = (iso?: string | null): string | null => {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+};
+
 const StudentFaceRegistrationPage = () => {
-  const [open, setOpen] = useState(false);
-  const [showFaceVerification, setShowFaceVerification] = useState(false);
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const { toast } = useToast();
+  const enrollment = useFaceEnrollment();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Fetch student data to check face registration status
-  const { data: studentData, isLoading, refetch } = useQuery({
-    queryKey: ['current-student-face-status', user?.email],
-    queryFn: async () => {
-      if (!user?.email) return null;
-      try {
-        const students = await api.students.getAll();
-        const found = students.find(s => s.email === user.email);
-        if (!found) {
-          const foundInsensitive = students.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
-          return foundInsensitive || null;
-        }
-        return found;
-      } catch (error) {
-        console.error('Error fetching student data:', error);
-        return null;
-      }
-    },
-    enabled: !!user?.email,
-  });
+  const refresh = () => void invalidateStudentFaceViews(queryClient);
 
-  if (isLoading) {
-    return (
-      <StudentSidebar>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="flex items-center gap-3 text-white">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span>Loading face registration status...</span>
-          </div>
+  const deleteFace = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await api.faceRecognition.deleteMyFace();
+      setConfirmOpen(false);
+      toast({ title: 'Face data deleted', description: res.message || 'Your face template was deleted.' });
+      refresh();
+    } catch (err) {
+      setDeleteError(parseApiError(err).message || "Couldn't delete your face data. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const data = enrollment.data;
+  const registeredOn = formatDate(data?.registered_at);
+
+  let body: React.ReactNode;
+  if (enrollment.isLoading) {
+    body = (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="flex items-center gap-3 text-body text-text-secondary" role="status">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand-subtle border-t-brand" aria-hidden />
+          Loading your face registration…
         </div>
-      </StudentSidebar>
+      </div>
+    );
+  } else if (enrollment.isError || !data) {
+    body = (
+      <FaceMessage
+        tone="error"
+        title="Couldn't load your face registration"
+        actions={
+          <Button size="sm" variant="outline" onClick={() => void enrollment.refetch()}>
+            <ArrowClockwise20Regular aria-hidden />
+            Retry
+          </Button>
+        }
+      >
+        {parseApiError(enrollment.error).message || 'Please try again in a moment.'}
+      </FaceMessage>
+    );
+  } else if (data.status === 'enrolled') {
+    body = (
+      <Card className="border-border-subtle bg-surface-default shadow">
+        <CardContent className="space-y-5 p-5">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-status-success-subtle text-status-success">
+              <CheckmarkCircle24Filled aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-subheading text-text-primary">Face registered</h2>
+              <p className="text-body text-text-secondary">
+                {registeredOn ? `Registered on ${registeredOn}.` : 'Your face is registered.'} You can check in to your classes with
+                your face.
+              </p>
+            </div>
+          </div>
+
+          <ul className="space-y-1.5 rounded-md border border-border-subtle bg-surface-subtle px-4 py-3 text-caption text-text-secondary">
+            <li>We keep a numeric face template, not your photos.</li>
+            <li>It is used only to confirm it's you when you check in.</li>
+            <li>
+              Need new photos? Delete your face data below, then ask an administrator to reset your registration so you can register
+              again.
+            </li>
+          </ul>
+
+          <div className="flex flex-col gap-2 border-t border-border-subtle pt-4 sm:flex-row sm:justify-between">
+            <Button
+              variant="outline"
+              className="text-status-error hover:text-status-error"
+              onClick={() => {
+                setDeleteError(null);
+                setConfirmOpen(true);
+              }}
+            >
+              <Delete20Regular aria-hidden />
+              Delete my face data
+            </Button>
+            <Button asChild>
+              <Link to="/student/attendance/mark">
+                <ScanPerson20Regular aria-hidden />
+                Check in to a class
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  } else if (data.can_enroll) {
+    body = (
+      <FaceRegistration
+        resetByAdmin={data.status === 'reset'}
+        onSuccess={() => {
+          toast({ title: 'Face registered', description: 'You can now check in with your face.' });
+          refresh();
+        }}
+        onCancel={() => navigate('/student')}
+        onStateChanged={refresh}
+      />
+    );
+  } else {
+    body = (
+      <Card className="border-border-subtle bg-surface-default shadow">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex items-start gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-status-warning-subtle text-status-warning">
+              <LockClosed24Regular aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-subheading text-text-primary">Face registration locked</h2>
+              <p className="text-body text-text-secondary">
+                {data.status === 'deleted' ? 'You deleted your face data. ' : data.message ? `${data.message} ` : ''}
+                Ask an administrator to reset your face registration, then come back here to register again.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end border-t border-border-subtle pt-4">
+            <Button variant="outline" onClick={() => navigate('/student')}>
+              Back to dashboard
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
-  const isFaceRegistered = !!studentData?.face_encoding;
-
   return (
     <StudentSidebar>
-      <div className="p-6 space-y-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Face Registration Status Card */}
-          <Card className="bg-surface-default border-border-subtle shadow-card">
-            <CardHeader>
-              <CardTitle className="text-xl text-text-primary flex items-center gap-3">
-                {isFaceRegistered ? (
-                  <>
-                    <CheckCircle className="h-7 w-7 text-status-success" />
-                    Face Recognition Ready
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="h-7 w-7 text-status-warning" />
-                    Face Registration Required
-                  </>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {isFaceRegistered ? (
-                <div className="space-y-4">
-                  <div className="bg-status-success-subtle border border-status-success-border rounded-xl p-5">
-                    <div className="text-status-success mb-2">
-                      <span className="font-semibold text-base">Your face is successfully registered!</span>
-                    </div>
-                    <p className="text-xs text-text-secondary">
-                      You can now use face recognition for quick attendance marking across all your classes.
-                    </p>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <Button 
-                      onClick={() => setOpen(true)}
-                      variant="outline"
-                      className="border-border-default hover:bg-surface-subtle"
-                    >
-                      Update Face Data
-                    </Button>
-                    
-                    <Button 
-                      onClick={() => navigate('/student')}
-                      className="bg-action-primary hover:bg-action-primary-hover text-white"
-                    >
-                      Back to Dashboard
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="bg-status-warning-subtle border border-status-warning-border rounded-xl p-5">
-                    <div className="text-status-warning mb-2">
-                      <span className="font-semibold text-base">Face registration is required</span>
-                    </div>
-                    <p className="text-xs text-text-secondary mb-3">
-                      Please register your face to enable automated attendance marking. The process takes less than a minute.
-                    </p>
-                    <ul className="text-xs text-text-muted space-y-1 list-disc list-inside">
-                      <li>Ensure good lighting</li>
-                      <li>Face the camera directly</li>
-                      <li>Remove accessories like sunglasses or hats</li>
-                    </ul>
-                  </div>
-                  
-                  <div className="flex gap-3">
-                    <Button 
-                      onClick={() => setOpen(true)}
-                      className="bg-action-primary hover:bg-action-primary-hover text-white"
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Register Face Now
-                    </Button>
-                    
-                    <Button 
-                      variant="outline"
-                      onClick={() => navigate('/student')}
-                      className="border-border-default hover:bg-surface-subtle"
-                    >
-                      Skip for Now
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Face Verification Test Card */}
-          {isFaceRegistered && (
-            <Card className="bg-surface-default border-border-subtle shadow-card">
-              <CardHeader>
-                <CardTitle className="text-lg text-text-primary flex items-center gap-2.5">
-                  <Shield className="h-5 w-5 text-action-primary" />
-                  Face Verification Test
-                </CardTitle>
-                <CardDescription className="text-text-muted text-xs">
-                  Test if your face matches the stored data. This is for verification only - no attendance will be marked.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-status-info-subtle border border-status-info-border rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-4 w-4 text-action-primary mt-0.5 shrink-0" />
-                    <div>
-                      <p className="text-action-primary font-medium text-xs mb-0.5">Verification Mode</p>
-                      <p className="text-text-secondary text-xs">
-                        Confirming your facial vectors match your student record without committing an attendance record.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={() => setShowFaceVerification(true)}
-                  className="w-full bg-action-primary hover:bg-action-primary-hover text-white"
-                >
-                  <Scan className="h-4 w-4 mr-2" />
-                  Start Face Verification
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      {/* Face Registration Modal */}
-      <FaceRegistration
-        isOpen={open}
-        onSuccess={() => {
-          setOpen(false);
-          refetch(); // Refresh the student data to show updated status
-        }}
-        onCancel={() => {
-          setOpen(false);
-        }}
-      />
-
-      {/* Face Verification Modal */}
-      {showFaceVerification && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div
-            className="bg-surface-default border border-border-default rounded-xl w-full shadow-2xl flex flex-col max-h-[90vh]"
-            style={{ width: 'min(92vw, 720px)' }}
-          >
-            <div className="border-b border-border-subtle px-6 py-4 flex-shrink-0 sticky top-0 bg-surface-default z-10">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-semibold text-text-primary flex items-center gap-2">
-                  <Scan className="h-5 w-5 text-action-primary" />
-                  Face Verification Test
-                </h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowFaceVerification(false)}
-                  className="text-text-muted hover:text-text-primary"
-                >
-                  Close
-                </Button>
-              </div>
-            </div>
-            <div className="p-4 flex-1">
-              <FaceRecognition
-                onCapture={(dataUrl, recognized) => {
-                  setShowFaceVerification(false);
-                  if (recognized) {
-                    toast({
-                      title: "Verification Successful",
-                      description: "Face recognized successfully!",
-                    });
-                  } else {
-                    toast({
-                      title: "Verification Failed",
-                      description: "Face not recognized. Please try again.",
-                      variant: "destructive",
-                    });
-                  }
-                }}
-                onCancel={() => setShowFaceVerification(false)}
-              />
-            </div>
+      <div className="mx-auto max-w-3xl space-y-5 py-2">
+        <div className="page-header mb-0">
+          <div>
+            <h1 className="text-page-title text-text-primary">Face registration</h1>
+            <p className="mt-1 text-body text-text-muted">Register your face once to check in to your classes with the camera.</p>
           </div>
         </div>
-      )}
+        {body}
+      </div>
+
+      <AlertDialog open={confirmOpen} onOpenChange={(open) => !deleting && setConfirmOpen(open)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete your face data?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes your face template. You won't be able to check in with your face, and an administrator will
+              have to reset your registration before you can register again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {deleteError && <FaceMessage tone="error">{deleteError}</FaceMessage>}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" onClick={() => void deleteFace()} disabled={deleting}>
+              {deleting ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />
+              ) : (
+                <Delete20Regular aria-hidden />
+              )}
+              {deleting ? 'Deleting…' : 'Delete face data'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </StudentSidebar>
   );
 };
