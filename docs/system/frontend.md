@@ -2,7 +2,7 @@
 
 Reference for `frontend/`. Read it before changing screens, the design system or the API client. Attendance business rules live in [domain-rules.md](domain-rules.md) and are enforced by the backend. The frontend only displays what the server decides. Code comments cite rules as `DOMAIN_RULES §13.x`, using the section numbers from the original design document.
 
-**Stack:** React 18, TypeScript 5.6, Vite 5 (SWC plugin), Tailwind 3, shadcn/ui on Radix, TanStack Query 5, react-router-dom 6, Recharts 2, react-big-calendar with moment (academic calendar), MediaPipe Tasks face detection in the browser (`@mediapipe/tasks-vision`), `qrcode.react` for classroom check-in codes. Icons come from `@fluentui/react-icons`, which is the preferred set. The only leftover from another library is lucide in `ClassesPage.tsx` (not routed); `@carbon/icons-react` is still a dependency but nothing imports it.
+**Stack:** React 18, TypeScript 5.6, Vite 5 (SWC plugin), Tailwind 3, shadcn/ui on Radix, TanStack Query 5, react-router-dom 6, Recharts 2, react-big-calendar with moment (academic calendar), MediaPipe Tasks face detection in the browser (`@mediapipe/tasks-vision`), `qrcode.react` for classroom check-in codes. Icons come only from `@fluentui/react-icons` (lucide and Carbon were removed); don't add another icon library.
 
 ---
 
@@ -18,11 +18,11 @@ npm run build                            # production build to dist/
 npm run build:dev                        # development-mode build
 npm run preview                          # serve dist/ on the same port
 npm run lint                             # ESLint 9 flat config: expect 0 errors and about 18 warnings (fast-refresh, hook deps)
-npx tsc -p tsconfig.app.json --noEmit    # type check: baseline is 13 pre-existing errors
+npx tsc -p tsconfig.app.json --noEmit    # type check: must report 0 errors
 ```
 
 - **Proxy:** `vite.config.ts` proxies `/api/*` to `http://127.0.0.1:8000` and logs every proxied request to the Vite console. Start the backend first (see [architecture.md](architecture.md)).
-- **Type-check baseline:** 11 errors in `pages/ClassesPage.tsx` (not routed), 1 in `pages/StudentsPage.tsx` and 1 in `pages/TeachersPage.tsx`. Do not add new ones. Compare the count before and after your change.
+- **Type check and lint are clean:** `tsc` reports 0 errors and lint 0 errors. Keep them at zero. The remaining 17 lint warnings are `react-refresh/only-export-components` (dev hot-reload hints in shadcn-style files that also export helpers); they don't affect the build.
 - **`frontend/tsconfig.app.json` must NOT contain `"ignoreDeprecations": "6.0"`.** An editor running a newer TypeScript keeps adding it back. TS 5.6 then rejects the config (TS5103) and `tsc` checks nothing. Delete the line whenever it reappears.
 - `tsconfig.app.json` uses `strict: false` and `noImplicitAny: false`. The path alias `@/*` maps to `src/*`, in both tsconfig and Vite.
 - **Env:** `VITE_PORT` and `VITE_HOST` set the dev server. `VITE_MEDIAPIPE_ASSET_BASE` overrides where MediaPipe WASM and model files load from (default: the local copy in `public/mediapipe/`, no CDN). `VITE_API_URL` appears in `.env` but nothing reads it.
@@ -53,7 +53,7 @@ npx tsc -p tsconfig.app.json --noEmit    # type check: baseline is 13 pre-existi
 | `src/components/data-view/DataTable.tsx`, `filters/SemesterFilter.tsx` | Generic table (currently unused) and the teacher semester filter |
 | `src/components/landing/` | Public landing page sections (see §8 "Public site"): `primitives.tsx` + `landing.css` (marketing type scale `lp-*`, `--lp-gutter`), `photos.ts` and `screens.ts` (asset manifests), one file per section |
 | `src/assets/landing/` | Landing imagery: `photos/` (Unsplash photography, WebP, credited in the footer) and `screens/` (real portal screenshots, light and dark, 1000w and 2000w) |
-| `src/pages/` | Route screens (see §3). Not routed: `ClassesPage`, `EnhancedAttendancePage`, `Index`, `ModernAcademicCalendar`, `RegisterPage`. `AcademicCalendarSettings` is embedded in Semester Setup |
+| `src/pages/` | Route screens (see §3). Not routed: `EnhancedAttendancePage`, `Index`, `ModernAcademicCalendar`, `RegisterPage`. `AcademicCalendarSettings` is embedded in Semester Setup |
 | `src/hooks/` | `useAttendancePolicy`, `useTimeRestrictions` (student check-in state), `useAttendanceData` (admin attendance page state), `useAcademicMetrics`, `useApiErrorHandler`, face-detection hooks, `use-toast`, `use-mobile`, `useTheme` |
 | `src/utils/` | `metricsDisplay.ts` (null-safe metrics and local dates), `timeRestrictions.ts` (check-in evaluation and rejection messages), `dateUtils.ts`, `developmentOverride.ts` |
 | `src/components/face/` | Student face capture: `CameraStage` (video tile, guide oval, prompts), `useCameraStream`, `capture.ts` (unmirrored ≤640 px JPEG frames), `PresenceCodeInput`, `FaceMessage`, `faceQueries.ts`, `enrolmentMessages.ts` |

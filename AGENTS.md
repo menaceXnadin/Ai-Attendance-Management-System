@@ -18,7 +18,7 @@ AttendAI is a university attendance system built around face recognition. It beg
 | `backend/alembic/` | Migrations (head `p20261018_face_verification`) |
 | `backend/models/anti_spoof/` | MiniFASNet anti-spoofing ONNX models (Apache-2.0, committed) |
 | `backend/tests/` | Real pytest suite: harness, domain-rule tests, route tests |
-| `frontend/src/` | React app: `App.tsx` (routes), `components/layout/` (Teams-style shell), `components/ui/` (Fluent-styled primitives), `components/attendance-admin/`, `pages/`, `integrations/api/client.ts` (the `api` client), `index.css` + `tailwind.config.ts` (design tokens) |
+| `frontend/src/` | React app: `App.tsx` (routes), `components/layout/` (Teams-style shell), `components/ui/` (Fluent-styled primitives), `components/attendance-admin/`, `components/landing/` (public landing page), `pages/`, `integrations/api/client.ts` (the `api` client), `index.css` + `tailwind.config.ts` (design tokens) |
 | `docs/system/` | **Current documentation** (architecture, domain rules, face verification, database, API, frontend, testing, known issues) |
 | `tests/backend/` (repo root) | Legacy ad-hoc scripts, not tests. Excluded from pytest |
 
@@ -26,7 +26,7 @@ AttendAI is a university attendance system built around face recognition. It beg
 - **Backend dev server:** `cd backend && venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000`. On Linux or macOS use `venv/bin/python`.
 - **Migrations:** `cd backend && venv/Scripts/python.exe -m alembic upgrade head`
 - **Backend tests:** `cd backend && venv/Scripts/python.exe -m pytest -q`. They build a throwaway `attendancedb_test`. When running tests in parallel, give each run its own database with `ATTENDAI_TEST_DB_NAME=attendancedb_test_gw<N>` (the harness only accepts names matching `^attendancedb_(test|migtest)(_gw\d+)?$`).
-- **Frontend:** `cd frontend && npm run dev` (:8080, proxies `/api` to :8000), `npm run build`, `npm run lint`, `npx tsc -p tsconfig.app.json --noEmit` (13 pre-existing errors are the baseline). Use **npm**, not bun.
+- **Frontend:** `cd frontend && npm run dev` (:8080, proxies `/api` to :8000), `npm run build`, `npm run lint`, `npx tsc -p tsconfig.app.json --noEmit` (must report 0 errors). Use **npm**, not bun.
 
 ## Golden rules
 1. **The attendance rules live in [`docs/system/domain-rules.md`](docs/system/domain-rules.md) and in `backend/app/services/`.** Routes call these services; never re-implement rules in routes or the frontend:
@@ -54,7 +54,7 @@ AttendAI is a university attendance system built around face recognition. It beg
 ## Gotchas
 - **Enum storage:** the DB enum `day_of_week` stores names (`'SUNDAY'`), and attendance status values are lowercase (`'present'`). The `SessionStatus`, `AttendanceSource` and `AuditAction` StrEnums have lowercase members (`SessionStatus.cancelled`).
 - **Several events per day are legal.** Don't use `scalar_one_or_none()` on events, schedules for a subject, or conflict queries; use `.first()` or `exists()`.
-- **Today is between terms.** No term covers today, so the app shows no classes until a term is created in Semester Setup.
+- **The local DB has a live term.** "Autumn 2026" (2026-09-13 to 2027-01-15, exams from 2027-01-04) covers today and `tracking_start_date` is 2026-09-13, so classes, check-in and auto-absent are active locally. Without a term covering today the app reports `between_terms` and shows no classes. See [`docs/system/known-issues.md`](docs/system/known-issues.md) for the local data state.
 - **Few teacher assignments:** only 30 of 2,160 timetable rows have a teacher, so most sessions are admin-resolved.
 - **Alembic quirks:** `alembic upgrade head` doesn't work on an *empty* DB (4 root migrations; tests use `backend/tests/schema/baseline.sql`). Never run `alembic revision --autogenerate` blindly; models drift from the DB outside the redesigned tables.
 - **tsconfig:** if `frontend/tsconfig.app.json` gains `"ignoreDeprecations": "6.0"`, remove it. TypeScript 5.6 rejects it.

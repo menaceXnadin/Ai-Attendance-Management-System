@@ -475,7 +475,7 @@ Full rules and check order: [face-verification.md §7](face-verification.md). Re
 - Codes, in check order: `too_many_attempts`, `no_registered_face`, `subject_not_found`, `not_enrolled`,
   `between_terms`, `no_session_today`, `session_cancelled`, `window_closed`, `presence_code_required`,
   `presence_code_invalid`, `challenge_required`, `challenge_invalid`, `invalid_frames`, `no_face_detected`,
-  `multiple_faces`, `low_quality`, `face_mismatch`, `liveness_failed`, `liveness_unavailable`,
+  `multiple_faces`, `low_quality`, `face_mismatch`, `turned_too_far` (not a failure), `liveness_failed`, `liveness_unavailable`,
   `spoof_suspected`, `already_recorded`.
 - Failures that count towards the lock-out: `face_mismatch`, `liveness_failed`, `spoof_suspected`,
   `presence_code_invalid`, `challenge_invalid`. Every request writes one `face_verification_attempts` row.
@@ -783,8 +783,8 @@ Success (200):
 Errors use `{detail: {code, message, details}}`: 409 `already_enrolled`, 409 `enrolment_locked`,
 400 `consent_required`, 400 `challenge_required` / `challenge_invalid`, 400 `invalid_frames`
 (`{min_images, max_images, received}`), 422 `low_quality` (`{image_results, valid_images, required, quality_issues}`),
-422 `pose_coverage` (`{missing_poses, image_results}`), 503 `liveness_unavailable`, 422 `spoof_suspected`,
-409 `duplicate_face` (the other student is never revealed). Frame issue codes: `invalid_image`, `no_face`,
+422 `pose_coverage` (`{missing_poses, pose_issues, image_results}`; each image result has `direction`), 503 `liveness_unavailable`, 422 `spoof_suspected`,
+409 `duplicate_face` (the other student is never revealed). Frame issue codes (`turned_too_far` too): `invalid_image`, `no_face`,
 `multiple_faces`, `low_confidence`, `too_small`, `too_blurry`, `too_dark`, `too_bright`.
 
 ## 4. Changing endpoints

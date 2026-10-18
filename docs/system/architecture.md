@@ -101,4 +101,4 @@ Business policy (minimum %, check-in window, grace, edit window, weekly off-day)
 - **Backend:** `cd backend && venv/Scripts/python.exe -m uvicorn app.main:app --reload --port 8000`. On Linux or macOS use `venv/bin/python`. Importing the app loads the face engine (two InsightFace models + two anti-spoof models), which takes about 5–6 s; the first run downloads `buffalo_l` to `~/.insightface`.
 - **Database migrations:** `cd backend && venv/Scripts/python.exe -m alembic upgrade head`.
 - **Frontend:** `cd frontend && npm run dev`. It serves on :8080 and proxies `/api` to :8000.
-- **Today's state:** no term covers today, so the app reports `between_terms`. To see classes, create a term in Semester Setup.
+- **Today's state:** the local DB has the term "Autumn 2026" (2026-09-13 to 2027-01-15), so classes are live. If no term covers the current date the app reports `between_terms`; create a term in Semester Setup to see classes. Local logins are in [testing.md](testing.md).

@@ -5,7 +5,7 @@ Run the suite from `backend/`:
 
 ```
 cd backend
-venv/Scripts/python.exe -m pytest -q        # ~40 s, 374 tests at last count
+venv/Scripts/python.exe -m pytest -q        # ~70 s, 695 tests at last count
 ```
 
 - **Config:** `backend/pytest.ini` sets `testpaths=tests`, `asyncio_mode=auto` and session-scoped event loops. A repo-root `conftest.py` stops pytest from collecting the legacy scripts in `tests/backend/**`, some of which call `localhost:8000` when imported.
@@ -58,10 +58,23 @@ There are no frontend unit tests. Checks:
 
 ```
 cd frontend
-npx tsc -p tsconfig.app.json --noEmit   # baseline: 13 pre-existing errors (ClassesPage, StudentsPage, TeachersPage)
+npx tsc -p tsconfig.app.json --noEmit   # must report 0 errors
 npm run lint                            # 0 errors expected (warnings are fast-refresh/hook-deps)
 npm run build
 ```
+
+### Visual QA in a browser
+Run both dev servers (backend :8000, frontend :8080) and check pages in a real browser: the chrome-devtools MCP tools, or headless Chrome driven over CDP. Check light and dark mode (localStorage `attendai-theme` = `light` / `dark`, then reload) and phone, tablet and desktop widths (390, 1024, 1440).
+
+Local logins on the dummy `attendancedb` (passwords are not stored in this public repo; ask the project owner):
+
+| Role | Email |
+|---|---|
+| Admin | `admin@attendance.com` |
+| Teacher | `teacher.test@university.edu` (teaches Programming Fundamentals 1 and Operating Systems 1, Computer Science semester 1) |
+| Student | `aarati.shrestha@students.example.edu` (and the other `*@students.example.edu` QA students) |
+
+These exist only in the local dummy database. When you capture screenshots for the landing page (`src/assets/landing/screens/`), rewrite any real-looking personal emails or phone numbers in the page before capturing.
 
 ## Legacy scripts
 `tests/backend/**` (repo root) holds old ad-hoc scripts: analysis, data population and migrations that run against a live DB. They are not a test suite, are git-ignored, and describe pre-redesign behaviour.

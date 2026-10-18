@@ -112,6 +112,7 @@ Loaded by `app/services/face_policy.py` → frozen `FacePolicy` (`get_face_polic
 | `antispoof_threshold` | 0.70 | Min mean "real" probability |
 | `require_head_turn` | true | Active challenge required (check-in and enrolment) |
 | `head_turn_min_yaw` | 0.18 | Min `|yaw|` (with the right sign) for the turned frame |
+| `max_turn_yaw` | 1.0 | Frames turned further (near side profile) are `turned_too_far`: detection confidence and embeddings are unreliable there. A comfortable turn is ~0.2–0.6 |
 | `frontal_max_yaw` | 0.12 | Max `|yaw|` for a frame to count as frontal |
 | `challenge_ttl_seconds` | 90 | Challenge lifetime |
 | `frames_min` / `frames_max` | 3 / 8 | Burst size when a head turn is required (1 / 8 otherwise) |
@@ -120,7 +121,7 @@ Loaded by `app/services/face_policy.py` → frozen `FacePolicy` (`get_face_polic
 | `max_failed_attempts` | 5 | Failures allowed per window before lock-out |
 | `failed_attempt_window_minutes` | 10 | Rolling window for the lock-out |
 | `min_detection_score` | 0.60 | Check-in frames |
-| `enrolment_min_detection_score` | 0.70 | Enrolment frames |
+| `enrolment_min_detection_score` | 0.70 | Enrolment **front** frames (turned frames use `min_detection_score`, since detectors are less confident on turned faces) |
 | `min_face_size_px` | 80 | Min bbox width and height |
 | `min_sharpness` | 20.0 | Laplacian variance on the 112×112 crop |
 | `min_brightness` / `max_brightness` | 40 / 220 | Face-crop mean grey level |
@@ -202,7 +203,7 @@ Order of checks (the first failure wins):
    - The best frontal frame (`|yaw| ≤ frontal_max_yaw`; if a head turn isn't required, the most frontal frame) must reach `match_threshold`.
    - Every other face frame must reach `consistency_threshold`.
    - Otherwise → `face_mismatch` (**failure**).
-9. **Head turn**, if required: at least one face frame with `yaw ≥ head_turn_min_yaw` for `turn_left` (`≤ −head_turn_min_yaw` for `turn_right`). Otherwise → `liveness_failed` (**failure**).
+9. **Head turn**, if required: at least one face frame with `yaw ≥ head_turn_min_yaw` for `turn_left` (`≤ −head_turn_min_yaw` for `turn_right`). Frames with `|yaw| > max_turn_yaw` are dropped before steps 8–9 (evidence for nothing). If the only turn in the right direction was too far → `turned_too_far` (not a failure); otherwise → `liveness_failed` (**failure**).
 10. **Passive liveness**, if required:
     - If `liveness_available` is false → `liveness_unavailable` (not a failure; an admin must install the models or switch it off).
     - The mean `liveness` of up to two best frontal frames must reach `antispoof_threshold`. Otherwise → `spoof_suspected` (**failure**).
@@ -242,7 +243,7 @@ Endpoints:
   2. `consent` must be true → otherwise `consent_required` (400).
   3. If a head turn is required: the challenge must be a valid `enrolment` challenge → otherwise `challenge_required` / `challenge_invalid` (400). It's consumed.
   4. Need between `enrolment_min_images` and 8 images → otherwise `invalid_frames` (400).
-  5. Run `aprocess_frames`. A frame is valid when it has exactly one face (`secondary_face_ratio ≤ 0.25`), `det_score ≥ enrolment_min_detection_score`, and passes size, sharpness and brightness. Fewer than `enrolment_min_images` valid → `low_quality` (422, `details.image_results`).
+  5. Run `aprocess_frames`. A frame is valid when it has exactly one face (`secondary_face_ratio ≤ 0.25`), `det_score ≥ enrolment_min_detection_score` (front frames) or `≥ min_detection_score` (turned frames), `|yaw| ≤ max_turn_yaw` (else issue `turned_too_far`), and passes size, sharpness and brightness. Each `image_results` entry carries `direction` (the pose its yaw points to, valid or not); `pose_coverage` adds `pose_issues` (why the photos for each missing pose failed). Fewer than `enrolment_min_images` valid → `low_quality` (422, `details.image_results`).
   6. Pose: classify each valid frame with `frontal_max_yaw` / `head_turn_min_yaw` as front, left or right. If a head turn is required, at least one of each is needed → otherwise `pose_coverage` (422). Otherwise at least one front is needed.
   7. Liveness, if required: `liveness_unavailable` (503), or the mean liveness of the front frames must reach `antispoof_threshold` → otherwise `spoof_suspected` (422) and a `spoof_blocked` event.
   8. Composite = `composite_embedding(valid embeddings)`.
