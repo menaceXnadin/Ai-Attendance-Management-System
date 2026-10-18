@@ -94,12 +94,25 @@ backend/*.py
 !backend/app/**/*.py
 !backend/alembic/**/*.py
 
+# Real pytest suite (the legacy ad-hoc scripts under tests/ stay ignored)
+!backend/tests/
+!backend/tests/**
+!backend/pytest.ini
+!conftest.py
+backend/tests/**/__pycache__/
+
 # Reserved for optional local tooling rules
 # (intentionally left blank after removing Codacy-specific entries)
 
-# Ignore all .md files except README.md
+# Ignore all .md files except README.md and the maintained project docs
 *.md
 !README.md
+!AGENTS.md
+!CLAUDE.md
+!docs/system/
+!docs/system/*.md
 
 # Ignore PowerShell scripts
 *.ps1
+# Local database backups
+backups/

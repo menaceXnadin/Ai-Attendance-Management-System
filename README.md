@@ -18,6 +18,11 @@ A full-stack attendance system using facial recognition, built with React (Vite,
 - `frontend/`: React + Vite + TypeScript frontend
 - `backend/`: FastAPI backend with InsightFace and PostgreSQL
 
+## Documentation
+
+- [AGENTS.md](AGENTS.md): quick orientation, commands and project rules (for developers and AI agents)
+- [docs/system/](docs/system/README.md): architecture, attendance domain rules, database, API reference, frontend, testing, known issues
+
 ## Quick Start
 
 ### Backend
@@ -40,9 +45,8 @@ A full-stack attendance system using facial recognition, built with React (Vite,
   ```
 4. Configure environment variables:
   - Copy `.env.example` to `.env` and update with your settings.
-5. Set up the database:
+5. Set up the database (an existing database is required: the migration chain cannot build an empty one, see `docs/system/database.md`):
   ```
-  createdb ai_attendance_db
   alembic upgrade head
   ```
 6. Run the backend server:
@@ -64,7 +68,7 @@ A full-stack attendance system using facial recognition, built with React (Vite,
   ```
   npm run dev
   ```
-  The frontend will run on http://localhost:5173
+  The frontend will run on http://localhost:8080 (API calls under `/api` are proxied to the backend on port 8000)
 
 ## Tech Stack
 
@@ -81,4 +85,5 @@ A full-stack attendance system using facial recognition, built with React (Vite,
 
 ## Testing
 
-- Test files are included for backend and frontend to ensure code quality and reliability.
+- Backend: `cd backend && venv/Scripts/python.exe -m pytest -q` (builds a throwaway `attendancedb_test` database; see `docs/system/testing.md`).
+- Frontend: `npm run lint`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run build`.
